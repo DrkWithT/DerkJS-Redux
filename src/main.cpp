@@ -34,20 +34,21 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    if (std::string_view arg_1 = argv[1]; arg_1 == "-v") {
+    std::string_view arg_1 = argv[1];
+
+    if (arg_1 == "-v") {
         std::println("DerkJS v0.0.1\nBy: DrkWithT (GitHub)");
         return 0;
     }
 
     std::string source {read_file(argv[1])};
     Lexer lexer {source};
+    Parser parser;
 
-    while (true) {
-        if (auto [tag, start, length, line, column] = lexer(source); tag == TokenTag::unknown) {
-            std::println("\x1b[1;31mLexer Error\x1b[0m [ln {}, col {}]:\n\tUnknown token \x1b[0;33m'{}'\x1b[0m", line, column, source.substr(start, length));
-            return 1;
-        } else if (tag == TokenTag::eof) {
-            break;
-        }
+    if (auto full_ast_opt = parser(lexer, source); full_ast_opt) {
+        std::println("Parsed {} top-level statements for source '{}'", full_ast_opt->size(), arg_1);
+        return 0;
     }
+
+    return 1;
 }
