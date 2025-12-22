@@ -50,8 +50,8 @@ export namespace DerkJS {
         right_paren,
         left_brace,
         right_brace,
-        // left_bracket,
-        // right_bracket,
+        left_bracket,
+        right_bracket,
         dot,
         comma,
         semicolon,
@@ -194,7 +194,7 @@ export namespace DerkJS {
                 if (const auto c = source.at(m_pos); c != '*') {
                     update_source_location(c);
                     ++temp_length;
-                } else {   
+                } else {
                     break;
                 }
             }
@@ -359,7 +359,9 @@ export namespace DerkJS {
             case '(': return lex_single(source, TokenTag::left_paren);
             case ')': return lex_single(source, TokenTag::right_paren);
             case '{': return lex_single(source, TokenTag::left_brace);
-            case '}': return lex_single(source, TokenTag::right_paren);
+            case '}': return lex_single(source, TokenTag::right_brace);
+            case '[': return lex_single(source, TokenTag::left_bracket);
+            case ']': return lex_single(source, TokenTag::right_bracket);
             case '.': return lex_single(source, TokenTag::dot);
             case ',': return lex_single(source, TokenTag::comma);
             case ';': return lex_single(source, TokenTag::semicolon);

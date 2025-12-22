@@ -15,15 +15,15 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
 ### Grammar (Expressions)
 ```
 <primary> = "undefined" | "null" | "this" | <identifier> | <boolean> | <number> | "(" <expr> ")"
-<member> = <primary> ( "." <member> | "[" <expr> "]" )?
+<member> = <primary> ( "." <call> | "[" <expr> "]" )?
 <new> = "new"? <member>
-<call> = <new> "(" ( <expr> ( "," <expr> )* )? ")"
-<unary> = ( "!" | "+" | "-" )? <call>
+<call> = <new> ( "(" ( <expr> ( "," <expr> )* )? ")" )?
+<unary> = ( "!" | "-" )? <call>
 <factor> = <unary> ( ( "%" | "*" | "/" ) <unary> )*
 <term> = <factor> ( ( "+" | "-" ) <factor> )*
 <compare> = <term> ( ( "<" | ">" | "<=" | ">=" ) <term> )*
 <equality> = <compare> ( ( "==" | "!=" | "===" | "!==" ) <compare> )*
-<expr> = <call> ( "=" <equality> )?
+<expr> = <equality>
 ```
 
 ### Grammar (Statements)
@@ -35,5 +35,5 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
 <return> = "return" <expr> ";"
 <function> = "function" <identifier> "(" ( <identifier> ( "," <identifier> )* )? ")" <block>
 <block> = "{" <stmt>+ "}"
-<expr-stmt> = <expr> ";"
+<expr-stmt> = <call> "=" <expr> ";"
 ```

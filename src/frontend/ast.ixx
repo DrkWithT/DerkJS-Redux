@@ -10,7 +10,11 @@ import frontend.lexicals;
 
 export namespace DerkJS {
     enum class AstOp : uint8_t {
-        ast_op_precent,
+        ast_op_noop,
+        ast_op_new, // 'new' for objects
+        ast_op_dot_access, // access member by `'.'`
+        ast_op_index_access, // access member by `<lhs>[...]`
+        ast_op_percent,
         ast_op_times,
         ast_op_slash,
         ast_op_plus,
@@ -32,7 +36,7 @@ export namespace DerkJS {
     };
 
     template <typename ... ExprKind>
-    struct Expr {
+    struct ExprNode {
         std::variant<ExprKind...> data;
         int src_id;
         int text_begin;
@@ -45,7 +49,8 @@ export namespace DerkJS {
     struct Assign;
     struct Call;
 
-    using ExprPtr = std::unique_ptr<Expr<Primitive, Unary, Binary, Assign, Call>>;
+    using Expr = ExprNode<Primitive, Unary, Binary, Assign, Call>;
+    using ExprPtr = std::unique_ptr<Expr>;
 
     struct Primitive {
         Token token;
@@ -73,7 +78,7 @@ export namespace DerkJS {
     };
 
     template <typename ... StmtKind>
-    struct Stmt {
+    struct StmtNode {
         std::variant<StmtKind...> data;
         int src_id;
         int text_begin;
@@ -87,7 +92,8 @@ export namespace DerkJS {
     struct Block;
     struct FunctionDecl;
 
-    using StmtPtr = std::unique_ptr<Stmt<ExprStmt, VarDecl, Variables, Return, Block, FunctionDecl>>;
+    using Stmt = StmtNode<ExprStmt, VarDecl, Variables, Return, Block, FunctionDecl>;
+    using StmtPtr = std::unique_ptr<Stmt>;
 
     struct ExprStmt {
         ExprPtr expr;
