@@ -17,6 +17,8 @@ export namespace DerkJS {
         keyword_return,
         keyword_function,
         keyword_prototype,
+        keyword_new,
+        keyword_this,
         keyword_undefined,
         keyword_null,
         keyword_true,
@@ -24,6 +26,7 @@ export namespace DerkJS {
         literal_int,
         literal_real,
         literal_string,
+        symbol_percent,
         symbol_times,
         symbol_slash,
         symbol_plus,
@@ -38,6 +41,7 @@ export namespace DerkJS {
         symbol_greater,
         symbol_greater_equal,
         symbol_assign,
+        symbol_percent_assign,
         symbol_times_assign,
         symbol_slash_assign,
         symbol_plus_assign,
@@ -114,7 +118,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] static constexpr auto is_op_symbol(char c) noexcept -> bool {
-            return is_any_of(c, '*', '/', '+', '-', '=', '!', '&', '|');
+            return is_any_of(c, '%', '*', '/', '+', '-', '=', '!', '&', '|');
         }
 
         [[nodiscard]] auto lookup_lexeme_as_special(std::string_view lexeme) noexcept -> std::optional<TokenTag> {
@@ -316,10 +320,13 @@ export namespace DerkJS {
             m_specials.emplace("return", TokenTag::keyword_return),
             m_specials.emplace("function", TokenTag::keyword_function);
             m_specials.emplace("prototype", TokenTag::keyword_prototype);
+            m_specials.emplace("this", TokenTag::keyword_this);
+            m_specials.emplace("new", TokenTag::keyword_new);
             m_specials.emplace("undefined", TokenTag::keyword_undefined);
             m_specials.emplace("null", TokenTag::keyword_null);
             m_specials.emplace("true", TokenTag::keyword_true);
             m_specials.emplace("false", TokenTag::keyword_false);
+            m_specials.emplace("%", TokenTag::symbol_percent);
             m_specials.emplace("*", TokenTag::symbol_times);
             m_specials.emplace("/", TokenTag::symbol_slash);
             m_specials.emplace("+", TokenTag::symbol_plus);
@@ -334,6 +341,7 @@ export namespace DerkJS {
             m_specials.emplace(">", TokenTag::symbol_greater);
             m_specials.emplace(">=", TokenTag::symbol_greater_equal);
             m_specials.emplace("=", TokenTag::symbol_assign);
+            m_specials.emplace("%=", TokenTag::symbol_percent_assign);
             m_specials.emplace("*=", TokenTag::symbol_times_assign);
             m_specials.emplace("/=", TokenTag::symbol_slash_assign);
             m_specials.emplace("+=", TokenTag::symbol_plus_assign);

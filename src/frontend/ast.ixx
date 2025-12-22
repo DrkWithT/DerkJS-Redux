@@ -6,8 +6,11 @@ module;
 
 export module frontend.ast;
 
+import frontend.lexicals;
+
 export namespace DerkJS {
     enum class AstOp : uint8_t {
+        ast_op_precent,
         ast_op_times,
         ast_op_slash,
         ast_op_plus,
@@ -79,11 +82,12 @@ export namespace DerkJS {
 
     struct ExprStmt;
     struct VarDecl;
+    struct Variables;
     struct Return;
     struct Block;
     struct FunctionDecl;
 
-    using StmtPtr = std::unique_ptr<Stmt<ExprStmt, VarDecl, Return, Block, FunctionDecl>>;
+    using StmtPtr = std::unique_ptr<Stmt<ExprStmt, VarDecl, Variables, Return, Block, FunctionDecl>>;
 
     struct ExprStmt {
         ExprPtr expr;
@@ -92,6 +96,10 @@ export namespace DerkJS {
     struct VarDecl {
         Token name;
         ExprPtr rhs;
+    };
+    
+    struct Variables {
+        std::vector<VarDecl> vars;
     };
 
     struct Return {
