@@ -19,7 +19,7 @@ elif [[ $action = "build" && $argc -ge 2 ]]; then
     rm -f ./build/derkjs;
     cmake -S . -B build --preset "local-$2-build" && cmake --build build;
 elif [[ $action = "rebuild" && $argc -ge 2 ]]; then
-    rm -f ./build/;
+    rm -rf ./build/;
     cmake --fresh -S . -B build --preset "local-$2-build" && cmake --build build;
 elif [[ $action = "unittest" && $argc -eq 1 ]]; then
     # touch ./test_logs.txt;
