@@ -11,6 +11,6 @@ function make_iota(n) {
 
 var counter = make_iota(1);
 
-console.log(counter());
-console.log(counter());
-console.log(counter());
+display(counter());
+display(counter());
+display(counter());
