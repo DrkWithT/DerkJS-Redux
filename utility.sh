@@ -27,7 +27,7 @@ elif [[ $action = "unittest" && $argc -eq 1 ]]; then
     # usage_exit $? && echo "TESTS PASSED";
     usage_exit 1;
 elif [[ $action = "sloc" ]]; then
-    wc -l ./src/**/*.ixx ./src/main.cpp;
+    wc -l ./src/derkjs_impl/**/*.ixx ./src/main.cpp;
 else
     usage_exit 1;
 fi
