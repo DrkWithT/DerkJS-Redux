@@ -42,11 +42,12 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    std::string source {read_file(argv[1])};
+    std::string source_path {argv[1]};
+    std::string source {read_file(source_path)};
     Lexer lexer {source};
     Parser parser;
 
-    auto ast_opt = parser(lexer, std::string {argv[1]}, source);
+    auto ast_opt = parser(lexer, source_path, source);
 
     if (!ast_opt) {
         return 1;

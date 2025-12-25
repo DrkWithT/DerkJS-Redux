@@ -676,7 +676,7 @@ export namespace DerkJS {
 
             for (auto& stmt_ptr : translation_unit_stmts) {
                 translation_unit.emplace_back(ASTUnit::value_type {
-                    .source_filename = std::move(file_name),
+                    .source_filename = file_name,
                     .decl = std::move(stmt_ptr),
                     .src_id = 0,
                 });
