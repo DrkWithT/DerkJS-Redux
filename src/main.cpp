@@ -1,14 +1,12 @@
 #include <string>
+#include <flat_map>
 #include <filesystem>
 #include <print>
 #include <iostream>
 #include <sstream>
 #include <fstream>
 
-import frontend.lexicals;
-import frontend.ast;
-import frontend.parse;
-import frontend.semantics;
+import derkjs_impl;
 
 [[nodiscard]] auto read_file(std::filesystem::path file_path) -> std::string {
     std::ifstream reader {file_path};
@@ -44,6 +42,9 @@ int main(int argc, char* argv[]) {
 
     std::string source_path {argv[1]};
     std::string source {read_file(source_path)};
+    std::flat_map<int, std::string> source_map;
+    source_map[0] = source;
+
     Lexer lexer {source};
     Parser parser;
 
@@ -59,7 +60,11 @@ int main(int argc, char* argv[]) {
 
     SemanticAnalyzer sema_check_pass;
 
-    std::println("Semantic check (dud): {}", sema_check_pass(full_ast, {{0, source}}));
+    std::println("Semantics OK? {}", sema_check_pass(full_ast, source_map));
 
-    return 1;
+    IrGenPass ir_emit_pass;
+
+    std::println("IR generated (WIP)? {}", ir_emit_pass(full_ast, source_map).has_value());
+
+    return 0;
 }
