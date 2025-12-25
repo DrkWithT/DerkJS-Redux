@@ -655,7 +655,7 @@ export namespace DerkJS {
         : m_previous {}, m_current {}, m_error_count {0}, m_syntax {SyntaxTag::program_top} {}
 
         /// TODO: add source mapping IDs here when requires are added.
-        [[nodiscard]] auto operator()(Lexer& lexer, const std::string& source) -> std::optional<ASTUnit> {
+        [[nodiscard]] auto operator()(Lexer& lexer, std::string file_name, const std::string& source) -> std::optional<ASTUnit> {
             reset(lexer, source);
 
             std::vector<StmtPtr> translation_unit_stmts;
@@ -676,6 +676,7 @@ export namespace DerkJS {
 
             for (auto& stmt_ptr : translation_unit_stmts) {
                 translation_unit.emplace_back(ASTUnit::value_type {
+                    .source_filename = std::move(file_name),
                     .decl = std::move(stmt_ptr),
                     .src_id = 0,
                 });

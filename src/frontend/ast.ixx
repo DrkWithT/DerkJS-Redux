@@ -92,7 +92,7 @@ export namespace DerkJS {
     struct Block;
     struct FunctionDecl;
 
-    using Stmt = StmtNode<ExprStmt, VarDecl, Variables, Return, Block, FunctionDecl>;
+    using Stmt = StmtNode<ExprStmt, Variables, Return, Block, FunctionDecl>;
     using StmtPtr = std::unique_ptr<Stmt>;
 
     struct ExprStmt {
@@ -125,6 +125,7 @@ export namespace DerkJS {
 
 
     struct SourcedAst {
+        std::string source_filename;
         StmtPtr decl;
         int src_id;
     };
