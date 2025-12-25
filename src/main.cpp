@@ -8,6 +8,7 @@
 import frontend.lexicals;
 import frontend.ast;
 import frontend.parse;
+import frontend.semantics;
 
 [[nodiscard]] auto read_file(std::filesystem::path file_path) -> std::string {
     std::ifstream reader {file_path};
@@ -45,10 +46,19 @@ int main(int argc, char* argv[]) {
     Lexer lexer {source};
     Parser parser;
 
-    if (auto full_ast_opt = parser(lexer, source); full_ast_opt) {
-        std::println("Parsed {} top-level statements for source '{}'", full_ast_opt->size(), arg_1);
-        return 0;
+    auto ast_opt = parser(lexer, std::string {argv[1]}, source);
+
+    if (!ast_opt) {
+        return 1;
     }
+
+    ASTUnit full_ast = std::move(ast_opt.value());
+
+    std::println("Parsed {} top-level statements for source '{}'", full_ast.size(), arg_1);
+
+    SemanticAnalyzer sema_check_pass;
+
+    std::println("Semantic check (dud): {}", sema_check_pass(full_ast, {{0, source}}));
 
     return 1;
 }
