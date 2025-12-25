@@ -9,6 +9,7 @@ target_sources(frontend
     FILES src/frontend/lexicals.ixx
     src/frontend/ast.ixx
     src/frontend/parse.ixx
+    src/frontend/semantics.ixx
 )
 
 add_executable(derkjs src/main.cpp)

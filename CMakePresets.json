@@ -15,7 +15,7 @@
                 "CMAKE_CXX_STANDARD": "23",
                 "CMAKE_CXX_EXTENSIONS": "OFF",
                 "CMAKE_BUILD_TYPE": "Debug",
-                "COMPILE_WARNING_AS_ERROR": "ON",
+                "CMAKE_COMPILE_WARNING_AS_ERROR": "ON",
                 "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "${sourceDir}/build/"
             }
         },
@@ -29,7 +29,7 @@
                 "CMAKE_CXX_STANDARD": "23",
                 "CMAKE_CXX_EXTENSIONS": "OFF",
                 "CMAKE_BUILD_TYPE": "Release",
-                "COMPILE_WARNING_AS_ERROR": "ON",
+                "CMAKE_COMPILE_WARNING_AS_ERROR": "ON",
                 "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "${sourceDir}/build/"
             }
         }
