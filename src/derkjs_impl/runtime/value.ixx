@@ -1,13 +1,11 @@
 module;
 
 #include <cstddef>
-#include <type_traits>
 #include <concepts>
 #include <utility>
 #include <memory>
 #include <optional>
 #include <flat_map>
-#include <format>
 #include <string>
 
 export module runtime.value;
@@ -221,6 +219,26 @@ export namespace DerkJS {
                 return m_data.obj_p == other.m_data.obj_p;
             } else {
                 return false;
+            }
+        }
+
+        /// NOTE: This is an ad-hoc implementation for now, so I'll fix this later by the ES5 spec.
+        [[nodiscard]] auto operator%(const Value& other) -> Value {
+            const auto lhs_tag = get_tag();
+            const auto rhs_tag = other.get_tag();
+
+            if (lhs_tag == ValueTag::num_nan || rhs_tag == ValueTag::num_nan) {
+                return Value {JSNaNOpt {}};
+            } else if (lhs_tag == ValueTag::num_i32) {
+                if (const auto rhs_i32_v = other.to_num_i32(); !rhs_i32_v) {
+                    return Value {JSNaNOpt {}};
+                } else if (*rhs_i32_v == 0) {
+                    return Value {JSNaNOpt {}};
+                } else {   
+                    return Value {to_num_i32().value() % rhs_i32_v.value()};
+                }
+            } else {
+                return Value {JSNaNOpt {}};
             }
         }
 
