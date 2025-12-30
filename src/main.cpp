@@ -61,4 +61,15 @@ int main(int argc, char* argv[]) {
     SemanticAnalyzer sema_check_pass;
 
     std::println("Semantics OK? {}", sema_check_pass(full_ast, source_map));
+
+    BytecodeGenPass codegen_pass;
+
+    auto program_opt = codegen_pass(full_ast, source_map);
+
+    if (!program_opt) {
+        std::println(std::cerr, "Could not compile program.");
+        return 1;
+    }
+
+    disassemble_program(program_opt.value());
 }
