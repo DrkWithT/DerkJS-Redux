@@ -61,10 +61,4 @@ int main(int argc, char* argv[]) {
     SemanticAnalyzer sema_check_pass;
 
     std::println("Semantics OK? {}", sema_check_pass(full_ast, source_map));
-
-    IrGenPass ir_emit_pass;
-
-    std::println("IR generated (WIP)? {}", ir_emit_pass(full_ast, source_map).has_value());
-
-    return 0;
 }
