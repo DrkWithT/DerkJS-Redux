@@ -119,7 +119,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] static constexpr auto is_op_symbol(char c) noexcept -> bool {
-            return is_any_of(c, '%', '*', '/', '+', '-', '=', '!', '&', '|');
+            return is_any_of(c, '%', '*', '/', '+', '-', '=', '!', '<', '>', '&', '|');
         }
 
         [[nodiscard]] auto lookup_lexeme_as_special(std::string_view lexeme) noexcept -> std::optional<TokenTag> {

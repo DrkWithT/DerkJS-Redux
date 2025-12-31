@@ -26,18 +26,11 @@ export namespace DerkJS {
             .tag = Location::immediate,
         };
 
-        struct Backpatch {
-            uint16_t dest_ip;
-            uint16_t src_ip;
-            bool is_reversed;
-        };
-
         struct SimStackFrame {
             std::flat_map<std::string, Arg> entries;
             int stack_base;
         };
 
-        std::vector<Backpatch> m_patches;
         std::vector<SimStackFrame> m_mappings;
         std::vector<Object<Value>> m_heap_items;
         std::vector<Value> m_consts;
@@ -284,7 +277,7 @@ export namespace DerkJS {
                     };
                     case AstOp::ast_op_slash: return OpcodeAssocPair {
                         Opcode::djs_div,
-                        false
+                        true
                     };
                     case AstOp::ast_op_plus: return OpcodeAssocPair {
                         Opcode::djs_add,
@@ -334,13 +327,13 @@ export namespace DerkJS {
             std::optional<Arg> result_locator;
 
             if (is_opcode_lefty) {
-                lhs_locator = emit_expr(*lhs, source);
-                rhs_locator = emit_expr(*rhs, source);
-                result_locator = lhs_locator;
-            } else {
                 rhs_locator = emit_expr(*rhs, source);
                 lhs_locator = emit_expr(*lhs, source);
                 result_locator = rhs_locator;
+            } else {
+                lhs_locator = emit_expr(*lhs, source);
+                rhs_locator = emit_expr(*rhs, source);
+                result_locator = lhs_locator;
             }
 
             if (!lhs_locator || !rhs_locator) {
@@ -473,15 +466,11 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto emit_if(const If& stmt_if, const std::string& source) -> bool {
-            /// TODO: 1st, generate the check evaluation... 2nd, save a backpatch with partial information (except forward jump offset)... 3rd, emit the body and then complete the backpatch... lastly, apply the patch
             auto cond_check_locator = emit_expr(*stmt_if.check, source);
 
             if (!cond_check_locator) {
                 return false;
             }
-            
-            // Emit dud jump to patch later...
-            encode_instruction(Opcode::djs_test);
 
             const int pre_if_body_jump_ip = m_chunks.back().size();
 
@@ -574,7 +563,7 @@ export namespace DerkJS {
 
     public:
         BytecodeGenPass()
-        : m_patches {}, m_mappings {}, m_heap_items {}, m_consts {}, m_chunks {}, m_temp_entry_id {-1}, m_next_temp_id {0} {
+        : m_mappings {}, m_heap_items {}, m_consts {}, m_chunks {}, m_temp_entry_id {-1}, m_next_temp_id {0} {
             /// NOTE: Consider global scope 1st for global variables / stmts...
             enter_simulated_frame();
         }
