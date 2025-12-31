@@ -279,6 +279,24 @@ namespace DerkJS {
             return true;
         }
 
+        [[nodiscard]] auto check_if(const If& stmt_if, std::string_view source_name, const std::string& current_source, int area_start, int area_length) -> bool {
+            if (m_prepass) {
+                return true;
+            }
+
+            if (!check_expr(*stmt_if.check, source_name, current_source, area_start, area_length)) {
+                return false;
+            }
+
+            if (!check_stmt(*stmt_if.body_true, source_name, current_source, area_start, area_length)) {
+                return false;
+            }
+
+            /// NOTE: Skip 'else' for now. Next iteration I'll fix that by adding the parsing logic, etc.
+
+            return true;
+        }
+
         [[nodiscard]] auto check_return(const Return& ret, std::string_view source_name, const std::string& current_source, int area_start, int area_length) -> bool {
             if (m_prepass) {
                 return true;
@@ -339,6 +357,8 @@ namespace DerkJS {
                 return check_expr_stmt(*expr_stmt_p, source_name, current_source, stmt_text_begin, stmt_text_length);
             } else if (auto variables_p = std::get_if<Variables>(&stmt.data); variables_p) {
                 return check_variables(*variables_p, source_name, current_source, stmt_text_begin, stmt_text_length);
+            } else if (auto stmt_if_p = std::get_if<If>(&stmt.data); stmt_if_p) {
+                return check_if(*stmt_if_p, source_name, current_source, stmt_text_begin, stmt_text_length);
             } else if (auto ret_p = std::get_if<Return>(&stmt.data); ret_p) {
                 return check_return(*ret_p, source_name, current_source, stmt_text_begin, stmt_text_length);
             } else if (auto block_p = std::get_if<Block>(&stmt.data); block_p) {
