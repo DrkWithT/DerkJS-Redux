@@ -15,7 +15,7 @@ target_sources(
     src/derkjs_impl/runtime/value.ixx
     src/derkjs_impl/runtime/bytecode.ixx
     src/derkjs_impl/backend/bc_generate.ixx
-    # src/derkjs_impl/runtime/engine.ixx # TODO: implement after codegen!
+    src/derkjs_impl/runtime/vm.ixx
 )
 
 add_executable(derkjs src/main.cpp)
