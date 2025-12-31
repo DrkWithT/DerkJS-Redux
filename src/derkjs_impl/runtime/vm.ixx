@@ -152,6 +152,92 @@ export namespace DerkJS {
             }
         }
 
+        void op_test_strict_eq() {
+            auto lhs_v = pop_off_value();
+            auto rhs_v = pop_off_value();
+
+            if (m_status != ExitStatus::ok) {
+                return;
+            }
+
+            push_value(Value {lhs_v == rhs_v});
+
+            ++m_rip;
+        }
+
+        void op_test_strict_ne() {
+            auto lhs_v = pop_off_value();
+            auto rhs_v = pop_off_value();
+
+            if (m_status != ExitStatus::ok) {
+                return;
+            }
+
+            push_value(Value {lhs_v != rhs_v});
+
+            ++m_rip;
+        }
+
+        void op_test_lt() {
+            auto lhs_v = pop_off_value();
+            auto rhs_v = pop_off_value();
+
+            if (m_status != ExitStatus::ok) {
+                return;
+            }
+
+            push_value(Value {lhs_v < rhs_v});
+
+            ++m_rip;
+        }
+
+        void op_test_lte() {
+            auto lhs_v = pop_off_value();
+            auto rhs_v = pop_off_value();
+
+            if (m_status != ExitStatus::ok) {
+                return;
+            }
+
+            push_value(Value {lhs_v <= rhs_v});
+
+            ++m_rip;
+        }
+
+        void op_test_gt() {
+            auto lhs_v = pop_off_value();
+            auto rhs_v = pop_off_value();
+
+            if (m_status != ExitStatus::ok) {
+                return;
+            }
+
+            push_value(Value {lhs_v > rhs_v});
+
+            ++m_rip;
+        }
+
+        void op_test_gte() {
+            auto lhs_v = pop_off_value();
+            auto rhs_v = pop_off_value();
+
+            if (m_status != ExitStatus::ok) {
+                return;
+            }
+
+            push_value(Value {lhs_v >= rhs_v});
+
+            ++m_rip;
+        }
+
+        void op_jump_else(Arg offset) {
+            if (m_stack[m_rsp].is_falsy()) {
+                m_rip += offset.n;
+            } else {
+                ++m_rip;
+            }
+        }
+
         void op_call(Arg chunk_id, Arg argc) {
             const int16_t new_callee_sbp = m_rsp - argc.n + 1;
             const int16_t old_caller_sbp = m_rsbp;
@@ -307,13 +393,27 @@ export namespace DerkJS {
                 case Opcode::djs_test:
                     op_test(next_argv[0]);
                     break;
-                // case Opcode::djs_test_strict_eq:
-                // case Opcode::djs_test_strict_ne:
-                // case Opcode::djs_test_lt:
-                // case Opcode::djs_test_lte:
-                // case Opcode::djs_test_gt:
-                // case Opcode::djs_test_gte:
-                // case Opcode::djs_jump_else:
+                case Opcode::djs_test_strict_eq:
+                    op_test_strict_eq();
+                    break;
+                case Opcode::djs_test_strict_ne:
+                    op_test_strict_ne();
+                    break;
+                case Opcode::djs_test_lt:
+                    op_test_lt();
+                    break;
+                case Opcode::djs_test_lte:
+                    op_test_lte();
+                    break;
+                case Opcode::djs_test_gt:
+                    op_test_gt();
+                    break;
+                case Opcode::djs_test_gte:
+                    op_test_gte();
+                    break;
+                case Opcode::djs_jump_else:
+                    op_jump_else(next_argv[0]);
+                    break;
                 // case Opcode::djs_jump:
                 case djs_call:
                     op_call(next_argv[0], next_argv[1]);
