@@ -222,6 +222,34 @@ export namespace DerkJS {
             }
         }
 
+        /// NOTE: This partly implements the Abstract Relational Comparison logic from https://262.ecma-international.org/5.1/#sec-11.8.5, but it only implements case 3 for now.
+        [[nodiscard]] auto operator<(const Value& other) const noexcept -> bool {
+            // Case 3: convert both sides to Number values if possible. No String values supported yet.
+            if (const auto lhs_tag = get_tag(); lhs_tag == ValueTag::num_f64) {
+                return to_num_f64().value_or(0.0) < other.to_num_f64().value_or(0.0);
+            } else {
+                return to_num_i32().value_or(0) < other.to_num_i32().value_or(0);
+            }
+        }
+
+        /// NOTE: see `DerkJS::Value::operator<()` documentation.
+        [[nodiscard]] auto operator>(const Value& other) const noexcept -> bool {
+            // Case 3: convert both sides to Number values if possible. No String values supported yet.
+            if (const auto lhs_tag = get_tag(); lhs_tag == ValueTag::num_f64) {
+                return to_num_f64().value_or(0.0) > other.to_num_f64().value_or(0.0);
+            } else {
+                return to_num_i32().value_or(0) > other.to_num_i32().value_or(0);
+            }
+        }
+
+        [[nodiscard]] auto operator<=(const Value& other) const noexcept -> bool {
+            return !this->operator>(other);
+        }
+
+        [[nodiscard]] auto operator>=(const Value& other) const noexcept -> bool {
+            return !this->operator<(other);
+        }
+
         /// NOTE: This is an ad-hoc implementation for now, so I'll fix this later by the ES5 spec.
         [[nodiscard]] auto operator%(const Value& other) -> Value {
             const auto lhs_tag = get_tag();
