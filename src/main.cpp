@@ -5,6 +5,7 @@
 #include <iostream>
 #include <sstream>
 #include <fstream>
+#include <chrono>
 
 import derkjs_impl;
 
@@ -78,5 +79,11 @@ int main(int argc, char* argv[]) {
 
     VM vm {program_opt.value(), default_stack_size, default_call_depth_limit};
 
-    return (vm() == ExitStatus::ok) ? 0 : 1 ;
+    auto derkjs_start_time = std::chrono::steady_clock::now();
+    auto vm_status = vm();
+    auto derkjs_running_time = std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::steady_clock::now() - derkjs_start_time);
+
+    std::println("Finished in \x1b[1;33m{} ms\x1b[0m", derkjs_running_time);
+
+    return (vm_status == ExitStatus::ok) ? 0 : 1 ;
 }
