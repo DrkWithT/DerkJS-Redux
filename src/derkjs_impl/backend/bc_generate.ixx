@@ -380,7 +380,7 @@ export namespace DerkJS {
             /// NOTE: Pop off all temporary values generated the expr-stmt despite side effects- They will not be used as their lifetime is brief.
             encode_instruction(Opcode::djs_pop, Arg {
                 .n = static_cast<int16_t>(post_eval_temp_id - pre_eval_temp_id),
-                .tag = Location::temp
+                .tag = Location::immediate
             });
             update_temp_id(pre_eval_temp_id - post_eval_temp_id);
 
@@ -507,9 +507,6 @@ export namespace DerkJS {
                     }
                 }
             }
-
-            /// NOTE: There can be top-level return statements in JS, so assume that this will yield from global logic... Maybe print this after each VM exit.
-            encode_instruction(Opcode::djs_ret);
 
             return Program {
                 .heap_items = std::exchange(m_heap_items, {}),

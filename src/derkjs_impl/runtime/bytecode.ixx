@@ -12,6 +12,7 @@ export namespace DerkJS {
     enum class ExitStatus : uint8_t {
         ok,
         setup_err,
+        opcode_err,
         stack_err,
         heap_err,
         func_err
@@ -44,7 +45,7 @@ export namespace DerkJS {
         djs_native_call,
         djs_ret,
         djs_halt,
-        last
+        last,
     };
 
     enum Location : uint8_t {
@@ -52,7 +53,8 @@ export namespace DerkJS {
         immediate,
         constant,
         heap_obj,
-        temp
+        temp,
+        end,
     };
 
     struct Arg {
@@ -105,6 +107,14 @@ export namespace DerkJS {
             "djs_halt",
         };
 
+        static constexpr std::array<std::string_view, static_cast<std::size_t>(Location::end)> location_names = {
+            "chunk",
+            "imm",
+            "const",
+            "heap",
+            "temp"
+        };
+
         const auto& [prgm_pre_heap, prgm_consts, prgm_chunks, prgm_entry_id] = prgm;
 
         std::println("\x1b[1;33mProgram Dump:\x1b[0m\n\nEntry Chunk ID: {}\n\n", prgm_entry_id);
@@ -128,9 +138,11 @@ export namespace DerkJS {
 
             for (const auto& [instr_argv, instr_op] : temp_chunk) {
                 std::println(
-                    "\t{} {} {}",
+                    "\t{} {}:{} {}:{}",
                     opcode_names[static_cast<std::size_t>(instr_op)],
+                    location_names[instr_argv[0].tag],
                     instr_argv[0].n,
+                    location_names[instr_argv[1].tag],
                     instr_argv[1].n
                 );
             }

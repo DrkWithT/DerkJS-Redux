@@ -101,8 +101,8 @@ export namespace DerkJS {
             m_props[name] = std::forward<Value>(value);
         }
 
-        template <typename Engine>
-        [[nodiscard]] auto try_invoke(Engine& vm, void* current_ctx) -> bool {
+        template <typename VM>
+        [[nodiscard]] auto try_invoke(VM& vm, void* current_ctx) -> bool {
             return vm.invoke_bc_fn(current_ctx, this);
         }
     };
