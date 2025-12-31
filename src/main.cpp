@@ -83,7 +83,7 @@ int main(int argc, char* argv[]) {
     auto vm_status = vm();
     auto derkjs_running_time = std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::steady_clock::now() - derkjs_start_time);
 
-    std::println("Finished in \x1b[1;33m{} ms\x1b[0m", derkjs_running_time);
+    std::println("Finished in \x1b[1;33m{}\x1b[0m", derkjs_running_time);
 
     return (vm_status == ExitStatus::ok) ? 0 : 1 ;
 }

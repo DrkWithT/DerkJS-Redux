@@ -40,7 +40,6 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
 ```
 
 ### TO-DO's:
- 1. Add negated literal support.
- 2. Add `if` statement support.
+ 2. Add negated literal support.
  3. Add `else` statement support.
  4. Add `while` statement support.
