@@ -8,6 +8,9 @@
 
 import derkjs_impl;
 
+constexpr std::size_t default_stack_size = 1024;
+constexpr std::size_t default_call_depth_limit = 192;
+
 [[nodiscard]] auto read_file(std::filesystem::path file_path) -> std::string {
     std::ifstream reader {file_path};
 
@@ -62,9 +65,18 @@ int main(int argc, char* argv[]) {
 
     std::println("Semantics OK? {}", sema_check_pass(full_ast, source_map));
 
-    IrGenPass ir_emit_pass;
+    BytecodeGenPass codegen_pass;
 
-    std::println("IR generated (WIP)? {}", ir_emit_pass(full_ast, source_map).has_value());
+    auto program_opt = codegen_pass(full_ast, source_map);
 
-    return 0;
+    if (!program_opt) {
+        std::println(std::cerr, "Could not compile program.");
+        return 1;
+    }
+
+    disassemble_program(program_opt.value());
+
+    VM vm {program_opt.value(), default_stack_size, default_call_depth_limit};
+
+    return (vm() == ExitStatus::ok) ? 0 : 1 ;
 }

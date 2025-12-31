@@ -12,8 +12,10 @@ target_sources(
     src/derkjs_impl/frontend/ast.ixx
     src/derkjs_impl/frontend/parse.ixx
     src/derkjs_impl/frontend/semantics.ixx
-    src/derkjs_impl/backend/ir.ixx
-    src/derkjs_impl/backend/ir_generate.ixx
+    src/derkjs_impl/runtime/value.ixx
+    src/derkjs_impl/runtime/bytecode.ixx
+    src/derkjs_impl/backend/bc_generate.ixx
+    src/derkjs_impl/runtime/vm.ixx
 )
 
 add_executable(derkjs src/main.cpp)

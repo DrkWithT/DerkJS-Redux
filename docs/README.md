@@ -37,3 +37,9 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
 <block> = "{" <stmt>+ "}"
 <expr-stmt> = <call> "=" <expr> ";"
 ```
+
+### TO-DO's:
+ 1. Add negated literal support.
+ 2. Add simple control flow support.
+ 3. Add closure support.
+ 4. Add object-prototype support.
