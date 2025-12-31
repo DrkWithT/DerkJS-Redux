@@ -28,6 +28,7 @@ export namespace DerkJS {
         expr_equality,
         program_top,
         stmt_var,
+        stmt_if,
         stmt_return,
         stmt_function,
         stmt_expr,
@@ -46,6 +47,7 @@ export namespace DerkJS {
         "expr-equality",
         "program-top",
         "stmt-var",
+        "stmt-if",
         "stmt-return",
         "stmt-function",
         "stmt-expr",
@@ -452,6 +454,8 @@ export namespace DerkJS {
         [[nodiscard]] auto parse_stmt(Lexer& lexer, const std::string& source) -> StmtPtr {
             if (const auto stmt_keyword = m_current.tag; stmt_keyword == TokenTag::keyword_var) {
                 return parse_variable(lexer, source);
+            } else if (stmt_keyword == TokenTag::keyword_if) {
+                return parse_if(lexer, source);
             } else if (stmt_keyword == TokenTag::keyword_return) {
                 return parse_return(lexer, source);
             } else if (stmt_keyword == TokenTag::keyword_function) {
@@ -506,6 +510,32 @@ export namespace DerkJS {
             return std::make_unique<Stmt>(
                 Variables {
                     .vars = std::move(vars)
+                },
+                0,
+                snippet_begin,
+                m_current.start - snippet_begin + 1
+            );
+        }
+
+        [[nodiscard]] auto parse_if(Lexer& lexer, const std::string& source) -> StmtPtr {
+            m_syntax = SyntaxTag::stmt_if;
+
+            const auto snippet_begin = m_current.start;
+
+            consume_any(lexer, source); // skip 'if'
+            consume(lexer, source, TokenTag::left_paren);
+
+            auto condition_expr = parse_equality(lexer, source);
+
+            consume(lexer, source, TokenTag::right_paren);
+
+            auto block_true = parse_block(lexer, source);
+
+            return std::make_unique<Stmt>(
+                If {
+                    .check = std::move(condition_expr),
+                    .body_true = std::move(block_true),
+                    .body_false = {}
                 },
                 0,
                 snippet_begin,

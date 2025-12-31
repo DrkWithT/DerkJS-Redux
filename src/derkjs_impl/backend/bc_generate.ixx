@@ -26,12 +26,6 @@ export namespace DerkJS {
             .tag = Location::immediate,
         };
 
-        struct Backpatch {
-            uint16_t dest_ip;
-            uint16_t src_ip;
-            bool is_reversed;
-        };
-
         struct SimStackFrame {
             std::flat_map<std::string, Arg> entries;
             int stack_base;
@@ -264,34 +258,92 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto emit_binary(const Binary& expr, const std::string& source) -> std::optional<Arg> {
+            struct OpcodeAssocPair {
+                Opcode op;
+                bool lhs_first;
+            };
+
             const auto& [lhs, rhs, bin_op] = expr;
 
-            auto rhs_locator = emit_expr(*rhs, source);
-            auto lhs_locator = emit_expr(*lhs, source);
+            const auto opcode_associated_pair = ([](AstOp ast_op) noexcept -> std::optional<OpcodeAssocPair> {
+                switch (ast_op) {
+                    case AstOp::ast_op_percent: return OpcodeAssocPair {
+                        Opcode::djs_mod,
+                        true
+                    };
+                    case AstOp::ast_op_times: return OpcodeAssocPair {
+                        Opcode::djs_mul,
+                        true
+                    };
+                    case AstOp::ast_op_slash: return OpcodeAssocPair {
+                        Opcode::djs_div,
+                        true
+                    };
+                    case AstOp::ast_op_plus: return OpcodeAssocPair {
+                        Opcode::djs_add,
+                        true
+                    };
+                    case AstOp::ast_op_minus: return OpcodeAssocPair {
+                        Opcode::djs_sub,
+                        true
+                    };
+                    case AstOp::ast_op_equal:
+                    case AstOp::ast_op_strict_equal: return OpcodeAssocPair {
+                        Opcode::djs_test_strict_eq,
+                        true
+                    };
+                    case AstOp::ast_op_bang_equal:
+                    case AstOp::ast_op_strict_bang_equal: return OpcodeAssocPair {
+                        Opcode::djs_test_strict_ne,
+                        true
+                    };
+                    case AstOp::ast_op_less: return OpcodeAssocPair {
+                        Opcode::djs_test_lt,
+                        true
+                    };
+                    case AstOp::ast_op_less_equal: return OpcodeAssocPair {
+                        Opcode::djs_test_lte,
+                        true
+                    };
+                    case AstOp::ast_op_greater: return OpcodeAssocPair {
+                        Opcode::djs_test_gt,
+                        true
+                    };
+                    case AstOp::ast_op_greater_equal: return OpcodeAssocPair {
+                        Opcode::djs_test_gte,
+                        true
+                    };
+                    default: return {};
+                }
+            })(bin_op);
+
+            if (!opcode_associated_pair) {
+                return {};
+            }
+
+            const auto [opcode, is_opcode_lefty] = *opcode_associated_pair;
+            std::optional<Arg> lhs_locator;
+            std::optional<Arg> rhs_locator;
+            std::optional<Arg> result_locator;
+
+            if (is_opcode_lefty) {
+                rhs_locator = emit_expr(*rhs, source);
+                lhs_locator = emit_expr(*lhs, source);
+                result_locator = rhs_locator;
+            } else {
+                lhs_locator = emit_expr(*lhs, source);
+                rhs_locator = emit_expr(*rhs, source);
+                result_locator = lhs_locator;
+            }
 
             if (!lhs_locator || !rhs_locator) {
                 return {};
             }
 
-            const auto opcode = ([](AstOp ast_op) noexcept -> std::optional<Opcode> {
-                switch (ast_op) {
-                    case AstOp::ast_op_percent: return Opcode::djs_mod;
-                    case AstOp::ast_op_times: return Opcode::djs_mul;
-                    case AstOp::ast_op_slash: return Opcode::djs_div;
-                    case AstOp::ast_op_plus: return Opcode::djs_add;
-                    case AstOp::ast_op_minus: return Opcode::djs_sub;
-                    default: return {};
-                }
-            })(bin_op);
-
-            if (!opcode) {
-                return {};
-            }
-
-            encode_instruction(*opcode);
+            encode_instruction(opcode);
             update_temp_id(-1);
 
-            return rhs_locator;
+            return result_locator;
         }
 
         [[nodiscard]] auto emit_assign(const Assign& expr, const std::string& source) -> std::optional<Arg> {
@@ -413,6 +465,35 @@ export namespace DerkJS {
             return true;
         }
 
+        [[nodiscard]] auto emit_if(const If& stmt_if, const std::string& source) -> bool {
+            auto cond_check_locator = emit_expr(*stmt_if.check, source);
+
+            if (!cond_check_locator) {
+                return false;
+            }
+
+            const int pre_if_body_jump_ip = m_chunks.back().size();
+
+            encode_instruction(Opcode::djs_jump_else, Arg {
+                .n = -1,
+                .tag = Location::immediate
+            });
+
+            if (!emit_stmt(*stmt_if.body_true, source)) {
+                return false;
+            }
+
+            const int post_if_body_jump_ip = m_chunks.back().size();
+
+            encode_instruction(Opcode::djs_nop);
+
+            const int falsy_jump_offset = post_if_body_jump_ip - pre_if_body_jump_ip;
+
+            m_chunks.back().at(pre_if_body_jump_ip).args[0].n = falsy_jump_offset;
+
+            return true;
+        }
+
         [[nodiscard]] auto emit_return(const Return& stmt, const std::string& source) -> bool {
             if (!emit_expr(*stmt.result, source)) {
                 return false;
@@ -467,6 +548,8 @@ export namespace DerkJS {
                 return emit_expr_stmt(*expr_stmt_p, source);
             } else if (auto variables_p = std::get_if<Variables>(&stmt.data); variables_p) {
                 return emit_variables(*variables_p, source);
+            } else if (auto stmt_if_p = std::get_if<If>(&stmt.data); stmt_if_p) {
+                return emit_if(*stmt_if_p, source);
             } else if (auto ret_p = std::get_if<Return>(&stmt.data); ret_p) {
                 return emit_return(*ret_p, source);
             } else if (auto block_p = std::get_if<Block>(&stmt.data); block_p) {

@@ -14,6 +14,7 @@ export namespace DerkJS {
         block_comment,
         identifier,
         keyword_var,
+        keyword_if,
         keyword_return,
         keyword_function,
         keyword_prototype,
@@ -118,7 +119,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] static constexpr auto is_op_symbol(char c) noexcept -> bool {
-            return is_any_of(c, '%', '*', '/', '+', '-', '=', '!', '&', '|');
+            return is_any_of(c, '%', '*', '/', '+', '-', '=', '!', '<', '>', '&', '|');
         }
 
         [[nodiscard]] auto lookup_lexeme_as_special(std::string_view lexeme) noexcept -> std::optional<TokenTag> {
@@ -317,6 +318,7 @@ export namespace DerkJS {
         Lexer(std::string_view source) noexcept
         : m_specials {}, m_pos {}, m_end {static_cast<int>(source.size())}, m_line {1}, m_column {1} {
             m_specials.emplace("var", TokenTag::keyword_var),
+            m_specials.emplace("if", TokenTag::keyword_if);
             m_specials.emplace("return", TokenTag::keyword_return),
             m_specials.emplace("function", TokenTag::keyword_function);
             m_specials.emplace("prototype", TokenTag::keyword_prototype);

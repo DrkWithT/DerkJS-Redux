@@ -29,17 +29,17 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
 ### Grammar (Statements)
 ```
 <program> = <stmt>+
-<stmt> = <variable> | <return> | <function> | <expr-stmt>
+<stmt> = <variable> | <if> | <return> | <function> | <expr-stmt>
 <variable> = "var" <var-decl> ( "," <var-decl>)* ";"
 <var-decl> = <identifier> ( "=" <expr> )?
+<if> = "if" "(" <expr> ")" <block>
 <return> = "return" <expr> ";"
 <function> = "function" <identifier> "(" ( <identifier> ( "," <identifier> )* )? ")" <block>
 <block> = "{" <stmt>+ "}"
-<expr-stmt> = <call> "=" <expr> ";"
+<expr-stmt> = <call> ( "=" <expr> )? ";"
 ```
 
 ### TO-DO's:
- 1. Add negated literal support.
- 2. Add simple control flow support.
- 3. Add closure support.
- 4. Add object-prototype support.
+ 2. Add negated literal support.
+ 3. Add `else` statement support.
+ 4. Add `while` statement support.
