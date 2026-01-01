@@ -9,8 +9,8 @@
 
 import derkjs_impl;
 
-constexpr std::size_t default_stack_size = 1024;
-constexpr std::size_t default_call_depth_limit = 192;
+constexpr std::size_t default_stack_size = 2048;
+constexpr std::size_t default_call_depth_limit = 208;
 
 [[nodiscard]] auto read_file(std::filesystem::path file_path) -> std::string {
     std::ifstream reader {file_path};
