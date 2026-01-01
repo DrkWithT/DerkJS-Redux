@@ -1,7 +1,7 @@
 argc=$#
 
 usage_exit() {
-    echo "Usage: utility.sh [help | build | unittest | sloc]\n\tutility.sh (re)build [debug | release]\n\tutility.sh unittest\n";
+    echo "Usage: utility.sh [help | build | unittest | profile | sloc]\n\tutility.sh (re)build [debug | release]\n\tutility.sh unittest\n\tutility.sh profile <JS file path>\n";
     exit $1;
 }
 
@@ -28,6 +28,8 @@ elif [[ $action = "unittest" && $argc -eq 1 ]]; then
     # ctest --test-dir build --timeout 2 -V 1> ./test_logs.txt;
     # usage_exit $? && echo "TESTS PASSED";
     usage_exit 1;
+elif [[ $action = "profile" && $argc -eq 2 ]]; then
+    samply record --save-only -o prof.json -- ./build/derkjs $2
 elif [[ $action = "sloc" ]]; then
     wc -l ./src/derkjs_impl/**/*.ixx ./src/main.cpp;
 else
