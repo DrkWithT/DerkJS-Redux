@@ -36,8 +36,16 @@ export namespace DerkJS {
         std::vector<CallFrame> m_frames;
 
         Value* m_consts_view;
-        Chunk* m_chunk_view;
+
+        /// NOTE: holds base of bytecode blob, starts at position 0 to access offsets from.
+        const Instruction* m_code_bp;
+
+        /// NOTE: holds base of an index array mapping function IDs to their code starts.
+        const int* m_fn_table_bp;
+
+        /// NOTE: holds direct pointer to an `Instruction`.
         const Instruction* m_rip_p;
+
         std::size_t m_frames_free;
 
         /// NOTE: holds stack base pointer for call locals
@@ -71,47 +79,45 @@ export namespace DerkJS {
             m_status = ExitStatus::opcode_err;
         }
 
-        void op_mod() {
-            auto rhs_v = pop_off_value();
-            auto lhs_v = pop_off_value();
-
-            push_value(lhs_v % rhs_v);
-
-            ++m_rip_p;
-        }
-
-        void op_mul() {
-            auto lhs_v = pop_off_value();
-            auto rhs_v = pop_off_value();
-
-            push_value(lhs_v * rhs_v);
+        void op_mod() noexcept {
+            m_stack[m_rsp] %= m_stack[m_rsp - 1];
+            std::swap(m_stack[m_rsp - 1], m_stack[m_rsp]);
+            --m_rsp;
 
             ++m_rip_p;
         }
 
-        void op_div() {
-            auto lhs_v = pop_off_value();
-            auto rhs_v = pop_off_value();
-
-            push_value(lhs_v / rhs_v);
-
-            ++m_rip_p;
-        }
-
-        void op_add() {
-            auto lhs_v = pop_off_value();
-            auto rhs_v = pop_off_value();
-
-            push_value(lhs_v + rhs_v);
+        void op_mul() noexcept {
+            m_stack[m_rsp] *= m_stack[m_rsp - 1];
+            std::swap(m_stack[m_rsp - 1], m_stack[m_rsp]);
+            --m_rsp;
 
             ++m_rip_p;
         }
 
-        void op_sub() {
-            auto lhs_v = pop_off_value();
-            auto rhs_v = pop_off_value();
+        void op_div() noexcept {
+            // E: 4 / 2: --> 4 / 2: 
+            // T: LHS: 10    LHS: 5
+            // B: RHS: 2     RHS: (bubble down LHS here)
+            m_stack[m_rsp] /= m_stack[m_rsp - 1];
+            std::swap(m_stack[m_rsp - 1], m_stack[m_rsp]);
+            --m_rsp;
 
-            push_value(lhs_v - rhs_v);
+            ++m_rip_p;
+        }
+
+        void op_add() noexcept {
+            m_stack[m_rsp] += m_stack[m_rsp - 1];
+            std::swap(m_stack[m_rsp - 1], m_stack[m_rsp]);
+            --m_rsp;
+
+            ++m_rip_p;
+        }
+
+        void op_sub() noexcept {
+            m_stack[m_rsp] -= m_stack[m_rsp - 1];
+            std::swap(m_stack[m_rsp - 1],  m_stack[m_rsp]);
+            --m_rsp;
 
             ++m_rip_p;
         }
@@ -125,65 +131,61 @@ export namespace DerkJS {
             }
         }
 
-        void op_test_strict_eq() {
-            auto lhs_v = pop_off_value();
-            auto rhs_v = pop_off_value();
+        void op_test_strict_eq() noexcept {
+            const auto& lhs = m_stack[m_rsp];
+            --m_rsp;
 
-            push_value(Value {lhs_v == rhs_v});
+            m_stack[m_rsp] = m_stack[m_rsp] == lhs;
 
             ++m_rip_p;
         }
 
-        void op_test_strict_ne() {
-            auto lhs_v = pop_off_value();
-            auto rhs_v = pop_off_value();
+        void op_test_strict_ne() noexcept {
+            const auto& lhs = m_stack[m_rsp];
+            --m_rsp;
 
-            push_value(Value {lhs_v != rhs_v});
+            m_stack[m_rsp] = m_stack[m_rsp] != lhs;
 
             ++m_rip_p;
         }
 
         void op_test_lt() {
-            auto lhs_v = pop_off_value();
-            auto rhs_v = pop_off_value();
+            const auto& lhs = m_stack[m_rsp];
+            --m_rsp;
 
-            push_value(Value {lhs_v < rhs_v});
+            m_stack[m_rsp] = lhs < m_stack[m_rsp];
 
             ++m_rip_p;
         }
 
         void op_test_lte() {
-            auto lhs_v = pop_off_value();
-            auto rhs_v = pop_off_value();
+            const auto& lhs = m_stack[m_rsp];
+            --m_rsp;
 
-            push_value(Value {lhs_v <= rhs_v});
+            m_stack[m_rsp] = lhs <= m_stack[m_rsp];
 
             ++m_rip_p;
         }
 
         void op_test_gt() {
-            auto lhs_v = pop_off_value();
-            auto rhs_v = pop_off_value();
+            const auto& lhs = m_stack[m_rsp];
+            --m_rsp;
 
-            push_value(Value {lhs_v > rhs_v});
+            m_stack[m_rsp] = lhs < m_stack[m_rsp];
 
             ++m_rip_p;
         }
 
         void op_test_gte() {
-            auto lhs_v = pop_off_value();
-            auto rhs_v = pop_off_value();
+            const auto& lhs = m_stack[m_rsp];
+            --m_rsp;
 
-            if (m_status != ExitStatus::ok) {
-                return;
-            }
-
-            push_value(Value {lhs_v >= rhs_v});
+            m_stack[m_rsp] = lhs >= m_stack[m_rsp];
 
             ++m_rip_p;
         }
 
-        void op_jump_else(Arg offset) {
+        void op_jump_else(Arg offset) noexcept {
             if (m_stack[m_rsp].is_falsy()) {
                 m_rip_p += offset.n;
             } else {
@@ -195,11 +197,11 @@ export namespace DerkJS {
             const int16_t new_callee_sbp = m_rsp - argc.n + 1;
             const int16_t old_caller_sbp = m_rsbp;
             const int16_t old_caller_id = m_rcid;
-            const int16_t old_caller_ret_ip = m_rip_p - m_chunk_view[old_caller_id].data() + 1;
+            const int16_t old_caller_ret_ip = m_rip_p - m_code_bp + 1;
 
             m_rsbp = new_callee_sbp;
             m_rcid = chunk_id.n;
-            m_rip_p = m_chunk_view[chunk_id.n].data();
+            m_rip_p = m_code_bp + m_fn_table_bp[chunk_id.n];
 
             m_frames.emplace_back(CallFrame {
                 new_callee_sbp,
@@ -220,29 +222,28 @@ export namespace DerkJS {
             m_frames.pop_back();
             ++m_frames_free;
 
-            Value result_v = pop_off_value();
+            m_stack[callee_sbp] = m_stack[m_rsp];
 
-            m_rsp = callee_sbp;
-            m_stack[callee_sbp] = std::move(result_v);
-
-            m_rcid = caller_id;
             m_rsbp = caller_sbp;
-            m_rip_p = m_chunk_view[caller_id].data() + caller_ret_ip;
+            m_rsp = callee_sbp;
+            m_rcid = caller_id;
+            m_rip_p = m_code_bp + caller_ret_ip;
         }
 
-        void op_halt(Arg exit_code) {
+        void op_halt(Arg exit_code) noexcept {
             m_status = static_cast<ExitStatus>(exit_code.n);
             ++m_rip_p;
         }
 
     public:
         VM(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit)
-        : m_stack {}, m_frames {}, m_consts_view {}, m_chunk_view {}, m_rip_p {}, m_frames_free {call_frame_limit}, m_rsbp {}, m_rsp {}, m_rcid {-1}, m_status {ExitStatus::ok} {
+        : m_stack {}, m_frames {}, m_consts_view {}, m_code_bp {}, m_fn_table_bp {}, m_rip_p {}, m_frames_free {call_frame_limit}, m_rsbp {}, m_rsp {}, m_rcid {-1}, m_status {ExitStatus::ok} {
             m_stack.reserve(stack_length_limit);
             m_stack.resize(stack_length_limit);
 
             m_consts_view = prgm.consts.data();
-            m_chunk_view = prgm.chunks.data();
+            m_code_bp = prgm.code.data();
+            m_fn_table_bp = prgm.offsets.data();
 
             m_rsbp = 0;
             m_rsp = -1;
@@ -257,7 +258,7 @@ export namespace DerkJS {
             --m_frames_free;
 
             if (m_rcid >= 0) {
-                m_rip_p = prgm.chunks[m_rcid].data();
+                m_rip_p = m_code_bp + m_fn_table_bp[m_rcid];
                 m_status = ExitStatus::ok;
             } else {
                 m_rip_p = nullptr;
@@ -266,7 +267,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_value(Arg op_arg) noexcept -> Value* {
-            const auto& [arg_n, arg_tag] = op_arg;
+            const auto [arg_n, arg_tag] = op_arg;
             
             switch (arg_tag) {
                 case Location::constant: return m_consts_view + arg_n;
@@ -285,7 +286,7 @@ export namespace DerkJS {
         template <typename V> requires (std::is_same_v<std::remove_cvref_t<V>, Value>)
         void push_value(V&& value) {
             ++m_rsp;
-            m_stack[m_rsp] = std::forward<Value>(value);
+            m_stack[m_rsp] = std::forward<V>(value); // 30 profile cost
         }
 
         void lazy_pop_values(int16_t n) noexcept {
@@ -296,17 +297,8 @@ export namespace DerkJS {
             }
         }
 
-        [[nodiscard]] auto pop_off_value() -> Value {
-            if (m_rsp < 0) {
-                m_status = ExitStatus::stack_err;
-                return {};
-            }
-
-            Value temp = std::move(m_stack[m_rsp]);
-
-            --m_rsp;
-
-            return temp;
+        [[nodiscard]] auto peek_local_value(int offset) noexcept -> Value& {
+            return m_stack[m_rsbp + offset];
         }
 
         [[nodiscard]] auto operator()() -> ExitStatus {

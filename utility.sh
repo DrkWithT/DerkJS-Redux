@@ -29,7 +29,7 @@ elif [[ $action = "unittest" && $argc -eq 1 ]]; then
     # usage_exit $? && echo "TESTS PASSED";
     usage_exit 1;
 elif [[ $action = "profile" && $argc -eq 2 ]]; then
-    samply record --save-only -o prof.json -- ./build/derkjs $2
+    samply record --save-only -o prof.json -- ./build/derkjs -r $2;
 elif [[ $action = "sloc" ]]; then
     wc -l ./src/derkjs_impl/**/*.ixx ./src/main.cpp;
 else
