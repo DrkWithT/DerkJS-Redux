@@ -32,19 +32,30 @@ constexpr std::size_t default_call_depth_limit = 192;
 int main(int argc, char* argv[]) {
     using namespace DerkJS;
 
-    if (argc != 2) {
-        std::println(std::cerr, "usage: ./derkjs [-v | <script name>]");
+    if (argc < 2 || argc > 3) {
+        std::println(std::cerr, "usage: ./derkjs [-v | [-d | -r] <script name>]");
         return 1;
     }
 
     std::string_view arg_1 = argv[1];
+    std::string source_path;
+    auto enable_bytecode_dump = false;
 
     if (arg_1 == "-v") {
         std::println("DerkJS v0.0.1\nBy: DrkWithT (GitHub)");
         return 0;
     }
+    
+    if (arg_1 == "-d") {
+        source_path = argv[2];
+        enable_bytecode_dump = true;
+    } else if (arg_1 == "-r") {
+        source_path = argv[2];
+    } else {
+        std::println(std::cerr, "usage: ./derkjs [-v | [-d | -r] <script name>]");
+        return 1;
+    }
 
-    std::string source_path {argv[1]};
     std::string source {read_file(source_path)};
     std::flat_map<int, std::string> source_map;
     source_map[0] = source;
@@ -60,11 +71,7 @@ int main(int argc, char* argv[]) {
 
     ASTUnit full_ast = std::move(ast_opt.value());
 
-    std::println("Parsed {} top-level statements for source '{}'", full_ast.size(), arg_1);
-
     SemanticAnalyzer sema_check_pass;
-
-    std::println("Semantics OK? {}", sema_check_pass(full_ast, source_map));
 
     BytecodeGenPass codegen_pass;
 
@@ -75,7 +82,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    disassemble_program(program_opt.value());
+    if (enable_bytecode_dump) {
+        disassemble_program(program_opt.value());
+    }
 
     VM vm {program_opt.value(), default_stack_size, default_call_depth_limit};
 

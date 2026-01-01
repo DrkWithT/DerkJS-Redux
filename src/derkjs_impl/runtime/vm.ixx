@@ -37,7 +37,7 @@ export namespace DerkJS {
 
         Value* m_consts_view;
         Chunk* m_chunk_view;
-        const Chunk* m_chunk_p;
+        const Instruction* m_rip_p;
         std::size_t m_frames_free;
 
         /// NOTE: holds stack base pointer for call locals
@@ -46,18 +46,11 @@ export namespace DerkJS {
         /// NOTE: holds stack top pointer
         int16_t m_rsp;
 
-        /// NOTE: holds current instruction pointer
-        int16_t m_rip;
-
         /// NOTE: holds current bytecode chunk ID (caller's code)
         int16_t m_rcid;
 
         /// NOTE: indicates an error condition during execution, returning from the VM invocation
         ExitStatus m_status;
-
-        [[nodiscard]] auto is_done() const noexcept -> bool {
-            return m_frames.empty() || m_status != ExitStatus::ok;
-        }
 
         void op_push(Arg src) {
             if (auto value_p = get_value(src); !value_p) {
@@ -65,13 +58,13 @@ export namespace DerkJS {
                 return;
             } else {
                 push_value(*value_p);
-                ++m_rip;
+                ++m_rip_p;
             }
         }
 
         void op_pop(Arg pop_n) noexcept {
             lazy_pop_values(pop_n.n);
-            ++m_rip;
+            ++m_rip_p;
         }
 
         void op_dup([[maybe_unused]] Arg src) {
@@ -82,65 +75,45 @@ export namespace DerkJS {
             auto rhs_v = pop_off_value();
             auto lhs_v = pop_off_value();
 
-            if (m_status != ExitStatus::ok) {
-                return;
-            }
-
             push_value(lhs_v % rhs_v);
 
-            ++m_rip;
+            ++m_rip_p;
         }
 
         void op_mul() {
             auto lhs_v = pop_off_value();
             auto rhs_v = pop_off_value();
 
-            if (m_status != ExitStatus::ok) {
-                return;
-            }
-
             push_value(lhs_v * rhs_v);
 
-            ++m_rip;
+            ++m_rip_p;
         }
 
         void op_div() {
             auto lhs_v = pop_off_value();
             auto rhs_v = pop_off_value();
 
-            if (m_status != ExitStatus::ok) {
-                return;
-            }
-
             push_value(lhs_v / rhs_v);
 
-            ++m_rip;
+            ++m_rip_p;
         }
 
         void op_add() {
             auto lhs_v = pop_off_value();
             auto rhs_v = pop_off_value();
 
-            if (m_status != ExitStatus::ok) {
-                return;
-            }
-
             push_value(lhs_v + rhs_v);
 
-            ++m_rip;
+            ++m_rip_p;
         }
 
         void op_sub() {
             auto lhs_v = pop_off_value();
             auto rhs_v = pop_off_value();
 
-            if (m_status != ExitStatus::ok) {
-                return;
-            }
-
             push_value(lhs_v - rhs_v);
 
-            ++m_rip;
+            ++m_rip_p;
         }
 
         void op_test(Arg src) {
@@ -148,7 +121,7 @@ export namespace DerkJS {
                 return;
             } else {
                 push_value(Value {src_value_p->is_truthy()});
-                ++m_rip;
+                ++m_rip_p;
             }
         }
 
@@ -156,65 +129,45 @@ export namespace DerkJS {
             auto lhs_v = pop_off_value();
             auto rhs_v = pop_off_value();
 
-            if (m_status != ExitStatus::ok) {
-                return;
-            }
-
             push_value(Value {lhs_v == rhs_v});
 
-            ++m_rip;
+            ++m_rip_p;
         }
 
         void op_test_strict_ne() {
             auto lhs_v = pop_off_value();
             auto rhs_v = pop_off_value();
 
-            if (m_status != ExitStatus::ok) {
-                return;
-            }
-
             push_value(Value {lhs_v != rhs_v});
 
-            ++m_rip;
+            ++m_rip_p;
         }
 
         void op_test_lt() {
             auto lhs_v = pop_off_value();
             auto rhs_v = pop_off_value();
 
-            if (m_status != ExitStatus::ok) {
-                return;
-            }
-
             push_value(Value {lhs_v < rhs_v});
 
-            ++m_rip;
+            ++m_rip_p;
         }
 
         void op_test_lte() {
             auto lhs_v = pop_off_value();
             auto rhs_v = pop_off_value();
 
-            if (m_status != ExitStatus::ok) {
-                return;
-            }
-
             push_value(Value {lhs_v <= rhs_v});
 
-            ++m_rip;
+            ++m_rip_p;
         }
 
         void op_test_gt() {
             auto lhs_v = pop_off_value();
             auto rhs_v = pop_off_value();
 
-            if (m_status != ExitStatus::ok) {
-                return;
-            }
-
             push_value(Value {lhs_v > rhs_v});
 
-            ++m_rip;
+            ++m_rip_p;
         }
 
         void op_test_gte() {
@@ -227,14 +180,14 @@ export namespace DerkJS {
 
             push_value(Value {lhs_v >= rhs_v});
 
-            ++m_rip;
+            ++m_rip_p;
         }
 
         void op_jump_else(Arg offset) {
             if (m_stack[m_rsp].is_falsy()) {
-                m_rip += offset.n;
+                m_rip_p += offset.n;
             } else {
-                ++m_rip;
+                ++m_rip_p;
             }
         }
 
@@ -242,12 +195,11 @@ export namespace DerkJS {
             const int16_t new_callee_sbp = m_rsp - argc.n + 1;
             const int16_t old_caller_sbp = m_rsbp;
             const int16_t old_caller_id = m_rcid;
-            const int16_t old_caller_ret_ip = m_rip + 1;
+            const int16_t old_caller_ret_ip = m_rip_p - m_chunk_view[old_caller_id].data() + 1;
 
             m_rsbp = new_callee_sbp;
-            m_rip = 0;
             m_rcid = chunk_id.n;
-            m_chunk_p = m_chunk_view + chunk_id.n;
+            m_rip_p = m_chunk_view[chunk_id.n].data();
 
             m_frames.emplace_back(CallFrame {
                 new_callee_sbp,
@@ -274,31 +226,28 @@ export namespace DerkJS {
             m_stack[callee_sbp] = std::move(result_v);
 
             m_rcid = caller_id;
-            m_rip = caller_ret_ip;
             m_rsbp = caller_sbp;
-            m_chunk_p = m_chunk_view + caller_id;
+            m_rip_p = m_chunk_view[caller_id].data() + caller_ret_ip;
         }
 
         void op_halt(Arg exit_code) {
             m_status = static_cast<ExitStatus>(exit_code.n);
-            ++m_rip;
+            ++m_rip_p;
         }
 
     public:
         VM(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit)
-        : m_stack {}, m_frames {}, m_consts_view {}, m_chunk_view {}, m_chunk_p {}, m_frames_free {call_frame_limit}, m_rsbp {}, m_rsp {}, m_rip {0}, m_rcid {-1}, m_status {ExitStatus::ok} {
+        : m_stack {}, m_frames {}, m_consts_view {}, m_chunk_view {}, m_rip_p {}, m_frames_free {call_frame_limit}, m_rsbp {}, m_rsp {}, m_rcid {-1}, m_status {ExitStatus::ok} {
             m_stack.reserve(stack_length_limit);
             m_stack.resize(stack_length_limit);
 
             m_consts_view = prgm.consts.data();
             m_chunk_view = prgm.chunks.data();
-            m_chunk_p = m_chunk_view + prgm.entry_func_id;
 
             m_rsbp = 0;
             m_rsp = -1;
-            m_rip = 0;
             m_rcid = prgm.entry_func_id;
-
+            
             m_frames.emplace_back(CallFrame {
                 0,
                 0,
@@ -307,7 +256,13 @@ export namespace DerkJS {
             });
             --m_frames_free;
 
-            m_status = (m_rcid >= 0) ? ExitStatus::ok : ExitStatus::setup_err;
+            if (m_rcid >= 0) {
+                m_rip_p = prgm.chunks[m_rcid].data();
+                m_status = ExitStatus::ok;
+            } else {
+                m_rip_p = nullptr;
+                m_status = ExitStatus::setup_err;
+            }
         }
 
         [[nodiscard]] auto get_value(Arg op_arg) noexcept -> Value* {
@@ -355,12 +310,12 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto operator()() -> ExitStatus {
-            while (!is_done()) {
-                const auto& [next_argv, next_opcode] = m_chunk_p->data()[m_rip];
+            while (!m_frames.empty() && m_status == ExitStatus::ok) {
+                const auto& [next_argv, next_opcode] = *m_rip_p;
 
                 switch (next_opcode) {
                 case Opcode::djs_nop:
-                    ++m_rip;
+                    ++m_rip_p;
                     break;
                 case Opcode::djs_push:
                     op_push(next_argv[0]);
