@@ -34,7 +34,8 @@ export namespace DerkJS {
         std::vector<SimStackFrame> m_mappings;
         std::vector<Object<Value>> m_heap_items;
         std::vector<Value> m_consts;
-        std::vector<Chunk> m_chunks;
+        std::vector<Instruction> m_code;
+        std::vector<int> m_func_offsets;
         int m_temp_entry_id;
 
         int m_next_temp_id;
@@ -112,9 +113,10 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto record_this_func() -> Arg {
-            const int next_func_id = m_chunks.size();
+            const int next_func_id = m_func_offsets.size();
+            const int next_func_code_offset = m_code.size();
 
-            m_chunks.emplace_back();
+            m_func_offsets.emplace_back(next_func_code_offset);
 
             return Arg {
                 .n = static_cast<int16_t>(next_func_id),
@@ -124,7 +126,7 @@ export namespace DerkJS {
 
         /// NOTE: This overload is for no-argument opcode instructions e.g NOP
         void encode_instruction(Opcode op) {
-            m_chunks.back().emplace_back(Instruction {
+            m_code.emplace_back(Instruction {
                 .args = {
                     dud_arg,
                     dud_arg,
@@ -134,7 +136,7 @@ export namespace DerkJS {
         }
 
         void encode_instruction(Opcode op, Arg a0) {
-            m_chunks.back().emplace_back(Instruction {
+            m_code.emplace_back(Instruction {
                 .args = {
                     a0,
                     dud_arg,
@@ -144,7 +146,7 @@ export namespace DerkJS {
         }
 
         void encode_instruction(Opcode op, Arg a0, Arg a1) {
-            m_chunks.back().emplace_back(Instruction {
+            m_code.emplace_back(Instruction {
                 .args = {
                     a0,
                     a1,
@@ -472,7 +474,7 @@ export namespace DerkJS {
                 return false;
             }
 
-            const int pre_if_body_jump_ip = m_chunks.back().size();
+            const int pre_if_body_jump_ip = m_code.size();
 
             encode_instruction(Opcode::djs_jump_else, Arg {
                 .n = -1,
@@ -483,13 +485,13 @@ export namespace DerkJS {
                 return false;
             }
 
-            const int post_if_body_jump_ip = m_chunks.back().size();
+            const int post_if_body_jump_ip = m_code.size();
 
             encode_instruction(Opcode::djs_nop);
 
             const int falsy_jump_offset = post_if_body_jump_ip - pre_if_body_jump_ip;
 
-            m_chunks.back().at(pre_if_body_jump_ip).args[0].n = falsy_jump_offset;
+            m_code.at(pre_if_body_jump_ip).args[0].n = falsy_jump_offset;
 
             return true;
         }
@@ -563,7 +565,7 @@ export namespace DerkJS {
 
     public:
         BytecodeGenPass()
-        : m_mappings {}, m_heap_items {}, m_consts {}, m_chunks {}, m_temp_entry_id {-1}, m_next_temp_id {0} {
+        : m_mappings {}, m_heap_items {}, m_consts {}, m_code {}, m_func_offsets {}, m_temp_entry_id {-1}, m_next_temp_id {0} {
             /// NOTE: Consider global scope 1st for global variables / stmts...
             enter_simulated_frame();
         }
@@ -594,7 +596,8 @@ export namespace DerkJS {
             return Program {
                 .heap_items = std::exchange(m_heap_items, {}),
                 .consts = std::exchange(m_consts, {}),
-                .chunks = std::exchange(m_chunks, {}),
+                .code = std::exchange(m_code, {}),
+                .offsets = std::exchange(m_func_offsets, {}),
                 .entry_func_id = global_func_chunk.n,
             };
         }
