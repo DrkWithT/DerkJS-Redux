@@ -270,6 +270,31 @@ export namespace DerkJS {
             }
         }
 
+        [[maybe_unused]] auto operator%=(const Value& other) -> Value& {
+            const auto lhs_tag = get_tag();
+            const auto rhs_tag = other.get_tag();
+
+            if (lhs_tag == ValueTag::num_nan || rhs_tag == ValueTag::num_nan) {
+                m_data.dud = dud_nan_char_v;
+                m_tag = ValueTag::num_nan;
+            } else if (lhs_tag == ValueTag::num_i32) {
+                if (const auto rhs_i32_v = other.to_num_i32(); !rhs_i32_v) {
+                    m_data.dud = dud_nan_char_v;
+                    m_tag = ValueTag::num_nan;
+                } else if (*rhs_i32_v == 0) {
+                    m_data.dud = dud_nan_char_v;
+                    m_tag = ValueTag::num_nan;
+                } else { 
+                    m_data.i %= rhs_i32_v.value();
+                }
+            } else {
+                m_data.dud = dud_nan_char_v;
+                m_tag = ValueTag::num_nan;
+            }
+
+            return *this;
+        }
+
         /// REF: https://262.ecma-international.org/5.1/#sec-11.5.1
         [[nodiscard]] auto operator*(const Value& other) -> Value {
             const auto lhs_tag = get_tag();
@@ -290,6 +315,25 @@ export namespace DerkJS {
             } else {
                 return Value {JSNaNOpt {}};
             }
+        }
+
+        [[maybe_unused]] auto operator*=(const Value& other) noexcept -> Value& {
+            const auto lhs_tag = get_tag();
+            const auto rhs_tag = other.get_tag();
+
+            if (lhs_tag == ValueTag::num_nan || rhs_tag == ValueTag::num_nan) {
+                m_data.dud = dud_nan_char_v;
+                m_tag = ValueTag::num_nan;
+            } else if (lhs_tag == ValueTag::num_i32 && rhs_tag == lhs_tag) {
+                m_data.i *= other.to_num_i32().value();
+            } else if (lhs_tag == ValueTag::num_f64 && rhs_tag == lhs_tag) {
+                m_data.i *= other.to_num_f64().value();
+            } else {
+                m_data.dud = dud_nan_char_v;
+                m_tag = ValueTag::num_nan;
+            }
+
+            return *this;
         }
 
         /// REF: https://262.ecma-international.org/5.1/#sec-11.5.2
@@ -321,6 +365,41 @@ export namespace DerkJS {
             }
         }
 
+        [[maybe_unused]] auto operator/=(const Value& other) noexcept -> Value& {
+            const auto lhs_tag = get_tag();
+            const auto rhs_tag = other.get_tag();
+
+            if (lhs_tag == ValueTag::num_nan || rhs_tag == ValueTag::num_nan) {
+                m_data.dud = dud_nan_char_v;
+                m_tag = ValueTag::num_nan;
+            } else if (lhs_tag == ValueTag::num_i32) {
+                if (const auto rhs_i32_v = other.to_num_i32(); !rhs_i32_v) {
+                    m_data.dud = dud_nan_char_v;
+                    m_tag = ValueTag::num_nan;
+                } else if (*rhs_i32_v == 0) {
+                    m_data.dud = dud_nan_char_v;
+                    m_tag = ValueTag::num_nan;
+                } else {   
+                    m_data.i /= other.to_num_i32().value();
+                }
+            } else if (lhs_tag == ValueTag::num_f64) {
+                if (const auto rhs_f64_v = other.to_num_f64(); !rhs_f64_v) {
+                    m_data.dud = dud_nan_char_v;
+                    m_tag = ValueTag::num_nan;
+                } else if (*rhs_f64_v == 0) {
+                    m_data.dud = dud_nan_char_v;
+                    m_tag = ValueTag::num_nan;
+                } else {   
+                    m_data.d /= other.to_num_f64().value();
+                }
+            } else {
+                m_data.dud = dud_nan_char_v;
+                m_tag = ValueTag::num_nan;
+            }
+
+            return *this;
+        }
+
         /// REF: https://262.ecma-international.org/5.1/#sec-11.6.1
         /// NOTE: Does not implement `String` or `Infinity` cases for brevity. Both operands will just be converted to numbers.
         [[nodiscard]] auto operator+(const Value& other) -> Value {
@@ -336,6 +415,22 @@ export namespace DerkJS {
             }
         }
 
+        [[maybe_unused]] auto operator+=(const Value& other) noexcept -> Value& {
+            const auto lhs_tag = get_tag();
+            const auto rhs_tag = other.get_tag();
+            
+            if (lhs_tag == ValueTag::num_i32) {
+                m_data.i += other.to_num_i32().value();
+            } else if (lhs_tag == ValueTag::num_f64) {
+                m_data.d += other.to_num_f64().value();
+            } else {
+                m_data.dud = dud_nan_char_v;
+                m_tag = ValueTag::num_nan;
+            }
+
+            return *this;
+        }
+
         /// REF: https://262.ecma-international.org/5.1/#sec-11.6.1
         /// NOTE: Does not implement `Infinity` cases for brevity.
         [[nodiscard]] auto operator-(const Value& other) -> Value {
@@ -349,6 +444,22 @@ export namespace DerkJS {
             } else {
                 return Value {JSNaNOpt {}};
             }
+        }
+
+        [[maybe_unused]] auto operator-=(const Value& other) noexcept -> Value& {
+            const auto lhs_tag = get_tag();
+            const auto rhs_tag = other.get_tag();
+            
+            if (lhs_tag == ValueTag::num_i32) {
+                m_data.i -= other.to_num_i32().value();
+            } else if (lhs_tag == ValueTag::num_f64) {
+                m_data.d -= other.to_num_f64().value();
+            } else {
+                m_data.dud = dud_nan_char_v;
+                m_tag = ValueTag::num_nan;
+            }
+
+            return *this;
         }
 
         [[nodiscard]] auto to_boolean() const noexcept -> std::optional<bool> {
