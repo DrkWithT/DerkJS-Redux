@@ -4,8 +4,8 @@ module;
 #include <type_traits>
 #include <utility>
 
+#include <algorithm>
 #include <vector>
-#include <iostream>
 
 export module runtime.vm;
 
@@ -473,8 +473,6 @@ export namespace DerkJS {
                 }
             }
 
-            std::cout << "\n\033[1;33mDerkJS [Result Value]:\033[0m \033[1;32m" << m_stack.at(m_rsbp).to_string().value().c_str() << "\033[0m\n";
-
             return m_status;
         }
     };
@@ -522,16 +520,16 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_dup(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.stack[ctx.rsp + 1] = ctx.stack[ctx.rsbp + a0];
         ++ctx.rsp;
-        ctx.stack[ctx.rsp] = ctx.stack[ctx.rsbp + a0];
         ++ctx.rip_p;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_put_const(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool  {
+        ctx.stack[ctx.rsp + 1] = ctx.consts_view[a0];
         ++ctx.rsp;
-        ctx.stack[ctx.rsp] = ctx.consts_view[a0];
         ++ctx.rip_p;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
@@ -552,8 +550,8 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_mod(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ctx.stack[ctx.rsp] %= ctx.stack[ctx.rsp - 1];
-        std::swap(ctx.stack[ctx.rsp - 1], ctx.stack[ctx.rsp]);
+        std::swap_ranges(reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp) + sizeof(Value), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp - 1));
+        ctx.stack[ctx.rsp - 1] %= ctx.stack[ctx.rsp];
         --ctx.rsp;
         ++ctx.rip_p;
 
@@ -561,8 +559,7 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_mul(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ctx.stack[ctx.rsp] *= ctx.stack[ctx.rsp - 1];
-        std::swap(ctx.stack[ctx.rsp - 1], ctx.stack[ctx.rsp]);
+        ctx.stack[ctx.rsp - 1] *= ctx.stack[ctx.rsp]; // commutativity of the TIMES operator allows avoidance of std::swap
         --ctx.rsp;
         ++ctx.rip_p;
 
@@ -570,8 +567,8 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_div(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ctx.stack[ctx.rsp] /= ctx.stack[ctx.rsp - 1];
-        std::swap(ctx.stack[ctx.rsp - 1], ctx.stack[ctx.rsp]);
+        std::swap_ranges(reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp) + sizeof(Value), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp - 1));
+        ctx.stack[ctx.rsp - 1] /= ctx.stack[ctx.rsp];
         --ctx.rsp;
         ++ctx.rip_p;
 
@@ -579,8 +576,7 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_add(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ctx.stack[ctx.rsp] += ctx.stack[ctx.rsp - 1];
-        std::swap(ctx.stack[ctx.rsp - 1], ctx.stack[ctx.rsp]);
+        ctx.stack[ctx.rsp - 1] += ctx.stack[ctx.rsp]; // commutativity of the PLUS operator allows avoidance of std::swap
         --ctx.rsp;
         ++ctx.rip_p;
 
@@ -588,8 +584,8 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_sub(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ctx.stack[ctx.rsp] -= ctx.stack[ctx.rsp - 1];
-        std::swap(ctx.stack[ctx.rsp - 1],  ctx.stack[ctx.rsp]);
+        std::swap_ranges(reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp) + sizeof(Value), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp - 1));
+        ctx.stack[ctx.rsp - 1] -= ctx.stack[ctx.rsp];
         --ctx.rsp;
         ++ctx.rip_p;
 
@@ -605,8 +601,7 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_test_strict_eq(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ctx.stack[ctx.rsp] = ctx.stack[ctx.rsp] == ctx.stack[ctx.rsp - 1];
-        std::swap(ctx.stack[ctx.rsp], ctx.stack[ctx.rsp - 1]);
+        ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] == ctx.stack[ctx.rsp];
         --ctx.rsp;
         ++ctx.rip_p;
 
@@ -614,8 +609,7 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_test_strict_ne(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ctx.stack[ctx.rsp] = ctx.stack[ctx.rsp] != ctx.stack[ctx.rsp - 1];
-        std::swap(ctx.stack[ctx.rsp], ctx.stack[ctx.rsp - 1]);
+        ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] != ctx.stack[ctx.rsp];
         --ctx.rsp;
         ++ctx.rip_p;
 
@@ -623,8 +617,7 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_test_lt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ctx.stack[ctx.rsp] = ctx.stack[ctx.rsp] < ctx.stack[ctx.rsp - 1];
-        std::swap(ctx.stack[ctx.rsp], ctx.stack[ctx.rsp - 1]);
+        ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] > ctx.stack[ctx.rsp]; // IF x < y THEN y > x
         --ctx.rsp;
         ++ctx.rip_p;
 
@@ -632,8 +625,7 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_test_lte(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ctx.stack[ctx.rsp] = ctx.stack[ctx.rsp] <= ctx.stack[ctx.rsp - 1];
-        std::swap(ctx.stack[ctx.rsp], ctx.stack[ctx.rsp - 1]);
+        ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] >= ctx.stack[ctx.rsp]; // IF x <= y THEN y >= x
         --ctx.rsp;
         ++ctx.rip_p;
 
@@ -641,8 +633,7 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_test_gt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ctx.stack[ctx.rsp] = ctx.stack[ctx.rsp] > ctx.stack[ctx.rsp - 1];
-        std::swap(ctx.stack[ctx.rsp], ctx.stack[ctx.rsp - 1]);
+        ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] < ctx.stack[ctx.rsp]; // IF x > y THEN y < x
         --ctx.rsp;
         ++ctx.rip_p;
 
@@ -650,8 +641,7 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_test_gte(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ctx.stack[ctx.rsp] = ctx.stack[ctx.rsp] >= ctx.stack[ctx.rsp - 1];
-        std::swap(ctx.stack[ctx.rsp], ctx.stack[ctx.rsp - 1]);
+        ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] <= ctx.stack[ctx.rsp]; // IF x >= y THEN y <= x
         --ctx.rsp;
         ++ctx.rip_p;
 
@@ -707,15 +697,15 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ctx.has_err = a0 != 0; // 1. A non-zero flag is an errorneous exit.
+        ctx.has_err = a0 ^ 0; // 1. A non-zero flag is an errorneous exit.
         ctx.rip_p = ctx.code_bp - 1; // 2. Force a HALT here with a dud RIP!
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        if (ctx.frames.empty() || ctx.has_err) {
-            return !ctx.has_err;
+        if (ctx.frames.empty() + ctx.has_err) {
+            return ctx.has_err;
         }
 
         return tco_opcodes[ctx.rip_p->op](ctx, a0, a1);

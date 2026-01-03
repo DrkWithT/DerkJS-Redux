@@ -183,7 +183,7 @@ export namespace DerkJS {
             } else if (m_tag == ValueTag::boolean) {
                 return m_data.b;
             } else if (m_tag == ValueTag::num_i32) {
-                return m_data.i != 0;
+                return m_data.i ^ 0;
             } else if (m_tag == ValueTag::num_f64) {
                 return m_data.d != 0.0;
             } else {
@@ -200,14 +200,10 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] constexpr auto is_nan() const noexcept -> bool {
-            if (m_tag != ValueTag::num_nan) {
-                return false;
-            }
-
-            return (m_data.dud & 0x1) == 1;
+            return m_tag == ValueTag::num_nan && (m_data.dud & 0x1) == 1;
         }
 
-        [[nodiscard]] auto operator==(const Value& other) const noexcept -> bool {
+        [[nodiscard]] constexpr auto operator==(const Value& other) const noexcept -> bool {
             if (const auto lhs_tag = get_tag(), rhs_tag = other.get_tag(); lhs_tag != rhs_tag) {
                 return false;
             } else if (lhs_tag == ValueTag::undefined || lhs_tag == ValueTag::null) {
@@ -227,7 +223,7 @@ export namespace DerkJS {
         }
 
         /// NOTE: This partly implements the Abstract Relational Comparison logic from https://262.ecma-international.org/5.1/#sec-11.8.5, but it only implements case 3 for now.
-        [[nodiscard]] auto operator<(const Value& other) const noexcept -> bool {
+        [[nodiscard]] constexpr auto operator<(const Value& other) const noexcept -> bool {
             // Case 3: convert both sides to Number values if possible. No String values supported yet.
             if (const auto lhs_tag = get_tag(); lhs_tag == ValueTag::num_f64) {
                 return to_num_f64().value_or(0.0) < other.to_num_f64().value_or(0.0);
@@ -237,7 +233,7 @@ export namespace DerkJS {
         }
 
         /// NOTE: see `DerkJS::Value::operator<()` documentation.
-        [[nodiscard]] auto operator>(const Value& other) const noexcept -> bool {
+        [[nodiscard]] constexpr auto operator>(const Value& other) const noexcept -> bool {
             // Case 3: convert both sides to Number values if possible. No String values supported yet.
             if (const auto lhs_tag = get_tag(); lhs_tag == ValueTag::num_f64) {
                 return to_num_f64().value_or(0.0) > other.to_num_f64().value_or(0.0);
@@ -349,12 +345,12 @@ export namespace DerkJS {
             if (lhs_tag == ValueTag::num_nan || rhs_tag == ValueTag::num_nan) {
                 return Value {JSNaNOpt {}};
             } else if (lhs_tag == ValueTag::num_i32) {
-                if (const auto rhs_i32_v = other.to_num_i32(); !rhs_i32_v) {
+                if (auto rhs_i32_v = other.to_num_i32(); !rhs_i32_v) {
                     return Value {JSNaNOpt {}};
                 } else if (*rhs_i32_v == 0) {
                     return Value {JSNaNOpt {}};
                 } else {   
-                    return Value {to_num_i32().value() / rhs_i32_v.value()};
+                    return Value {*rhs_i32_v / rhs_i32_v.value()};
                 }
             } else if (lhs_tag == ValueTag::num_f64) {
                 if (const auto rhs_f64_v = other.to_num_f64(); !rhs_f64_v) {
@@ -377,24 +373,24 @@ export namespace DerkJS {
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
             } else if (lhs_tag == ValueTag::num_i32) {
-                if (const auto rhs_i32_v = other.to_num_i32(); !rhs_i32_v) {
+                if (auto rhs_i32_v = other.to_num_i32(); !rhs_i32_v) {
                     m_data.dud = dud_nan_char_v;
                     m_tag = ValueTag::num_nan;
                 } else if (*rhs_i32_v == 0) {
                     m_data.dud = dud_nan_char_v;
                     m_tag = ValueTag::num_nan;
                 } else {   
-                    m_data.i /= other.to_num_i32().value();
+                    m_data.i /= rhs_i32_v.value();
                 }
             } else if (lhs_tag == ValueTag::num_f64) {
-                if (const auto rhs_f64_v = other.to_num_f64(); !rhs_f64_v) {
+                if (auto rhs_f64_v = other.to_num_f64(); !rhs_f64_v) {
                     m_data.dud = dud_nan_char_v;
                     m_tag = ValueTag::num_nan;
                 } else if (*rhs_f64_v == 0) {
                     m_data.dud = dud_nan_char_v;
                     m_tag = ValueTag::num_nan;
                 } else {   
-                    m_data.d /= other.to_num_f64().value();
+                    m_data.d /= rhs_f64_v.value();
                 }
             } else {
                 m_data.dud = dud_nan_char_v;
@@ -410,7 +406,9 @@ export namespace DerkJS {
             const auto lhs_tag = get_tag();
             const auto rhs_tag = other.get_tag();
             
-            if (lhs_tag == ValueTag::num_i32) {
+            if (lhs_tag == ValueTag::num_nan || rhs_tag == ValueTag::num_nan) {
+                return Value {JSNaNOpt {}};
+            } else if (lhs_tag == ValueTag::num_i32) {
                 return Value {to_num_i32().value() + other.to_num_i32().value()};
             } else if (lhs_tag == ValueTag::num_f64) {
                 return Value {to_num_f64().value() + other.to_num_f64().value()};
@@ -423,7 +421,10 @@ export namespace DerkJS {
             const auto lhs_tag = get_tag();
             const auto rhs_tag = other.get_tag();
             
-            if (lhs_tag == ValueTag::num_i32) {
+            if (lhs_tag == ValueTag::num_nan || rhs_tag == ValueTag::num_nan) {
+                m_data.dud = dud_nan_char_v;
+                m_tag = ValueTag::num_nan;
+            } else if (lhs_tag == ValueTag::num_i32) {
                 m_data.i += other.to_num_i32().value();
             } else if (lhs_tag == ValueTag::num_f64) {
                 m_data.d += other.to_num_f64().value();
@@ -441,7 +442,9 @@ export namespace DerkJS {
             const auto lhs_tag = get_tag();
             const auto rhs_tag = other.get_tag();
             
-            if (lhs_tag == ValueTag::num_i32) {
+            if (lhs_tag == ValueTag::num_nan || rhs_tag == ValueTag::num_nan) {
+                return Value {JSNaNOpt {}};
+            } else if (lhs_tag == ValueTag::num_i32) {
                 return Value {to_num_i32().value() - other.to_num_i32().value()};
             } else if (lhs_tag == ValueTag::num_f64) {
                 return Value {to_num_f64().value() - other.to_num_f64().value()};
@@ -454,7 +457,10 @@ export namespace DerkJS {
             const auto lhs_tag = get_tag();
             const auto rhs_tag = other.get_tag();
             
-            if (lhs_tag == ValueTag::num_i32) {
+            if (lhs_tag == ValueTag::num_nan || rhs_tag == ValueTag::num_nan) {
+                m_data.dud = dud_nan_char_v;
+                m_tag = ValueTag::num_nan;
+            } else if (lhs_tag == ValueTag::num_i32) {
                 m_data.i -= other.to_num_i32().value();
             } else if (lhs_tag == ValueTag::num_f64) {
                 m_data.d -= other.to_num_f64().value();
@@ -472,9 +478,8 @@ export namespace DerkJS {
 
         [[nodiscard]] auto to_num_i32() const noexcept -> std::optional<int> {
             switch (m_tag) {
-            case ValueTag::undefined: return {};
             case ValueTag::null: return 0;
-            case ValueTag::boolean: return m_data.b ? 1 : 0 ;
+            case ValueTag::boolean: return static_cast<int>(m_data.b);
             case ValueTag::num_i32: return m_data.i;
             case ValueTag::num_f64: return static_cast<int>(m_data.d);
             case ValueTag::object: // TODO: add obj_p->to_num_i32();
@@ -484,7 +489,6 @@ export namespace DerkJS {
 
         [[nodiscard]] auto to_num_f64() const noexcept -> std::optional<double> {
             switch (m_tag) {
-            case ValueTag::undefined: return {};
             case ValueTag::null: return 0.0;
             case ValueTag::boolean: return m_data.b ? 1.0 : 0.0 ;
             case ValueTag::num_i32: return static_cast<double>(m_data.i);
