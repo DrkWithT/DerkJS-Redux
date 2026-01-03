@@ -20,9 +20,10 @@ export namespace DerkJS {
 
     enum Opcode : uint8_t {
         djs_nop,
-        djs_push,
-        djs_pop,
         djs_dup,
+        djs_put_const,
+        djs_put_obj_ref,
+        djs_pop,
         // djs_create_obj,
         // djs_get_prop,
         // djs_put_prop,
@@ -62,27 +63,26 @@ export namespace DerkJS {
         Location tag;
     };
 
-
     struct Instruction {
-        Arg args[2];
+        int16_t args[2];
         Opcode op;
     };
-
-    using Chunk = std::vector<Instruction>;
 
     struct Program {
         std::vector<Object<Value>> heap_items;
         std::vector<Value> consts;
-        std::vector<Chunk> chunks;
+        std::vector<Instruction> code;
+        std::vector<int> offsets;
         int16_t entry_func_id;
     };
 
     void disassemble_program(const Program& prgm) {
         static constexpr std::array<std::string_view, static_cast<std::size_t>(Opcode::last)> opcode_names = {
             "djs_nop",
-            "djs_push",
-            "djs_pop",
             "djs_dup",
+            "djs_put_const",
+            "djs_put_obj_ref",
+            "djs_pop",
             // "djs_create_obj",
             // "djs_get_prop",
             // "djs_put_prop",
@@ -115,11 +115,11 @@ export namespace DerkJS {
             "temp"
         };
 
-        const auto& [prgm_pre_heap, prgm_consts, prgm_chunks, prgm_entry_id] = prgm;
+        const auto& [prgm_pre_heap, prgm_consts, prgm_code, prgm_code_offsets, prgm_entry_id] = prgm;
 
-        std::println("\x1b[1;33mProgram Dump:\x1b[0m\n\nEntry Chunk ID: {}\n\n", prgm_entry_id);
+        std::println("\x1b[1;33mProgram Dump:\x1b[0m\n\nEntry Chunk ID: {}\n", prgm_entry_id);
 
-        std::println("\x1b[1;33mConstants:\x1b[0m\n\n");
+        std::println("\x1b[1;33mConstants:\x1b[0m\n");
 
         for (int constant_id = 0; const auto& temp_constant : prgm_consts) {
             std::println(
@@ -131,23 +131,22 @@ export namespace DerkJS {
             ++constant_id;
         }
 
-        std::println("\x1b[1;33mChunks:\x1b[0m\n\n");
+        std::println("\x1b[1;33mCode:\x1b[0m\n");
 
-        for (int chunk_id = 0; const auto& temp_chunk : prgm_chunks) {
-            std::println("Chunk {}:\n\n", chunk_id);
-
-            for (const auto& [instr_argv, instr_op] : temp_chunk) {
-                std::println(
-                    "\t{} {}:{} {}:{}",
-                    opcode_names[static_cast<std::size_t>(instr_op)],
-                    location_names[instr_argv[0].tag],
-                    instr_argv[0].n,
-                    location_names[instr_argv[1].tag],
-                    instr_argv[1].n
-                );
+        for (int fn_offset_index = 0, abs_code_pos = 0; const auto& [instr_argv, instr_op] : prgm_code) {
+            if (abs_code_pos == prgm_code_offsets[fn_offset_index]) {
+                std::println("Chunk {}:\n", fn_offset_index);
+                ++fn_offset_index;
             }
 
-            ++chunk_id;
+            std::println(
+                "\t{} {} {}",
+                opcode_names[static_cast<std::size_t>(instr_op)],
+                instr_argv[0],
+                instr_argv[1]
+            );
+
+            ++abs_code_pos;
         }
     }
 }
