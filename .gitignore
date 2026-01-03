@@ -46,4 +46,4 @@ compile_commands.json
 .env
 .vscode/
 *.zip
-prof.json
+prof_*.json
