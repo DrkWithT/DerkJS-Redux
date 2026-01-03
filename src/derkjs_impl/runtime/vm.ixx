@@ -3,6 +3,7 @@ module;
 #include <cstdint>
 #include <type_traits>
 #include <utility>
+
 #include <vector>
 #include <iostream>
 
@@ -12,11 +13,26 @@ import runtime.value;
 import runtime.bytecode;
 
 export namespace DerkJS {
-    struct CallFrame {
-        int16_t m_callee_sbp;
-        int16_t m_caller_sbp;
-        int16_t m_caller_id;
-        int16_t m_caller_ret_ip;
+    /// NOTE: This scoped enum enables instantiation of a specialized VM that either does loop-switch or tail-call-friendly control flow when running opcodes.
+    enum class DispatchPolicy : uint8_t {
+        loop_switch,
+        tco,
+    };
+
+    /**
+     * @brief Provides the bytecode VM's call frame type. The full specializations by `DispatchPolicy` are meant for use.
+     * @see `DispatchPolicy` for more information about how opcodes would be dispatched.
+     * @tparam Dp 
+     */
+    template <DispatchPolicy Dp>
+    struct CallFrame;
+
+    template <>
+    struct CallFrame<DispatchPolicy::loop_switch> {
+        int m_callee_sbp;
+        int m_caller_sbp;
+        int m_caller_id;
+        int m_caller_ret_ip;
 
         constexpr CallFrame() noexcept
         : m_callee_sbp {0}, m_caller_sbp {0}, m_caller_id {-1}, m_caller_ret_ip {-1} {}
@@ -29,11 +45,88 @@ export namespace DerkJS {
         }
     };
 
-    class VM {
+    template <>
+    struct CallFrame<DispatchPolicy::tco> {
+        int m_callee_sbp;
+        int m_caller_sbp;
+        int m_caller_ret_bc_off;
+    };
+
+    #ifdef __clang__
+        #ifdef __llvm__
+            #if __clang_major__ >= 20
+                /// NOTE: Compile-time flag to check if TCO is enabled for the build- This is only enabled on LLVM Clang 20+ to be safe.
+                constexpr bool is_tco_enabled_v = true;
+            #else
+                /// NOTE: Compile-time flag to check if TCO is enabled for the build- This is only enabled on LLVM Clang 20+ to be safe.
+                constexpr bool is_tco_enabled_v = false;
+            #endif
+        #else
+            /// NOTE: Compile-time flag to check if TCO is enabled for the build- This is only enabled on LLVM Clang 20+ to be safe.
+            constexpr bool is_tco_enabled_v = false;
+        #endif
+    #else
+        /// NOTE: Compile-time flag to check if TCO is enabled for the build- This is only enabled on LLVM Clang 20+ to be safe.
+        constexpr bool is_tco_enabled_v = false;
+    #endif
+
+    /// NOTE: This type decouples the internal state of the bytecode VM. It's used when the `DispatchPolicy::tco` specialization is used with a opcode dispatch table and dispatch TCO'd function internally apply in `VM<DispatchPolicy::tco>`. However, this is only enabled on LLVM Clang 20+ to be safe.
+    struct ExternVMCtx {
+        using call_frame_type = CallFrame<DispatchPolicy::tco>;
+
+        // GCHeap<Object<Value>> m_heap;
+        std::vector<Value> stack;
+        std::vector<call_frame_type> frames;
+
+        Value* consts_view;
+
+        /// NOTE: holds base of bytecode blob, starts at position 0 to access offsets from.
+        const Instruction* code_bp;
+
+        /// NOTE: holds base of an index array mapping function IDs to their code starts.
+        const int* fn_table_bp;
+
+        /// NOTE: holds direct pointer to an `Instruction`.
+        const Instruction* rip_p;
+
+        /// NOTE: holds stack base pointer for call locals
+        int16_t rsbp;
+
+        /// NOTE: holds stack top pointer
+        int16_t rsp;
+
+        bool has_err;
+
+        ExternVMCtx(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit)
+        : stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, rsbp {0}, rsp {-1}, has_err {false} {
+            stack.reserve(stack_length_limit);
+            stack.resize(stack_length_limit);
+            frames.reserve(call_frame_limit);
+
+            frames.emplace_back(call_frame_type {
+                .m_callee_sbp = 0,
+                .m_caller_sbp = 0,
+                .m_caller_ret_bc_off = -1,
+            });
+        }
+    };
+
+    /**
+     * @brief Provides the general bytecode VM type. Actual specializations via DispatchPolicy are meant to be used.
+     * 
+     * @tparam Dp Determines how bytecode opcodes are dispatched, either by loop-switch or tail-call optimization-friendly recursion. Tail call optimization (TCO) allows a slight speedup in the VM over a typical switch-loop by avoiding some overhead of creating / unwinding call frames.
+     */
+    template <DispatchPolicy Dp>
+    class VM;
+
+    template <>
+    class VM<DispatchPolicy::loop_switch> {
     private:
+        using call_frame_type = CallFrame<DispatchPolicy::loop_switch>;
+
         // GCHeap<Object<Value>> m_heap;
         std::vector<Value> m_stack;
-        std::vector<CallFrame> m_frames;
+        std::vector<call_frame_type> m_frames;
 
         Value* m_consts_view;
 
@@ -60,22 +153,28 @@ export namespace DerkJS {
         /// NOTE: indicates an error condition during execution, returning from the VM invocation
         ExitStatus m_status;
 
-        void op_push(Arg src) {
-            if (auto value_p = get_value(src); !value_p) {
-                m_status = ExitStatus::stack_err;
-                return;
-            } else {
-                push_value(*value_p);
-                ++m_rip_p;
-            }
-        }
+        void op_dup(int16_t temp_offset) noexcept {
+            const auto& src_value = m_stack[m_rsbp + temp_offset];
 
-        void op_pop(Arg pop_n) noexcept {
-            lazy_pop_values(pop_n.n);
+            ++m_rsp;
+            m_stack[m_rsp] = src_value;
+
             ++m_rip_p;
         }
 
-        void op_dup([[maybe_unused]] Arg src) {
+        void op_push_const(int16_t const_id) noexcept {
+            ++m_rsp;
+            m_stack[m_rsbp + m_rsp] = m_consts_view[const_id];
+
+            ++m_rip_p;
+        }
+
+        void op_pop(int16_t pop_n) noexcept {
+            lazy_pop_values(pop_n);
+            ++m_rip_p;
+        }
+
+        void op_dup() noexcept {
             m_status = ExitStatus::opcode_err;
         }
 
@@ -122,88 +221,81 @@ export namespace DerkJS {
             ++m_rip_p;
         }
 
-        void op_test(Arg src) {
-            if (auto src_value_p = get_value(src); !src_value_p) {
-                return;
-            } else {
-                push_value(Value {src_value_p->is_truthy()});
-                ++m_rip_p;
-            }
+        void op_test() noexcept {
+            const auto& tested_value = m_stack[m_rsp];
+
+            ++m_rsp;
+            m_stack[m_rsp] = tested_value.is_truthy();
+            ++m_rip_p;
         }
 
         void op_test_strict_eq() noexcept {
             const auto& lhs = m_stack[m_rsp];
+
             --m_rsp;
-
-            m_stack[m_rsp] = m_stack[m_rsp] == lhs;
-
+            m_stack[m_rsp] = lhs == m_stack[m_rsp];
             ++m_rip_p;
         }
 
         void op_test_strict_ne() noexcept {
             const auto& lhs = m_stack[m_rsp];
+            
             --m_rsp;
-
-            m_stack[m_rsp] = m_stack[m_rsp] != lhs;
-
+            m_stack[m_rsp] = lhs != m_stack[m_rsp];
             ++m_rip_p;
         }
 
         void op_test_lt() {
             const auto& lhs = m_stack[m_rsp];
+            
             --m_rsp;
-
             m_stack[m_rsp] = lhs < m_stack[m_rsp];
-
             ++m_rip_p;
         }
 
         void op_test_lte() {
             const auto& lhs = m_stack[m_rsp];
+
             --m_rsp;
-
             m_stack[m_rsp] = lhs <= m_stack[m_rsp];
-
             ++m_rip_p;
         }
 
         void op_test_gt() {
             const auto& lhs = m_stack[m_rsp];
+
             --m_rsp;
-
             m_stack[m_rsp] = lhs < m_stack[m_rsp];
-
             ++m_rip_p;
         }
 
         void op_test_gte() {
             const auto& lhs = m_stack[m_rsp];
+
             --m_rsp;
-
             m_stack[m_rsp] = lhs >= m_stack[m_rsp];
-
             ++m_rip_p;
         }
 
-        void op_jump_else(Arg offset) noexcept {
+        void op_jump_else(int16_t jmp_offset) noexcept {
             if (m_stack[m_rsp].is_falsy()) {
-                m_rip_p += offset.n;
+                m_rip_p += jmp_offset;
             } else {
                 ++m_rip_p;
             }
         }
 
-        void op_call(Arg chunk_id, Arg argc) {
-            const int16_t new_callee_sbp = m_rsp - argc.n + 1;
+        void op_call(int16_t chunk_id, int16_t argc) {
+            const int16_t new_callee_sbp = m_rsp - argc + 1;
             const int16_t old_caller_sbp = m_rsbp;
             const int16_t old_caller_id = m_rcid;
             const int16_t old_caller_ret_ip = m_rip_p - m_code_bp + 1;
 
             m_rsbp = new_callee_sbp;
-            m_rcid = chunk_id.n;
-            m_rip_p = m_code_bp + m_fn_table_bp[chunk_id.n];
+            m_rcid = chunk_id;
+            m_rip_p = m_code_bp + m_fn_table_bp[chunk_id];
 
-            m_frames.emplace_back(CallFrame {
+            m_frames.emplace_back(call_frame_type {
                 new_callee_sbp,
                 old_caller_sbp,
                 old_caller_id,
@@ -212,7 +304,7 @@ export namespace DerkJS {
             --m_frames_free;
         }
 
-        void op_native_call([[maybe_unused]] Arg native_id) {
+        void op_native_call([[maybe_unused]] int16_t native_id) noexcept {
             m_status = ExitStatus::opcode_err;
         }
 
@@ -230,13 +322,13 @@ export namespace DerkJS {
             m_rip_p = m_code_bp + caller_ret_ip;
         }
 
-        void op_halt(Arg exit_code) noexcept {
-            m_status = static_cast<ExitStatus>(exit_code.n);
+        void op_halt(int16_t exit_code) noexcept {
+            m_status = static_cast<ExitStatus>(exit_code);
             ++m_rip_p;
         }
 
     public:
-        VM(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit)
+        explicit VM(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit)
         : m_stack {}, m_frames {}, m_consts_view {}, m_code_bp {}, m_fn_table_bp {}, m_rip_p {}, m_frames_free {call_frame_limit}, m_rsbp {}, m_rsp {}, m_rcid {-1}, m_status {ExitStatus::ok} {
             m_stack.reserve(stack_length_limit);
             m_stack.resize(stack_length_limit);
@@ -249,7 +341,7 @@ export namespace DerkJS {
             m_rsp = -1;
             m_rcid = prgm.entry_func_id;
             
-            m_frames.emplace_back(CallFrame {
+            m_frames.emplace_back(call_frame_type {
                 0,
                 0,
                 -1,
@@ -309,14 +401,17 @@ export namespace DerkJS {
                 case Opcode::djs_nop:
                     ++m_rip_p;
                     break;
-                case Opcode::djs_push:
-                    op_push(next_argv[0]);
+                case Opcode::djs_dup:
+                    op_dup(next_argv[0]);
+                    break;
+                case Opcode::djs_put_const:
+                    op_push_const(next_argv[0]);
+                    break;
+                case Opcode::djs_put_obj_ref:
+                    m_status = ExitStatus::opcode_err;
                     break;
                 case Opcode::djs_pop:
                     op_pop(next_argv[0]);
-                    break;
-                case Opcode::djs_dup:
-                    op_dup(next_argv[0]);
                     break;
                 // case Opcode::djs_create_obj:
                 // case Opcode::djs_get_prop:
@@ -338,7 +433,7 @@ export namespace DerkJS {
                     op_sub();
                     break;
                 case Opcode::djs_test:
-                    op_test(next_argv[0]);
+                    op_test();
                     break;
                 case Opcode::djs_test_strict_eq:
                     op_test_strict_eq();
@@ -378,9 +473,306 @@ export namespace DerkJS {
                 }
             }
 
-            std::cout << "\n\x1b[1;33mDerkJS [Result Value]:\x1b[0m \x1b[1;32m" << m_stack.at(m_rsbp).to_string().value() << "\x1b[0m\n";
+            std::cout << "\n\033[1;33mDerkJS [Result Value]:\033[0m \033[1;32m" << m_stack.at(m_rsbp).to_string().value().c_str() << "\033[0m\n";
 
             return m_status;
+        }
+    };
+
+
+
+    [[nodiscard]] inline auto op_nop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_dup(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_put_const(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_put_obj_ref(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_pop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_mod(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_mul(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_div(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_add(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_sub(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_test(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_test_strict_eq(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_test_strict_ne(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_test_lt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_test_lte(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_test_gt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_test_gte(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_jump_else(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_native_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+
+    using tco_call_frame_type = CallFrame<DispatchPolicy::tco>;
+    using tco_opcode_fn = bool(*)(ExternVMCtx&, int16_t, int16_t);
+    constexpr tco_opcode_fn tco_opcodes[static_cast<std::size_t>(Opcode::last)] = {
+        op_nop,
+        op_dup, op_put_const, op_put_obj_ref, op_pop,
+        op_mod, op_mul, op_div, op_add, op_sub,
+        op_test, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte,
+        op_jump_else, op_call, op_native_call, op_ret, op_halt
+    };
+
+    [[nodiscard]] inline auto op_nop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_dup(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ++ctx.rsp;
+        ctx.stack[ctx.rsp] = ctx.stack[ctx.rsbp + a0];
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_put_const(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool  {
+        ++ctx.rsp;
+        ctx.stack[ctx.rsp] = ctx.consts_view[a0];
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_put_obj_ref(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        /// TODO: implement!
+        ctx.has_err = true;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_pop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool  {
+        ctx.rsp -= a0;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_mod(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.stack[ctx.rsp] %= ctx.stack[ctx.rsp - 1];
+        std::swap(ctx.stack[ctx.rsp - 1], ctx.stack[ctx.rsp]);
+        --ctx.rsp;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_mul(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.stack[ctx.rsp] *= ctx.stack[ctx.rsp - 1];
+        std::swap(ctx.stack[ctx.rsp - 1], ctx.stack[ctx.rsp]);
+        --ctx.rsp;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_div(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.stack[ctx.rsp] /= ctx.stack[ctx.rsp - 1];
+        std::swap(ctx.stack[ctx.rsp - 1], ctx.stack[ctx.rsp]);
+        --ctx.rsp;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_add(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.stack[ctx.rsp] += ctx.stack[ctx.rsp - 1];
+        std::swap(ctx.stack[ctx.rsp - 1], ctx.stack[ctx.rsp]);
+        --ctx.rsp;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_sub(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.stack[ctx.rsp] -= ctx.stack[ctx.rsp - 1];
+        std::swap(ctx.stack[ctx.rsp - 1],  ctx.stack[ctx.rsp]);
+        --ctx.rsp;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_test(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.stack[ctx.rsp + 1] = ctx.stack[ctx.rsp].is_truthy();
+        ++ctx.rsp;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_test_strict_eq(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.stack[ctx.rsp] = ctx.stack[ctx.rsp] == ctx.stack[ctx.rsp - 1];
+        std::swap(ctx.stack[ctx.rsp], ctx.stack[ctx.rsp - 1]);
+        --ctx.rsp;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_test_strict_ne(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.stack[ctx.rsp] = ctx.stack[ctx.rsp] != ctx.stack[ctx.rsp - 1];
+        std::swap(ctx.stack[ctx.rsp], ctx.stack[ctx.rsp - 1]);
+        --ctx.rsp;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_test_lt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.stack[ctx.rsp] = ctx.stack[ctx.rsp] < ctx.stack[ctx.rsp - 1];
+        std::swap(ctx.stack[ctx.rsp], ctx.stack[ctx.rsp - 1]);
+        --ctx.rsp;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_test_lte(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.stack[ctx.rsp] = ctx.stack[ctx.rsp] <= ctx.stack[ctx.rsp - 1];
+        std::swap(ctx.stack[ctx.rsp], ctx.stack[ctx.rsp - 1]);
+        --ctx.rsp;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_test_gt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.stack[ctx.rsp] = ctx.stack[ctx.rsp] > ctx.stack[ctx.rsp - 1];
+        std::swap(ctx.stack[ctx.rsp], ctx.stack[ctx.rsp - 1]);
+        --ctx.rsp;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_test_gte(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.stack[ctx.rsp] = ctx.stack[ctx.rsp] >= ctx.stack[ctx.rsp - 1];
+        std::swap(ctx.stack[ctx.rsp], ctx.stack[ctx.rsp - 1]);
+        --ctx.rsp;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_jump_else(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        if (!ctx.stack[ctx.rsp]) {
+            --ctx.rsp;
+            ctx.rip_p += a0;
+        } else {
+            ++ctx.rip_p;
+        }
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        const int16_t new_callee_sbp = ctx.rsp - a1 + 1;
+        const int16_t old_caller_sbp = ctx.rsbp;
+        const int16_t old_caller_ret_bc_off = ctx.rip_p - ctx.code_bp + 1;
+
+        ctx.rip_p = ctx.code_bp + ctx.fn_table_bp[a0];
+        ctx.rsbp = new_callee_sbp;
+
+        ctx.frames.emplace_back(tco_call_frame_type {
+            new_callee_sbp,
+            old_caller_sbp,
+            old_caller_ret_bc_off,
+        });
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_native_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.has_err = true;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        const auto& [callee_sbp, caller_sbp, caller_ret_bc_off] = ctx.frames.back();
+
+        ctx.stack[callee_sbp] = ctx.stack[ctx.rsp];
+
+        ctx.rsp = callee_sbp;
+        ctx.rsbp = caller_sbp;
+        ctx.rip_p = ctx.code_bp + caller_ret_bc_off;
+
+        ctx.frames.pop_back();
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.has_err = a0 != 0; // 1. A non-zero flag is an errorneous exit.
+        ctx.rip_p = ctx.code_bp - 1; // 2. Force a HALT here with a dud RIP!
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        if (ctx.frames.empty() || ctx.has_err) {
+            return !ctx.has_err;
+        }
+
+        return tco_opcodes[ctx.rip_p->op](ctx, a0, a1);
+    }
+
+    template <>
+    class VM<DispatchPolicy::tco> {
+    public:
+        static_assert(is_tco_enabled_v, "TCO is not enabled for this compiler (version) :(");
+
+        /// NOTE: do not modify directly!
+        ExternVMCtx m_ctx;
+
+        explicit VM(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit)
+        : m_ctx {prgm, stack_length_limit, call_frame_limit} {}
+
+        [[nodiscard]] auto get_value(Arg op_arg) noexcept -> Value* {
+            const auto [arg_n, arg_tag] = op_arg;
+            
+            switch (arg_tag) {
+                case Location::constant: return m_ctx.consts_view + arg_n;
+                case Location::heap_obj: {
+                    m_ctx.has_err = true;
+                    return nullptr;
+                }
+                case Location::temp: return m_ctx.stack.data() + m_ctx.rsbp + arg_n;
+                default: {
+                    m_ctx.has_err = true;
+                    return nullptr;
+                }
+            }
+        }
+
+        template <typename V> requires (std::is_same_v<std::remove_cvref_t<V>, Value>)
+        void push_value(V&& value) {
+            ++m_ctx.rsp;
+            m_ctx.stack[m_ctx.rsp] = std::forward<V>(value);
+        }
+
+        void lazy_pop_values(int16_t n) noexcept {
+            m_ctx.rsp -= n;
+
+            if (m_ctx.rsp < 0) {
+                m_ctx.has_err = true;
+            }
+        }
+
+        [[nodiscard]] auto peek_local_value(int offset) noexcept -> Value& {
+            return m_ctx.stack[m_ctx.rsbp + offset];
+        }
+
+        [[nodiscard]] auto peek_final_result() const noexcept -> const Value& {
+            return m_ctx.stack[0];
+        }
+
+        [[nodiscard]] inline auto operator()() -> bool {
+            return dispatch_op(m_ctx, m_ctx.rip_p->args[0], m_ctx.rip_p->args[1]);
         }
     };
 }
