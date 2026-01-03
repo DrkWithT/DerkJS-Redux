@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 4.2.0)
 
 project(derkjs)
 
+set(USE_TCO_WITH_BC_VM, OFF, CACHE BOOL "The final safeguard before the compiler tries to use TCO in a separate kind of interpreter build: derkjs_tco. Use at your own risk... Only Clang 20 is allowed.")
+
 add_library(derkjs_impl)
 target_sources(
     derkjs_impl
@@ -18,9 +20,26 @@ target_sources(
     src/derkjs_impl/runtime/vm.ixx
 )
 
-add_executable(derkjs src/main.cpp)
-target_link_directories(derkjs PUBLIC ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
-target_link_libraries(derkjs PUBLIC derkjs_impl)
+if (USE_TCO_WITH_BC_VM)
+    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+        set(CMAKE_BUILD_TYPE "RelWIthDebInfo")
+        message(WARNING "CMAKE_BUILD_TYPE was set to 'Debug'- Reset to 'RelWithDebInfo' build for TCO.")
+    endif ()
+
+    add_executable(derkjs_tco src/main_tco.cpp)
+    target_compile_options(derkjs_tco PRIVATE "-foptimize-sibling-calls")
+    target_link_directories(derkjs_tco PUBLIC ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+    target_link_libraries(derkjs_tco PUBLIC derkjs_impl)
+
+    message(NOTICE "Executable: ./build/derkjs_tco")
+else ()
+    add_executable(derkjs src/main.cpp)
+    target_link_directories(derkjs PUBLIC ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+    target_link_libraries(derkjs PUBLIC derkjs_impl)
+
+    message(NOTICE "Executable: ./build/derkjs")
+endif ()
+
 
 # enable_testing()
 # add_subdirectory(tests)
