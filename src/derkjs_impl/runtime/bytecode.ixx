@@ -20,9 +20,10 @@ export namespace DerkJS {
 
     enum Opcode : uint8_t {
         djs_nop,
-        djs_push,
-        djs_pop,
         djs_dup,
+        djs_put_const,
+        djs_put_obj_ref,
+        djs_pop,
         // djs_create_obj,
         // djs_get_prop,
         // djs_put_prop,
@@ -63,7 +64,7 @@ export namespace DerkJS {
     };
 
     struct Instruction {
-        Arg args[2];
+        int16_t args[2];
         Opcode op;
     };
 
@@ -78,9 +79,10 @@ export namespace DerkJS {
     void disassemble_program(const Program& prgm) {
         static constexpr std::array<std::string_view, static_cast<std::size_t>(Opcode::last)> opcode_names = {
             "djs_nop",
-            "djs_push",
-            "djs_pop",
             "djs_dup",
+            "djs_put_const",
+            "djs_put_obj_ref",
+            "djs_pop",
             // "djs_create_obj",
             // "djs_get_prop",
             // "djs_put_prop",
@@ -138,12 +140,10 @@ export namespace DerkJS {
             }
 
             std::println(
-                "\t{} {}:{} {}:{}",
+                "\t{} {} {}",
                 opcode_names[static_cast<std::size_t>(instr_op)],
-                location_names[instr_argv[0].tag],
-                instr_argv[0].n,
-                location_names[instr_argv[1].tag],
-                instr_argv[1].n
+                instr_argv[0],
+                instr_argv[1]
             );
 
             ++abs_code_pos;

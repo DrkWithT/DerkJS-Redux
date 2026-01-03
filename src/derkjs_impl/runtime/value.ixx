@@ -138,27 +138,27 @@ export namespace DerkJS {
         ValueTag m_tag;
 
     public:
-        Value() noexcept
+        constexpr Value() noexcept
         : m_data {}, m_tag {ValueTag::undefined} {
             m_data.dud = dud_undefined_char_v;
         }
 
-        Value([[maybe_unused]] JSNullOpt opt) noexcept
+        constexpr Value([[maybe_unused]] JSNullOpt opt) noexcept
         : m_data {}, m_tag {ValueTag::null} {
             m_data.dud = dud_null_char_v;
         }
 
-        Value([[maybe_unused]] JSNaNOpt opt) noexcept
+        constexpr Value([[maybe_unused]] JSNaNOpt opt) noexcept
         : m_data {}, m_tag {ValueTag::num_nan} {
             m_data.dud = dud_nan_char_v;
         }
 
-        Value(bool b) noexcept
+        constexpr Value(bool b) noexcept
         : m_data {}, m_tag {ValueTag::boolean} {
             m_data.b = b;
         }
 
-        Value(int i) noexcept
+        constexpr Value(int i) noexcept
         : m_data {}, m_tag {ValueTag::num_i32} {
             m_data.i = i;
         }
@@ -168,16 +168,16 @@ export namespace DerkJS {
             m_data.d = d;
         }
 
-        Value(Object<Value>* object_p) noexcept
+        constexpr Value(Object<Value>* object_p) noexcept
         : m_data {}, m_tag {ValueTag::object} {
             m_data.obj_p = object_p;
         }
 
-        [[nodiscard]] auto get_tag() const noexcept -> ValueTag {
+        [[nodiscard]] constexpr auto get_tag() const noexcept -> ValueTag {
             return m_tag;
         }
 
-        [[nodiscard]] auto is_truthy() const noexcept -> bool {
+        [[nodiscard]] constexpr auto is_truthy() const noexcept -> bool {
             if (m_tag == ValueTag::undefined || m_tag == ValueTag::null || m_tag == ValueTag::num_nan) {
                 return false;
             } else if (m_tag == ValueTag::boolean) {
@@ -191,11 +191,15 @@ export namespace DerkJS {
             }
         }
 
-        [[nodiscard]] auto is_falsy() const noexcept -> bool {
+        [[nodiscard]] constexpr auto is_falsy() const noexcept -> bool {
             return !is_truthy();
         }
 
-        [[nodiscard]] auto is_nan() const noexcept -> bool {
+        explicit constexpr operator bool(this auto&& self) noexcept {
+            return self.is_truthy();
+        }
+
+        [[nodiscard]] constexpr auto is_nan() const noexcept -> bool {
             if (m_tag != ValueTag::num_nan) {
                 return false;
             }

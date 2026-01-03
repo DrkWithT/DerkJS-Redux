@@ -1,6 +1,8 @@
 module;
 
 #include <utility>
+#include <limits>
+
 #include <optional>
 #include <string>
 #include <vector>
@@ -21,6 +23,9 @@ export namespace DerkJS {
 
     class BytecodeGenPass {
     private:
+        static constexpr int min_bc_jump_offset = std::numeric_limits<int16_t>::min();
+        static constexpr int max_bc_jump_offset = std::numeric_limits<int16_t>::max();
+
         static constexpr Arg dud_arg {
             .n = 0,
             .tag = Location::immediate,
@@ -36,7 +41,6 @@ export namespace DerkJS {
         std::vector<Value> m_consts;
         std::vector<Instruction> m_code;
         std::vector<int> m_func_offsets;
-        int m_temp_entry_id;
 
         int m_next_temp_id;
         // bool is_op_emplaced;
@@ -54,11 +58,11 @@ export namespace DerkJS {
             m_mappings.pop_back();
         }
 
-        [[nodiscard]] auto lookup_named_item(const std::string& name) -> std::optional<Arg> {
-            if (auto targeted_frame = std::find_if(m_mappings.rbegin(), m_mappings.rend(), [&name](const SimStackFrame& frame) -> bool {
-                return frame.entries.contains(name);
+        [[nodiscard]] auto lookup_item(const std::string& lexeme) -> std::optional<Arg> {
+            if (auto targeted_frame = std::find_if(m_mappings.rbegin(), m_mappings.rend(), [&lexeme](const SimStackFrame& frame) -> bool {
+                return frame.entries.contains(lexeme);
             }); targeted_frame != m_mappings.rend()) {
-                if (const auto& [locator_n, locator_tag] = targeted_frame->entries.at(name); locator_tag == Location::temp) {
+                if (const auto& [locator_n, locator_tag] = targeted_frame->entries.at(lexeme); locator_tag == Location::temp) {
                     return Arg {
                         .n = static_cast<int16_t>(locator_n - targeted_frame->stack_base),
                         .tag = Location::temp,
@@ -74,7 +78,7 @@ export namespace DerkJS {
             return {};
         }
 
-        void record_named_item(const std::string& name, Arg locator) {
+        void record_item(const std::string& name, Arg locator) {
             auto& targeted_frame = m_mappings.back();
 
             if (const auto& [locator_n, locator_tag] = locator; locator_tag != Location::temp)
@@ -101,15 +105,26 @@ export namespace DerkJS {
             };
         }
 
-        [[nodiscard]] auto record_constants(std::same_as<Value> auto&& new_value) -> Arg {
-            const int next_const_id = m_consts.size();
+        [[nodiscard]] auto record_constants(const std::string& literal_text, std::same_as<Value> auto&& new_value) -> Arg {
+            if (auto existing_constant = lookup_item(literal_text); !existing_constant) {
+                const int next_const_id = m_consts.size();
+                Arg result_locator {
+                    .n = static_cast<int16_t>(next_const_id),
+                    .tag = Location::constant
+                };
+                
+                record_item(literal_text, result_locator);
+                m_consts.emplace_back(std::forward<Value>(new_value));
 
-            m_consts.emplace_back(std::forward<Value>(new_value));
-
-            return Arg {
-                .n = static_cast<int16_t>(next_const_id),
-                .tag = Location::constant
-            };
+                return result_locator;
+            } else if (existing_constant->tag == Location::constant) {
+                return *existing_constant;
+            } else {
+                return Arg {
+                    .n = -1,
+                    .tag = Location::immediate
+                };
+            }
         }
 
         [[nodiscard]] auto record_this_func() -> Arg {
@@ -128,8 +143,8 @@ export namespace DerkJS {
         void encode_instruction(Opcode op) {
             m_code.emplace_back(Instruction {
                 .args = {
-                    dud_arg,
-                    dud_arg,
+                    0,
+                    0,
                 },
                 .op = op
             });
@@ -138,8 +153,8 @@ export namespace DerkJS {
         void encode_instruction(Opcode op, Arg a0) {
             m_code.emplace_back(Instruction {
                 .args = {
-                    a0,
-                    dud_arg,
+                    a0.n,
+                    0,
                 },
                 .op = op
             });
@@ -148,8 +163,8 @@ export namespace DerkJS {
         void encode_instruction(Opcode op, Arg a0, Arg a1) {
             m_code.emplace_back(Instruction {
                 .args = {
-                    a0,
-                    a1,
+                    a0.n,
+                    a1.n,
                 },
                 .op = op
             });
@@ -172,9 +187,9 @@ export namespace DerkJS {
 
             switch (literal_token.tag) {
             case TokenTag::keyword_undefined: {
-                auto undef_lt_locator = record_constants(Value {});
+                auto undef_lt_locator = record_constants("undefined", Value {});
 
-                encode_instruction(Opcode::djs_push, undef_lt_locator);
+                encode_instruction(Opcode::djs_put_const, undef_lt_locator);
 
                 return Arg {
                     .n = static_cast<int16_t>(update_temp_id(1)),
@@ -182,19 +197,30 @@ export namespace DerkJS {
                 };
             }
             case TokenTag::keyword_null:{
-                auto null_lt_locator = record_constants(Value {JSNullOpt {}});
+                auto null_lt_locator = record_constants("null", Value {JSNullOpt {}});
 
-                encode_instruction(Opcode::djs_push, null_lt_locator);
+                encode_instruction(Opcode::djs_put_const, null_lt_locator);
 
                 return null_lt_locator;
             }
-            case TokenTag::keyword_true:
-            case TokenTag::keyword_false: {
-                auto boolean_lt_locator = record_constants(Value {
-                    literal_token.as_str(source) == "true"
+            case TokenTag::keyword_true: {
+                auto boolean_lt_locator = record_constants("true", Value {
+                    true
                 });
 
-                encode_instruction(Opcode::djs_push, boolean_lt_locator);
+                encode_instruction(Opcode::djs_put_const, boolean_lt_locator);
+
+                return Arg {
+                    .n = static_cast<int16_t>(update_temp_id(1)),
+                    .tag = Location::temp
+                };
+            }
+            case TokenTag::keyword_false: {
+                auto boolean_lt_locator = record_constants("false", Value {
+                    false
+                });
+
+                encode_instruction(Opcode::djs_put_const, boolean_lt_locator);
 
                 return Arg {
                     .n = static_cast<int16_t>(update_temp_id(1)),
@@ -202,11 +228,13 @@ export namespace DerkJS {
                 };
             }
             case TokenTag::literal_int: {
-                auto int_lt_locator = record_constants(Value {
-                    std::stoi(literal_token.as_string(source))
+                std::string int_lexeme = literal_token.as_string(source);
+
+                auto int_lt_locator = record_constants(int_lexeme, Value {
+                    std::stoi(int_lexeme)
                 });
 
-                encode_instruction(Opcode::djs_push, int_lt_locator);
+                encode_instruction(Opcode::djs_put_const, int_lt_locator);
 
                 return Arg {
                     .n = static_cast<int16_t>(update_temp_id(1)),
@@ -214,11 +242,13 @@ export namespace DerkJS {
                 };
             }
             case TokenTag::literal_real: {
-                auto real_lt_locator = record_constants(Value {
-                    std::stoi(literal_token.as_string(source))
+                std::string dbl_lexeme = literal_token.as_string(source);
+
+                auto dbl_lt_locator = record_constants(dbl_lexeme, Value {
+                    std::stod(dbl_lexeme)
                 });
 
-                encode_instruction(Opcode::djs_push, real_lt_locator);
+                encode_instruction(Opcode::djs_put_const, dbl_lt_locator);
 
                 return Arg {
                     .n = static_cast<int16_t>(update_temp_id(1)),
@@ -228,17 +258,25 @@ export namespace DerkJS {
             case TokenTag::identifier: {
                 std::string any_name_lexeme = literal_token.as_string(source);
 
-                if (auto name_locator_opt = lookup_named_item(any_name_lexeme); name_locator_opt) {
+                if (auto name_locator_opt = lookup_item(any_name_lexeme); name_locator_opt) {
                     if (const auto locator_tag = name_locator_opt->tag; locator_tag == Location::temp) {
-                        encode_instruction(djs_push, *name_locator_opt);
+                        encode_instruction(djs_dup, *name_locator_opt);
 
                         return Arg {
                             .n = static_cast<int16_t>(update_temp_id(1)),
                             .tag = Location::temp
                         };
-                    } else if (locator_tag == Location::constant || locator_tag == Location::heap_obj) {
-                        /// NOTE: Push constants, object refs, and argument-temps as needed within blocks (even in functions).
-                        encode_instruction(djs_push, *name_locator_opt);
+                    } else if (locator_tag == Location::constant) {
+                        /// NOTE: Push constants as needed within blocks (even in functions), using the dedicated opcode for this case.
+                        encode_instruction(Opcode::djs_put_const, *name_locator_opt);
+
+                        return Arg {
+                            .n = static_cast<int16_t>(update_temp_id(1)),
+                            .tag = Location::temp
+                        };
+                    } else if (locator_tag == Location::heap_obj) {
+                        /// NOTE: Push constants as needed within blocks (even in functions).
+                        encode_instruction(Opcode::djs_put_obj_ref, *name_locator_opt);
 
                         return Arg {
                             .n = static_cast<int16_t>(update_temp_id(1)),
@@ -360,7 +398,7 @@ export namespace DerkJS {
             if (auto var_name_literal = std::get_if<Primitive>(&assign_lhs->data); var_name_literal) {
                 std::string lhs_name = var_name_literal->token.as_string(source);
 
-                record_named_item(lhs_name, *assign_rhs_locator);
+                record_item(lhs_name, *assign_rhs_locator);
 
                 return assign_rhs_locator;
             }
@@ -449,7 +487,7 @@ export namespace DerkJS {
             } else {
                 std::string var_name = var_name_token.as_string(source);
 
-                record_named_item(var_name, *var_init_locator);
+                record_item(var_name, *var_init_locator);
             }
 
             return true;
@@ -491,7 +529,11 @@ export namespace DerkJS {
 
             const int falsy_jump_offset = post_if_body_jump_ip - pre_if_body_jump_ip;
 
-            m_code.at(pre_if_body_jump_ip).args[0].n = falsy_jump_offset;
+            if (falsy_jump_offset < min_bc_jump_offset || falsy_jump_offset > max_bc_jump_offset) {
+                return false;
+            }
+
+            m_code.at(pre_if_body_jump_ip).args[0] = falsy_jump_offset;
 
             return true;
         }
@@ -523,14 +565,14 @@ export namespace DerkJS {
             const auto& [func_params, func_name_token, func_body] = stmt;
             std::string func_name = func_name_token.as_string(source);
 
-            record_named_item(func_name, record_this_func());
+            record_item(func_name, record_this_func());
 
             enter_simulated_frame();
 
             for (const auto& param : func_params) {
                 std::string param_name = param.as_string(source);
 
-                record_named_item(param_name, Arg {
+                record_item(param_name, Arg {
                     .n = static_cast<int16_t>(update_temp_id(1)),
                     .tag = Location::temp,
                 });
@@ -565,7 +607,7 @@ export namespace DerkJS {
 
     public:
         BytecodeGenPass()
-        : m_mappings {}, m_heap_items {}, m_consts {}, m_code {}, m_func_offsets {}, m_temp_entry_id {-1}, m_next_temp_id {0} {
+        : m_mappings {}, m_heap_items {}, m_consts {}, m_code {}, m_func_offsets {}, m_next_temp_id {0} {
             /// NOTE: Consider global scope 1st for global variables / stmts...
             enter_simulated_frame();
         }
