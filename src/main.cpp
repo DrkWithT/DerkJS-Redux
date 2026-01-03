@@ -29,12 +29,6 @@ constexpr std::size_t default_call_depth_limit = 208;
     return src_buffer.str();
 }
 
-[[nodiscard]] constexpr auto run_script_bytecode(DerkJS::Program& prgm, std::size_t stack_limit, std::size_t recursion_limit) -> DerkJS::ExitStatus {
-    DerkJS::VM<DerkJS::DispatchPolicy::loop_switch> vm {prgm, stack_limit, recursion_limit};
-
-    return vm();
-}
-
 int main(int argc, char* argv[]) {
     using namespace DerkJS;
 
@@ -92,11 +86,13 @@ int main(int argc, char* argv[]) {
         disassemble_program(program_opt.value());
     }
 
+    DerkJS::VM<DerkJS::DispatchPolicy::loop_switch> vm {program_opt.value(), default_stack_size, default_call_depth_limit};
+
     auto derkjs_start_time = std::chrono::steady_clock::now();
-    const auto vm_status = run_script_bytecode(program_opt.value(), default_stack_size, default_call_depth_limit);
+    const auto vm_status = vm();
     auto derkjs_running_time = std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::steady_clock::now() - derkjs_start_time);
 
-    std::println("Finished in \x1b[1;33m{}\x1b[0m", derkjs_running_time);
+    std::println("DerkJS [Result Value]: {}, Finished in \x1b[1;33m{}\x1b[0m", vm.peek_local_value(0).to_string().value(), derkjs_running_time);
 
     return (vm_status == ExitStatus::ok) ? 0 : 1 ;
 }
