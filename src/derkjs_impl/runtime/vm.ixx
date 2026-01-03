@@ -164,7 +164,7 @@ export namespace DerkJS {
 
         void op_push_const(int16_t const_id) noexcept {
             ++m_rsp;
-            m_stack[m_rsbp + m_rsp] = m_consts_view[const_id];
+            m_stack[m_rsp] = m_consts_view[const_id];
 
             ++m_rip_p;
         }
