@@ -326,7 +326,7 @@ export namespace DerkJS {
                 } else {
                     lhs_jump_if_pos = m_code.size();
                     encode_instruction(Opcode::djs_jump_if, Arg {.n = -1, .tag = Location::immediate});
-                    update_temp_id(-1);
+                    // update_temp_id(-1);
                 }
 
                 // 2. Pop the temp LHS if it's false at this control-flow point, saving a stack slot.
@@ -358,7 +358,7 @@ export namespace DerkJS {
                 } else {
                     lhs_jump_else_pos = m_code.size();
                     encode_instruction(Opcode::djs_jump_else, Arg {.n = -1, .tag = Location::immediate});
-                    update_temp_id(-1);
+                    // update_temp_id(-1);
                 }
 
                 // 2. Pop the temp LHS if it's true at this control-flow point, saving a stack slot.
@@ -626,7 +626,7 @@ export namespace DerkJS {
                 .n = -1,
                 .tag = Location::immediate
             });
-            update_temp_id(-1);
+            // update_temp_id(-1);
 
             if (!emit_stmt(*stmt_if.body_true, source)) {
                 return false;

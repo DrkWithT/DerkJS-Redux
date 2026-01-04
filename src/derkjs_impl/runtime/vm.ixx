@@ -283,8 +283,6 @@ export namespace DerkJS {
             } else {
                 ++m_rip_p;
             }
-
-            --m_rsp;
         }
 
         void op_jump_if(int16_t jmp_offset) noexcept {
@@ -293,8 +291,6 @@ export namespace DerkJS {
             } else {
                 ++m_rip_p;
             }
-
-            --m_rsp;
         }
 
         void op_jump(int16_t jmp_offset) noexcept {
@@ -680,8 +676,6 @@ export namespace DerkJS {
             ++ctx.rip_p;
         }
 
-        --ctx.rsp;
-
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -691,8 +685,6 @@ export namespace DerkJS {
         } else {
             ++ctx.rip_p;
         }
-
-        --ctx.rsp;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }

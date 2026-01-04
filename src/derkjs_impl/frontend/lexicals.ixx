@@ -226,35 +226,34 @@ export namespace DerkJS {
             const auto temp_line = m_line;
             const auto temp_column = m_column;
             auto dot_count = 0;
-            auto has_minus_sign = false;
-            auto has_excess_minuses = false;
+            auto minus_count = 0;
 
             if (const auto prefix_c = source.at(m_pos); prefix_c == '-') {
-                has_minus_sign = true;
+                ++minus_count;
                 ++m_pos;
             }
 
             while (!at_eof()) {
-                if (const auto c = source.at(m_pos); is_numeric(c)) {
+                if (const auto c = source.at(m_pos); is_numeric(c) || c == '-') {
                     update_source_location(c);
                     ++temp_length;
 
                     if (c == '.') ++dot_count;
+                    else if (c == '-') ++minus_count;
                 } else {
-                    has_excess_minuses = c == '-';
                     break;
                 }
             }
 
-            const auto checked_tag = ([] (int dots, bool has_extra_minuses) noexcept -> TokenTag {
-                if (has_extra_minuses) return TokenTag::unknown;
+            const auto checked_tag = ([] (int dots, int minuses) noexcept -> TokenTag {
+                if (minuses > 1) return TokenTag::unknown;
 
                 switch (dots) {
                 case 0: return TokenTag::literal_int;
                 case 1: return TokenTag::literal_real;
                 default: return TokenTag::unknown;
                 }
-            })(dot_count, has_excess_minuses);
+            })(dot_count, minus_count);
 
             return {
                 checked_tag,
