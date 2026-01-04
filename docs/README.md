@@ -18,7 +18,7 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
 <member> = <primary> ( "." <call> | "[" <expr> "]" )?
 <new> = "new"? <member>
 <call> = <new> ( "(" ( <expr> ( "," <expr> )* )? ")" )?
-<unary> = ( "!" | "-" )? <call>
+<unary> = ( "!" )? <call>
 <factor> = <unary> ( ( "%" | "*" | "/" ) <unary> )*
 <term> = <factor> ( ( "+" | "-" ) <factor> )*
 <compare> = <term> ( ( "<" | ">" | "<=" | ">=" ) <term> )*
@@ -34,7 +34,7 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
 <stmt> = <variable> | <if> | <return> | <function> | <expr-stmt>
 <variable> = "var" <var-decl> ( "," <var-decl>)* ";"
 <var-decl> = <identifier> ( "=" <expr> )?
-<if> = "if" "(" <expr> ")" <block> "else" ( <block> | <if> | <return> | <expr-stmt> )
+<if> = "if" "(" <expr> ")" <block> ( "else" ( <block> | <if> | <return> | <expr-stmt> ) )?
 <return> = "return" <expr> ";"
 <function> = "function" <identifier> "(" ( <identifier> ( "," <identifier> )* )? ")" <block>
 <block> = "{" <stmt>+ "}"
