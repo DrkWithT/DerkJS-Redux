@@ -288,7 +288,6 @@ export namespace DerkJS {
             const auto unary_op = ([](TokenTag tag) -> AstOp {
                 switch (tag) {
                 case TokenTag::symbol_bang: return AstOp::ast_op_bang;
-                case TokenTag::symbol_minus: return AstOp::ast_op_minus;
                 default: return AstOp::ast_op_noop;
                 }
             })(m_current.tag);
@@ -582,21 +581,23 @@ export namespace DerkJS {
 
             consume(lexer, source, TokenTag::right_paren);
 
-            /// TODO: add looser syntax paths for if-true bodies...
+            /// TODO: add looser syntax paths for ifs' true bodies...
             auto block_true = parse_block(lexer, source);
-
-            consume(lexer, source, TokenTag::keyword_else);
 
             std::unique_ptr<Stmt> stmt_falsy;
 
-            if (const auto current_token_tag = m_current.tag; current_token_tag == TokenTag::left_brace) {
-                stmt_falsy = parse_block(lexer, source);
-            } else if (current_token_tag == TokenTag::keyword_if) {
-                stmt_falsy = parse_if(lexer, source);
-            } else if (current_token_tag == TokenTag::keyword_return) {
-                stmt_falsy = parse_return(lexer, source);
-            } else {
-                stmt_falsy = parse_expr_stmt(lexer, source);
+            if (const auto current_token_tag = m_current.tag; current_token_tag == TokenTag::keyword_else) {
+                consume_any(lexer, source);
+
+                if (const auto current_token_tag = m_current.tag; current_token_tag == TokenTag::left_brace) {
+                    stmt_falsy = parse_block(lexer, source);
+                } else if (current_token_tag == TokenTag::keyword_if) {
+                    stmt_falsy = parse_if(lexer, source);
+                } else if (current_token_tag == TokenTag::keyword_return) {
+                    stmt_falsy = parse_return(lexer, source);
+                } else {
+                    stmt_falsy = parse_expr_stmt(lexer, source);
+                }
             }
 
             return std::make_unique<Stmt>(

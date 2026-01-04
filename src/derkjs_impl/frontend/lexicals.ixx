@@ -226,6 +226,13 @@ export namespace DerkJS {
             const auto temp_line = m_line;
             const auto temp_column = m_column;
             auto dot_count = 0;
+            auto has_minus_sign = false;
+            auto has_excess_minuses = false;
+
+            if (const auto prefix_c = source.at(m_pos); prefix_c == '-') {
+                has_minus_sign = true;
+                ++m_pos;
+            }
 
             while (!at_eof()) {
                 if (const auto c = source.at(m_pos); is_numeric(c)) {
@@ -234,17 +241,20 @@ export namespace DerkJS {
 
                     if (c == '.') ++dot_count;
                 } else {
+                    has_excess_minuses = c == '-';
                     break;
                 }
             }
 
-            const auto checked_tag = ([] (int dots) noexcept -> TokenTag {
+            const auto checked_tag = ([] (int dots, bool has_extra_minuses) noexcept -> TokenTag {
+                if (has_extra_minuses) return TokenTag::unknown;
+
                 switch (dots) {
                 case 0: return TokenTag::literal_int;
                 case 1: return TokenTag::literal_real;
                 default: return TokenTag::unknown;
                 }
-            })(dot_count);
+            })(dot_count, has_excess_minuses);
 
             return {
                 checked_tag,
@@ -383,7 +393,7 @@ export namespace DerkJS {
                 return lex_block_comment(source);
             } else if (is_whitespace(peek_0)) {
                 return lex_whitespace(source);
-            } else if (is_numeric(peek_0)) {
+            } else if (is_numeric(peek_0) || (peek_0 == '-' && is_numeric(peek_1))) {
                 return lex_numeric(source);
             } else if (is_op_symbol(peek_0)) {
                 return lex_operator(source);
