@@ -201,7 +201,10 @@ export namespace DerkJS {
 
                 encode_instruction(Opcode::djs_put_const, null_lt_locator);
 
-                return null_lt_locator;
+                return Arg {
+                    .n = static_cast<int16_t>(update_temp_id(1)),
+                    .tag = Location::temp
+                };
             }
             case TokenTag::keyword_true: {
                 auto boolean_lt_locator = record_constants("true", Value {
@@ -294,13 +297,98 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto emit_unary([[maybe_unused]] const Unary& expr, [[maybe_unused]] const std::string& source) -> std::optional<Arg> {
-            return {}; // TODO: support negation before implementing this: it must emit code for evaluating the inner expr first BEFORE the opcode!
+            if (const auto& [unary_expr, unary_op] = expr; unary_op == AstOp::ast_op_bang) {
+                if (!emit_expr(*unary_expr, source)) {
+                    return {};
+                }
+
+                encode_instruction(Opcode::djs_test_falsy);
+                update_temp_id(1);
+
+                return Arg {
+                    .n = static_cast<int16_t>(current_temp_id()),
+                    .tag = Location::temp
+                };
+            }
+
+            return {};
+        }
+
+        [[nodiscard]] auto emit_logical_expr(AstOp logical_operator, const Expr& lhs, const Expr& rhs, const std::string& source) -> std::optional<Arg> {
+            switch (logical_operator) {
+            case AstOp::ast_op_or: {
+                int lhs_jump_if_pos = -1000;
+                int post_rhs_jump_pos = -1000;
+
+                // 1. By the ES5 spec, the logical OR short-circuits: If LHS is truthy, it becomes the result and RHS is not evaluated!
+                if (auto lhs_locator = emit_expr(lhs, source); !lhs_locator) {
+                    return {};
+                } else {
+                    lhs_jump_if_pos = m_code.size();
+                    encode_instruction(Opcode::djs_jump_if, Arg {.n = -1, .tag = Location::immediate});
+                    update_temp_id(-1);
+                }
+
+                // 2. Pop the temp LHS if it's false at this control-flow point, saving a stack slot.
+                // encode_instruction(Opcode::djs_pop, Arg {.n = 1, .tag = Location::immediate});
+                // update_temp_id(-1);
+
+                // 3. Emit the RHS evaluation & result since control flow reaching this point must have a falsy LHS.
+                if (auto rhs_locator = emit_expr(rhs, source); !rhs_locator) {
+                    return {};
+                } else {
+                    post_rhs_jump_pos = m_code.size();
+                    encode_instruction(Opcode::djs_nop);
+                }
+
+                m_code[lhs_jump_if_pos].args[0] = post_rhs_jump_pos - lhs_jump_if_pos;
+
+                return Arg {
+                    .n = static_cast<int16_t>(current_temp_id()),
+                    .tag = Location::temp
+                };
+            }
+            case AstOp::ast_op_and: {
+                int lhs_jump_else_pos = -1000;
+                int post_rhs_jump_pos = -1000;
+
+                // 1. By the ES5 spec, the logical AND short-circuits: If LHS is falsy, it becomes the result and RHS is not evaluated!
+                if (auto lhs_locator = emit_expr(lhs, source); !lhs_locator) {
+                    return {};
+                } else {
+                    lhs_jump_else_pos = m_code.size();
+                    encode_instruction(Opcode::djs_jump_else, Arg {.n = -1, .tag = Location::immediate});
+                    update_temp_id(-1);
+                }
+
+                // 2. Pop the temp LHS if it's true at this control-flow point, saving a stack slot.
+                // encode_instruction(Opcode::djs_pop, Arg {.n = 1, .tag = Location::immediate});
+                // update_temp_id(-1);
+
+                // 3. Emit the RHS evaluation & result since control flow reaching this point must have a truthy LHS.
+                if (auto rhs_locator = emit_expr(rhs, source); !rhs_locator) {
+                    return {};
+                } else {
+                    post_rhs_jump_pos = m_code.size();
+                    encode_instruction(Opcode::djs_nop);
+                }
+
+                m_code[lhs_jump_else_pos].args[0] = post_rhs_jump_pos - lhs_jump_else_pos;
+
+                return Arg {
+                    .n = static_cast<int16_t>(current_temp_id()),
+                    .tag = Location::temp
+                };
+            }
+            default: return {};
+            }
         }
 
         [[nodiscard]] auto emit_binary(const Binary& expr, const std::string& source) -> std::optional<Arg> {
             struct OpcodeAssocPair {
                 Opcode op;
                 bool lhs_first;
+                bool logical_eval; // indicates special cases: && OR ||
             };
 
             const auto& [lhs, rhs, bin_op] = expr;
@@ -309,49 +397,66 @@ export namespace DerkJS {
                 switch (ast_op) {
                     case AstOp::ast_op_percent: return OpcodeAssocPair {
                         Opcode::djs_mod,
-                        true
+                        true,
+                        false
                     };
                     case AstOp::ast_op_times: return OpcodeAssocPair {
                         Opcode::djs_mul,
-                        true
+                        true,
+                        false
                     };
                     case AstOp::ast_op_slash: return OpcodeAssocPair {
                         Opcode::djs_div,
-                        true
+                        true,
+                        false
                     };
                     case AstOp::ast_op_plus: return OpcodeAssocPair {
                         Opcode::djs_add,
-                        true
+                        true,
+                        false
                     };
                     case AstOp::ast_op_minus: return OpcodeAssocPair {
                         Opcode::djs_sub,
-                        true
+                        true,
+                        false
                     };
                     case AstOp::ast_op_equal:
                     case AstOp::ast_op_strict_equal: return OpcodeAssocPair {
                         Opcode::djs_test_strict_eq,
-                        true
+                        true,
+                        false
                     };
                     case AstOp::ast_op_bang_equal:
                     case AstOp::ast_op_strict_bang_equal: return OpcodeAssocPair {
                         Opcode::djs_test_strict_ne,
-                        true
+                        true,
+                        false
                     };
                     case AstOp::ast_op_less: return OpcodeAssocPair {
                         Opcode::djs_test_lt,
-                        true
+                        true,
+                        false
                     };
                     case AstOp::ast_op_less_equal: return OpcodeAssocPair {
                         Opcode::djs_test_lte,
-                        true
+                        true,
+                        false
                     };
                     case AstOp::ast_op_greater: return OpcodeAssocPair {
                         Opcode::djs_test_gt,
-                        true
+                        true,
+                        false
                     };
                     case AstOp::ast_op_greater_equal: return OpcodeAssocPair {
                         Opcode::djs_test_gte,
-                        true
+                        true,
+                        false
+                    };
+                    case AstOp::ast_op_and:
+                    case AstOp::ast_op_or: return OpcodeAssocPair {
+                        Opcode::djs_nop,
+                        true,
+                        true,
                     };
                     default: return {};
                 }
@@ -361,7 +466,12 @@ export namespace DerkJS {
                 return {};
             }
 
-            const auto [opcode, is_opcode_lefty] = *opcode_associated_pair;
+            const auto [opcode, is_opcode_lefty, has_logical_eval] = *opcode_associated_pair;
+
+            if (has_logical_eval) {
+                return emit_logical_expr(bin_op, *lhs, *rhs, source);
+            }
+
             std::optional<Arg> lhs_locator;
             std::optional<Arg> rhs_locator;
             std::optional<Arg> result_locator;
@@ -506,9 +616,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto emit_if(const If& stmt_if, const std::string& source) -> bool {
-            auto cond_check_locator = emit_expr(*stmt_if.check, source);
-
-            if (!cond_check_locator) {
+            if (!emit_expr(*stmt_if.check, source)) {
                 return false;
             }
 
@@ -518,22 +626,38 @@ export namespace DerkJS {
                 .n = -1,
                 .tag = Location::immediate
             });
+            update_temp_id(-1);
 
             if (!emit_stmt(*stmt_if.body_true, source)) {
                 return false;
             }
 
-            const int post_if_body_jump_ip = m_code.size();
+            const int skip_else_body_jump_ip = m_code.size();
 
+            if (stmt_if.body_false) {
+                encode_instruction(Opcode::djs_jump, Arg {.n = -1000, .tag = Location::immediate});
+            }
+
+            const int post_truthy_part_jump_ip = m_code.size();
             encode_instruction(Opcode::djs_nop);
-
-            const int falsy_jump_offset = post_if_body_jump_ip - pre_if_body_jump_ip;
+            const int falsy_jump_offset = post_truthy_part_jump_ip - pre_if_body_jump_ip;
 
             if (falsy_jump_offset < min_bc_jump_offset || falsy_jump_offset > max_bc_jump_offset) {
                 return false;
             }
 
             m_code.at(pre_if_body_jump_ip).args[0] = falsy_jump_offset;
+
+            if (const auto falsy_if_part_p = stmt_if.body_false.get(); falsy_if_part_p) {
+                if (!emit_stmt(*falsy_if_part_p, source)) {
+                    return false;
+                } else {
+                    const int post_if_else_ip = m_code.size();
+                    encode_instruction(Opcode::djs_nop);
+
+                    m_code[skip_else_body_jump_ip].args[0] = post_if_else_ip - skip_else_body_jump_ip;
+                }
+            }
 
             return true;
         }
@@ -618,7 +742,7 @@ export namespace DerkJS {
                 if (std::holds_alternative<FunctionDecl>(decl->data)) {
                     if (!emit_stmt(*decl, source_map.at(src_id))) {
                         std::println(std::cerr, "Compile Error at source '{}' around '{}': unsupported JS construct :(\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length / 2));
-                        continue;
+                        return {};
                     }
                 }
             }
@@ -630,10 +754,13 @@ export namespace DerkJS {
                 if (!std::holds_alternative<FunctionDecl>(decl->data)) {
                     if (!emit_stmt(*decl, source_map.at(src_id))) {
                         std::println(std::cerr, "Compile Error at source '{}' around '{}': unsupported JS construct :(\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length / 2));
-                        continue;
+                        return {};
                     }
                 }
             }
+
+            /// NOTE: Place dud offset marker for bytecode dumping to stop properly.
+            m_func_offsets.emplace_back(-1);
 
             return Program {
                 .heap_items = std::exchange(m_heap_items, {}),

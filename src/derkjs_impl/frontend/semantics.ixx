@@ -292,7 +292,9 @@ namespace DerkJS {
                 return false;
             }
 
-            /// NOTE: Skip 'else' for now. Next iteration I'll fix that by adding the parsing logic, etc.
+            if (const auto stmt_if_falsy_part_p = stmt_if.body_false.get(); stmt_if_falsy_part_p) {
+                return check_stmt(*stmt_if_falsy_part_p, source_name, current_source, area_start, area_length);
+            }
 
             return true;
         }

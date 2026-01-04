@@ -15,6 +15,7 @@ export namespace DerkJS {
         identifier,
         keyword_var,
         keyword_if,
+        keyword_else,
         keyword_return,
         keyword_function,
         keyword_prototype,
@@ -41,6 +42,8 @@ export namespace DerkJS {
         symbol_less_equal,
         symbol_greater,
         symbol_greater_equal,
+        symbol_amps, // `&&` symbol
+        symbol_pipes, // `||` symbol
         symbol_assign,
         symbol_percent_assign,
         symbol_times_assign,
@@ -223,6 +226,13 @@ export namespace DerkJS {
             const auto temp_line = m_line;
             const auto temp_column = m_column;
             auto dot_count = 0;
+            auto has_minus_sign = false;
+            auto has_excess_minuses = false;
+
+            if (const auto prefix_c = source.at(m_pos); prefix_c == '-') {
+                has_minus_sign = true;
+                ++m_pos;
+            }
 
             while (!at_eof()) {
                 if (const auto c = source.at(m_pos); is_numeric(c)) {
@@ -231,17 +241,20 @@ export namespace DerkJS {
 
                     if (c == '.') ++dot_count;
                 } else {
+                    has_excess_minuses = c == '-';
                     break;
                 }
             }
 
-            const auto checked_tag = ([] (int dots) noexcept -> TokenTag {
+            const auto checked_tag = ([] (int dots, bool has_extra_minuses) noexcept -> TokenTag {
+                if (has_extra_minuses) return TokenTag::unknown;
+
                 switch (dots) {
                 case 0: return TokenTag::literal_int;
                 case 1: return TokenTag::literal_real;
                 default: return TokenTag::unknown;
                 }
-            })(dot_count);
+            })(dot_count, has_excess_minuses);
 
             return {
                 checked_tag,
@@ -319,6 +332,7 @@ export namespace DerkJS {
         : m_specials {}, m_pos {}, m_end {static_cast<int>(source.size())}, m_line {1}, m_column {1} {
             m_specials.emplace("var", TokenTag::keyword_var),
             m_specials.emplace("if", TokenTag::keyword_if);
+            m_specials.emplace("else", TokenTag::keyword_else);
             m_specials.emplace("return", TokenTag::keyword_return),
             m_specials.emplace("function", TokenTag::keyword_function);
             m_specials.emplace("prototype", TokenTag::keyword_prototype);
@@ -342,6 +356,8 @@ export namespace DerkJS {
             m_specials.emplace("<=", TokenTag::symbol_less_equal);
             m_specials.emplace(">", TokenTag::symbol_greater);
             m_specials.emplace(">=", TokenTag::symbol_greater_equal);
+            m_specials.emplace("&&", TokenTag::symbol_amps);
+            m_specials.emplace("||", TokenTag::symbol_pipes);
             m_specials.emplace("=", TokenTag::symbol_assign);
             m_specials.emplace("%=", TokenTag::symbol_percent_assign);
             m_specials.emplace("*=", TokenTag::symbol_times_assign);
@@ -377,7 +393,7 @@ export namespace DerkJS {
                 return lex_block_comment(source);
             } else if (is_whitespace(peek_0)) {
                 return lex_whitespace(source);
-            } else if (is_numeric(peek_0)) {
+            } else if (is_numeric(peek_0) || (peek_0 == '-' && is_numeric(peek_1))) {
                 return lex_numeric(source);
             } else if (is_op_symbol(peek_0)) {
                 return lex_operator(source);

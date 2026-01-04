@@ -28,6 +28,8 @@ export namespace DerkJS {
         ast_op_less_equal,
         ast_op_greater,
         ast_op_greater_equal,
+        ast_op_and,
+        ast_op_or,
         ast_op_assign,
         ast_op_times_assign,
         ast_op_slash_assign,

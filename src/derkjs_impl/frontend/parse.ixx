@@ -110,6 +110,7 @@ export namespace DerkJS {
                 return;
             }
 
+            /// FIXME: The syntax tags are not properly tracked... A reversed stack is needed to track the most appropriate syntax reached.
             report_syntax_error(
                 source,
                 std::format("Invalid token found in {}", syntax_tag_name(m_syntax)),
@@ -145,7 +146,7 @@ export namespace DerkJS {
             case TokenTag::left_paren:
                 {
                     consume_any(lexer, source);
-                    auto enclosed_expr = parse_equality(lexer, source);
+                    auto enclosed_expr = parse_logical_or(lexer, source);
                     consume(lexer, source, TokenTag::right_paren);
 
                     return enclosed_expr;
@@ -180,7 +181,7 @@ export namespace DerkJS {
             } else if (member_mark == TokenTag::left_bracket) {
                 consume_any(lexer, source);
 
-                auto enclosed_expr = parse_equality(lexer, source);
+                auto enclosed_expr = parse_logical_or(lexer, source);
 
                 consume(lexer, source, TokenTag::right_bracket);
 
@@ -255,7 +256,7 @@ export namespace DerkJS {
                 );
             }
 
-            args.emplace_back(parse_equality(lexer, source));
+            args.emplace_back(parse_logical_or(lexer, source));
 
             while (!at_eof()) {
                 if (!m_current.match_tag_to(TokenTag::comma)) {
@@ -264,7 +265,7 @@ export namespace DerkJS {
 
                 consume_any(lexer, source);
 
-                args.emplace_back(parse_equality(lexer, source));
+                args.emplace_back(parse_logical_or(lexer, source));
             }
 
             consume(lexer, source, TokenTag::right_paren);
@@ -287,7 +288,6 @@ export namespace DerkJS {
             const auto unary_op = ([](TokenTag tag) -> AstOp {
                 switch (tag) {
                 case TokenTag::symbol_bang: return AstOp::ast_op_bang;
-                case TokenTag::symbol_minus: return AstOp::ast_op_minus;
                 default: return AstOp::ast_op_noop;
                 }
             })(m_current.tag);
@@ -451,6 +451,58 @@ export namespace DerkJS {
             return lhs;
         }
 
+        [[nodiscard]] auto parse_logical_and(Lexer& lexer, const std::string& source) -> ExprPtr {
+            const auto snippet_begin = m_current.start;
+            auto and_lhs = parse_equality(lexer, source);
+
+            while (!at_eof()) {
+                if (!m_current.match_tag_to(TokenTag::symbol_amps)) {
+                    break;
+                }
+
+                consume_any(lexer, source);
+
+                and_lhs = std::make_unique<Expr>(
+                    Binary {
+                        .lhs = std::move(and_lhs),
+                        .rhs = parse_equality(lexer, source),
+                        .op = AstOp::ast_op_and
+                    },
+                    0,
+                    snippet_begin,
+                    m_current.start - snippet_begin + 1
+                );
+            }
+
+            return and_lhs;
+        }
+
+        [[nodiscard]] auto parse_logical_or(Lexer& lexer, const std::string& source) -> ExprPtr {
+            const auto snippet_begin = m_current.start;
+            auto or_lhs = parse_logical_and(lexer, source);
+
+            while (!at_eof()) {
+                if (!m_current.match_tag_to(TokenTag::symbol_pipes)) {
+                    break;
+                }
+
+                consume_any(lexer, source);
+
+                or_lhs = std::make_unique<Expr>(
+                    Binary {
+                        .lhs = std::move(or_lhs),
+                        .rhs = parse_logical_and(lexer, source),
+                        .op = AstOp::ast_op_or
+                    },
+                    0,
+                    snippet_begin,
+                    m_current.start - snippet_begin + 1
+                );
+            }
+
+            return or_lhs;
+        }
+
         [[nodiscard]] auto parse_stmt(Lexer& lexer, const std::string& source) -> StmtPtr {
             if (const auto stmt_keyword = m_current.tag; stmt_keyword == TokenTag::keyword_var) {
                 return parse_variable(lexer, source);
@@ -481,7 +533,7 @@ export namespace DerkJS {
 
             return VarDecl {
                 .name = name_token,
-                .rhs = parse_equality(lexer, source)
+                .rhs = parse_logical_or(lexer, source)
             };
         }
 
@@ -525,17 +577,34 @@ export namespace DerkJS {
             consume_any(lexer, source); // skip 'if'
             consume(lexer, source, TokenTag::left_paren);
 
-            auto condition_expr = parse_equality(lexer, source);
+            auto condition_expr = parse_logical_or(lexer, source);
 
             consume(lexer, source, TokenTag::right_paren);
 
+            /// TODO: add looser syntax paths for ifs' true bodies...
             auto block_true = parse_block(lexer, source);
+
+            std::unique_ptr<Stmt> stmt_falsy;
+
+            if (const auto current_token_tag = m_current.tag; current_token_tag == TokenTag::keyword_else) {
+                consume_any(lexer, source);
+
+                if (const auto current_token_tag = m_current.tag; current_token_tag == TokenTag::left_brace) {
+                    stmt_falsy = parse_block(lexer, source);
+                } else if (current_token_tag == TokenTag::keyword_if) {
+                    stmt_falsy = parse_if(lexer, source);
+                } else if (current_token_tag == TokenTag::keyword_return) {
+                    stmt_falsy = parse_return(lexer, source);
+                } else {
+                    stmt_falsy = parse_expr_stmt(lexer, source);
+                }
+            }
 
             return std::make_unique<Stmt>(
                 If {
                     .check = std::move(condition_expr),
                     .body_true = std::move(block_true),
-                    .body_false = {}
+                    .body_false = std::move(stmt_falsy)
                 },
                 0,
                 snippet_begin,
@@ -550,7 +619,7 @@ export namespace DerkJS {
 
             consume_any(lexer, source); // skip 'return'
 
-            auto result_expr = parse_equality(lexer, source);
+            auto result_expr = parse_logical_or(lexer, source);
 
             consume(lexer, source, TokenTag::semicolon);
 
@@ -653,7 +722,7 @@ export namespace DerkJS {
 
             consume_any(lexer, source);
 
-            auto rhs = parse_equality(lexer, source);
+            auto rhs = parse_logical_or(lexer, source);
 
             consume(lexer, source, TokenTag::semicolon);
 

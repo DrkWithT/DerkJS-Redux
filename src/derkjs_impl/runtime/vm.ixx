@@ -221,11 +221,11 @@ export namespace DerkJS {
             ++m_rip_p;
         }
 
-        void op_test() noexcept {
+        void op_test_falsy() noexcept {
             const auto& tested_value = m_stack[m_rsp];
 
             ++m_rsp;
-            m_stack[m_rsp] = tested_value.is_truthy();
+            m_stack[m_rsp] = tested_value.is_falsy();
             ++m_rip_p;
         }
 
@@ -278,11 +278,27 @@ export namespace DerkJS {
         }
 
         void op_jump_else(int16_t jmp_offset) noexcept {
-            if (m_stack[m_rsp].is_falsy()) {
+            if (!m_stack[m_rsp]) {
                 m_rip_p += jmp_offset;
             } else {
                 ++m_rip_p;
             }
+
+            --m_rsp;
+        }
+
+        void op_jump_if(int16_t jmp_offset) noexcept {
+            if (m_stack[m_rsp]) {
+                m_rip_p += jmp_offset;
+            } else {
+                ++m_rip_p;
+            }
+
+            --m_rsp;
+        }
+
+        void op_jump(int16_t jmp_offset) noexcept {
+            m_rip_p += jmp_offset;
         }
 
         void op_call(int16_t chunk_id, int16_t argc) {
@@ -432,8 +448,8 @@ export namespace DerkJS {
                 case Opcode::djs_sub:
                     op_sub();
                     break;
-                case Opcode::djs_test:
-                    op_test();
+                case Opcode::djs_test_falsy:
+                    op_test_falsy();
                     break;
                 case Opcode::djs_test_strict_eq:
                     op_test_strict_eq();
@@ -456,7 +472,12 @@ export namespace DerkJS {
                 case Opcode::djs_jump_else:
                     op_jump_else(next_argv[0]);
                     break;
-                // case Opcode::djs_jump:
+                case Opcode::djs_jump_if:
+                    op_jump_if(next_argv[0]);
+                    break;
+                case Opcode::djs_jump:
+                    op_jump(next_argv[0]);
+                    break;
                 case djs_call:
                     op_call(next_argv[0], next_argv[1]);
                     break;
@@ -489,7 +510,7 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_div(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_add(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_sub(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_test(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_test_falsy(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_test_strict_eq(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_test_strict_ne(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_test_lt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
@@ -497,6 +518,8 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_test_gt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_test_gte(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_jump_else(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_jump_if(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_jump(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_native_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
@@ -509,8 +532,10 @@ export namespace DerkJS {
         op_nop,
         op_dup, op_put_const, op_put_obj_ref, op_pop,
         op_mod, op_mul, op_div, op_add, op_sub,
-        op_test, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte,
-        op_jump_else, op_call, op_native_call, op_ret, op_halt
+        op_test_falsy, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte,
+        op_jump_else, op_jump_if, op_jump,
+        op_call, op_native_call, op_ret,
+        op_halt
     };
 
     [[nodiscard]] inline auto op_nop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
@@ -592,8 +617,8 @@ export namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_test(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ctx.stack[ctx.rsp + 1] = ctx.stack[ctx.rsp].is_truthy();
+    [[nodiscard]] inline auto op_test_falsy(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.stack[ctx.rsp + 1] = ctx.stack[ctx.rsp].is_falsy();
         ++ctx.rsp;
         ++ctx.rip_p;
 
@@ -650,11 +675,30 @@ export namespace DerkJS {
 
     [[nodiscard]] inline auto op_jump_else(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         if (!ctx.stack[ctx.rsp]) {
-            --ctx.rsp;
             ctx.rip_p += a0;
         } else {
             ++ctx.rip_p;
         }
+
+        --ctx.rsp;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    inline auto op_jump_if(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        if (ctx.stack[ctx.rsp]) {
+            ctx.rip_p += a0;
+        } else {
+            ++ctx.rip_p;
+        }
+
+        --ctx.rsp;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_jump(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.rip_p += a0;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
