@@ -15,6 +15,7 @@ export namespace DerkJS {
         identifier,
         keyword_var,
         keyword_if,
+        keyword_else,
         keyword_return,
         keyword_function,
         keyword_prototype,
@@ -41,6 +42,8 @@ export namespace DerkJS {
         symbol_less_equal,
         symbol_greater,
         symbol_greater_equal,
+        symbol_amps, // `&&` symbol
+        symbol_pipes, // `||` symbol
         symbol_assign,
         symbol_percent_assign,
         symbol_times_assign,
@@ -319,6 +322,7 @@ export namespace DerkJS {
         : m_specials {}, m_pos {}, m_end {static_cast<int>(source.size())}, m_line {1}, m_column {1} {
             m_specials.emplace("var", TokenTag::keyword_var),
             m_specials.emplace("if", TokenTag::keyword_if);
+            m_specials.emplace("else", TokenTag::keyword_else);
             m_specials.emplace("return", TokenTag::keyword_return),
             m_specials.emplace("function", TokenTag::keyword_function);
             m_specials.emplace("prototype", TokenTag::keyword_prototype);
@@ -342,6 +346,8 @@ export namespace DerkJS {
             m_specials.emplace("<=", TokenTag::symbol_less_equal);
             m_specials.emplace(">", TokenTag::symbol_greater);
             m_specials.emplace(">=", TokenTag::symbol_greater_equal);
+            m_specials.emplace("&&", TokenTag::symbol_amps);
+            m_specials.emplace("||", TokenTag::symbol_pipes);
             m_specials.emplace("=", TokenTag::symbol_assign);
             m_specials.emplace("%=", TokenTag::symbol_percent_assign);
             m_specials.emplace("*=", TokenTag::symbol_times_assign);
