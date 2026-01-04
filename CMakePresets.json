@@ -16,7 +16,8 @@
                 "CMAKE_CXX_EXTENSIONS": "OFF",
                 "CMAKE_BUILD_TYPE": "Debug",
                 "CMAKE_COMPILE_WARNING_AS_ERROR": "ON",
-                "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "${sourceDir}/build/"
+                "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "${sourceDir}/build/",
+                "MY_LLVM_LIBCXX_DIR": "/usr/local/opt/llvm/lib/"
             }
         },
         {
@@ -30,7 +31,8 @@
                 "CMAKE_CXX_EXTENSIONS": "OFF",
                 "CMAKE_BUILD_TYPE": "Release",
                 "CMAKE_COMPILE_WARNING_AS_ERROR": "ON",
-                "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "${sourceDir}/build/"
+                "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "${sourceDir}/build/",
+                "MY_LLVM_LIBCXX_DIR": "/usr/local/opt/llvm/lib/"
             }
         },
         {
@@ -44,7 +46,8 @@
                 "CMAKE_CXX_EXTENSIONS": "OFF",
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
                 "CMAKE_COMPILE_WARNING_AS_ERROR": "ON",
-                "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "${sourceDir}/build/"
+                "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "${sourceDir}/build/",
+                "MY_LLVM_LIBCXX_DIR": "/usr/local/opt/llvm/lib/"
             }
         }
     ]

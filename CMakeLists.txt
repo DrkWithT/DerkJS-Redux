@@ -28,13 +28,13 @@ if (USE_TCO_WITH_BC_VM)
 
     add_executable(derkjs_tco src/main_tco.cpp)
     target_compile_options(derkjs_tco PRIVATE "-foptimize-sibling-calls")
-    target_link_directories(derkjs_tco PUBLIC ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+    target_link_directories(derkjs_tco PUBLIC ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} PUBLIC ${MY_LLVM_LIBCXX_DIR})
     target_link_libraries(derkjs_tco PUBLIC derkjs_impl)
 
     message(NOTICE "Executable: ./build/derkjs_tco")
 else ()
     add_executable(derkjs src/main.cpp)
-    target_link_directories(derkjs PUBLIC ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+    target_link_directories(derkjs PUBLIC ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} PUBLIC ${MY_LLVM_LIBCXX_DIR})
     target_link_libraries(derkjs PUBLIC derkjs_impl)
 
     message(NOTICE "Executable: ./build/derkjs")
