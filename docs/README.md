@@ -42,9 +42,11 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
 ### TO-DO's:
  1. ~~Fix duplicate constant storage in bytecode.~~
  2. Shrink VM value to 8B. (**PENDING**)
- 3. Refactor VM to use TCO?
- 4. Add `else` statement support.
- 5. Add `while` statement support.
- 6. Add semantic warnings in yellow text.
- 7. Add static-size & heap strings with interning.
- 8. Add objects.
+ 3. ~~Refactor VM to use TCO?~~
+ 4. Add `||` or `&&` operator support.
+ 5. Add `else` statement support.
+ 6. Add `print(arg)` native function.
+ 6. Add `while` statement support.
+ 7. Add semantic warnings in yellow text.
+ 8. Add static-size & heap strings with interning.
+ 9. Add objects.
