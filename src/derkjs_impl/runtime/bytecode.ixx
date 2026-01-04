@@ -33,7 +33,7 @@ export namespace DerkJS {
         djs_div,
         djs_add,
         djs_sub,
-        djs_test,
+        djs_test_falsy,
         djs_test_strict_eq,
         djs_test_strict_ne,
         djs_test_lt,
@@ -93,7 +93,7 @@ export namespace DerkJS {
             "djs_div",
             "djs_add",
             "djs_sub",
-            "djs_test",
+            "djs_test_falsy",
             "djs_test_strict_eq",
             "djs_test_strict_ne",
             "djs_test_lt",
@@ -109,19 +109,18 @@ export namespace DerkJS {
             "djs_halt",
         };
 
-        static constexpr std::array<std::string_view, static_cast<std::size_t>(Location::end)> location_names = {
-            "chunk",
-            "imm",
-            "const",
-            "heap",
-            "temp"
-        };
-
         const auto& [prgm_pre_heap, prgm_consts, prgm_code, prgm_code_offsets, prgm_entry_id] = prgm;
 
         std::println("\x1b[1;33mProgram Dump:\x1b[0m\n\nEntry Chunk ID: {}\n", prgm_entry_id);
 
-        std::println("\x1b[1;33mConstants:\x1b[0m\n");
+        std::println("\x1b[1;33mFunction Offsets:\x1b[0m\n");
+
+        for (auto fn_bc_index = 0; const auto& fn_bc_pos : prgm_code_offsets) {
+            std::println("Chunk {} offset -> {}", fn_bc_index, fn_bc_pos);
+            ++fn_bc_index;
+        }
+
+        std::println("\n\x1b[1;33mConstants:\x1b[0m\n");
 
         for (int constant_id = 0; const auto& temp_constant : prgm_consts) {
             std::println(
@@ -133,17 +132,18 @@ export namespace DerkJS {
             ++constant_id;
         }
 
-        std::println("\x1b[1;33mCode:\x1b[0m\n");
+        std::println("\n\x1b[1;33mCode:\x1b[0m\n");
 
         for (int fn_offset_index = 0, abs_code_pos = 0; const auto& [instr_argv, instr_op] : prgm_code) {
-            if (abs_code_pos == prgm_code_offsets[fn_offset_index]) {
-                std::println("Chunk {}:\n", fn_offset_index);
+            if (const auto fn_begin = prgm_code_offsets.at(fn_offset_index); abs_code_pos == fn_begin) {
+                std::println("\n--- BEGIN CHUNK {} at {} ---\n", fn_offset_index, fn_begin);
                 ++fn_offset_index;
             }
 
             std::println(
-                "\t{} {} {}",
-                opcode_names[static_cast<std::size_t>(instr_op)],
+                "{}: {} {} {}",
+                abs_code_pos,
+                opcode_names.at(static_cast<std::size_t>(instr_op)),
                 instr_argv[0],
                 instr_argv[1]
             );

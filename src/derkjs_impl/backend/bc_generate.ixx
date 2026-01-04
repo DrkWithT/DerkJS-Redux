@@ -297,7 +297,21 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto emit_unary([[maybe_unused]] const Unary& expr, [[maybe_unused]] const std::string& source) -> std::optional<Arg> {
-            return {}; // TODO: support negation before implementing this: it must emit code for evaluating the inner expr first BEFORE the opcode!
+            if (const auto& [unary_expr, unary_op] = expr; unary_op == AstOp::ast_op_bang) {
+                if (!emit_expr(*unary_expr, source)) {
+                    return {};
+                }
+
+                encode_instruction(Opcode::djs_test_falsy);
+                update_temp_id(1);
+
+                return Arg {
+                    .n = static_cast<int16_t>(current_temp_id()),
+                    .tag = Location::temp
+                };
+            }
+
+            return {};
         }
 
         [[nodiscard]] auto emit_logical_expr(AstOp logical_operator, const Expr& lhs, const Expr& rhs, const std::string& source) -> std::optional<Arg> {
@@ -312,11 +326,12 @@ export namespace DerkJS {
                 } else {
                     lhs_jump_if_pos = m_code.size();
                     encode_instruction(Opcode::djs_jump_if, Arg {.n = -1, .tag = Location::immediate});
+                    update_temp_id(-1);
                 }
 
                 // 2. Pop the temp LHS if it's false at this control-flow point, saving a stack slot.
-                encode_instruction(Opcode::djs_pop, Arg {.n = 1, .tag = Location::immediate});
-                update_temp_id(-1);
+                // encode_instruction(Opcode::djs_pop, Arg {.n = 1, .tag = Location::immediate});
+                // update_temp_id(-1);
 
                 // 3. Emit the RHS evaluation & result since control flow reaching this point must have a falsy LHS.
                 if (auto rhs_locator = emit_expr(rhs, source); !rhs_locator) {
@@ -328,9 +343,8 @@ export namespace DerkJS {
 
                 m_code[lhs_jump_if_pos].args[0] = post_rhs_jump_pos - lhs_jump_if_pos;
 
-                /// NOTE: emit a dud locator here since only the top temporary (LHS or RHS) will be used next.
                 return Arg {
-                    .n = 0,
+                    .n = static_cast<int16_t>(current_temp_id()),
                     .tag = Location::temp
                 };
             }
@@ -344,11 +358,12 @@ export namespace DerkJS {
                 } else {
                     lhs_jump_else_pos = m_code.size();
                     encode_instruction(Opcode::djs_jump_else, Arg {.n = -1, .tag = Location::immediate});
+                    update_temp_id(-1);
                 }
 
                 // 2. Pop the temp LHS if it's true at this control-flow point, saving a stack slot.
-                encode_instruction(Opcode::djs_pop, Arg {.n = 1, .tag = Location::immediate});
-                update_temp_id(-1);
+                // encode_instruction(Opcode::djs_pop, Arg {.n = 1, .tag = Location::immediate});
+                // update_temp_id(-1);
 
                 // 3. Emit the RHS evaluation & result since control flow reaching this point must have a truthy LHS.
                 if (auto rhs_locator = emit_expr(rhs, source); !rhs_locator) {
@@ -361,7 +376,7 @@ export namespace DerkJS {
                 m_code[lhs_jump_else_pos].args[0] = post_rhs_jump_pos - lhs_jump_else_pos;
 
                 return Arg {
-                    .n = 0,
+                    .n = static_cast<int16_t>(current_temp_id()),
                     .tag = Location::temp
                 };
             }
@@ -611,6 +626,7 @@ export namespace DerkJS {
                 .n = -1,
                 .tag = Location::immediate
             });
+            update_temp_id(-1);
 
             if (!emit_stmt(*stmt_if.body_true, source)) {
                 return false;
@@ -726,7 +742,7 @@ export namespace DerkJS {
                 if (std::holds_alternative<FunctionDecl>(decl->data)) {
                     if (!emit_stmt(*decl, source_map.at(src_id))) {
                         std::println(std::cerr, "Compile Error at source '{}' around '{}': unsupported JS construct :(\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length / 2));
-                        continue;
+                        return {};
                     }
                 }
             }
@@ -738,10 +754,13 @@ export namespace DerkJS {
                 if (!std::holds_alternative<FunctionDecl>(decl->data)) {
                     if (!emit_stmt(*decl, source_map.at(src_id))) {
                         std::println(std::cerr, "Compile Error at source '{}' around '{}': unsupported JS construct :(\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length / 2));
-                        continue;
+                        return {};
                     }
                 }
             }
+
+            /// NOTE: Place dud offset marker for bytecode dumping to stop properly.
+            m_func_offsets.emplace_back(-1);
 
             return Program {
                 .heap_items = std::exchange(m_heap_items, {}),
