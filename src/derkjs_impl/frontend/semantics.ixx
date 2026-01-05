@@ -307,6 +307,20 @@ namespace DerkJS {
             return check_expr(*ret.result, source_name, current_source, area_start, area_length).has_value();
         }
 
+        [[nodiscard]] auto check_while(const While& loop_by_while, std::string_view source_name, const std::string& current_source, int area_start, int area_length) -> bool {
+            const auto& [loop_check, loop_body] = loop_by_while;
+
+            if (!check_expr(*loop_check, source_name, current_source, area_start, area_length)) {
+                return false;
+            }
+
+            if (!check_stmt(*loop_body, source_name, current_source, area_start, area_length)) {
+                return false;
+            }
+
+            return true;
+        }
+
         [[nodiscard]] auto check_block(const Block& block, std::string_view source_name, const std::string& current_source, int area_start, int area_length) -> bool {
             if (m_prepass) {
                 return true;
@@ -363,6 +377,8 @@ namespace DerkJS {
                 return check_if(*stmt_if_p, source_name, current_source, stmt_text_begin, stmt_text_length);
             } else if (auto ret_p = std::get_if<Return>(&stmt.data); ret_p) {
                 return check_return(*ret_p, source_name, current_source, stmt_text_begin, stmt_text_length);
+            } else if (auto loop_by_while_p = std::get_if<While>(&stmt.data); loop_by_while_p) {
+                return check_while(*loop_by_while_p, source_name, current_source, stmt_text_begin, stmt_text_length);
             } else if (auto block_p = std::get_if<Block>(&stmt.data); block_p) {
                 return check_block(*block_p, source_name, current_source, stmt_text_begin, stmt_text_length);
             } else if (auto func_p = std::get_if<FunctionDecl>(&stmt.data); func_p) {
