@@ -30,6 +30,7 @@ export namespace DerkJS {
         stmt_var,
         stmt_if,
         stmt_return,
+        stmt_while,
         stmt_function,
         stmt_expr,
         last,
@@ -510,6 +511,8 @@ export namespace DerkJS {
                 return parse_if(lexer, source);
             } else if (stmt_keyword == TokenTag::keyword_return) {
                 return parse_return(lexer, source);
+            } else if (stmt_keyword == TokenTag::keyword_while) {
+                return parse_while(lexer, source);
             } else if (stmt_keyword == TokenTag::keyword_function) {
                 return parse_function(lexer, source);
             } else {
@@ -633,12 +636,37 @@ export namespace DerkJS {
             );
         }
 
+        [[nodiscard]] auto parse_while(Lexer& lexer, const std::string& source) -> StmtPtr {
+            m_syntax = SyntaxTag::stmt_while;
+
+            const auto snippet_begin = m_current.start;
+
+            consume_any(lexer, source); // skip pre-checked 'while'
+            consume(lexer, source, TokenTag::left_paren);
+
+            auto loop_check_expr = parse_logical_or(lexer, source);
+
+            consume(lexer, source, TokenTag::right_paren);
+
+            auto loop_body = parse_block(lexer, source);
+
+            return std::make_unique<Stmt>(
+                While {
+                    .check = std::move(loop_check_expr),
+                    .body = std::move(loop_body)
+                },
+                0,
+                snippet_begin,
+                m_current.start - snippet_begin + 1
+            );
+        }
+
         [[nodiscard]] auto parse_function(Lexer& lexer, const std::string& source) -> StmtPtr {
             m_syntax = SyntaxTag::stmt_function;
 
             const auto snippet_begin = m_current.start;
 
-            consume_any(lexer, source); // skip 'function'
+            consume_any(lexer, source); // skip pre-checked 'function'
             consume(lexer, source, TokenTag::identifier);
 
             Token name_token = m_previous;

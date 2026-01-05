@@ -17,6 +17,7 @@ export namespace DerkJS {
         keyword_if,
         keyword_else,
         keyword_return,
+        keyword_while,
         keyword_function,
         keyword_prototype,
         keyword_new,
@@ -333,6 +334,7 @@ export namespace DerkJS {
             m_specials.emplace("if", TokenTag::keyword_if);
             m_specials.emplace("else", TokenTag::keyword_else);
             m_specials.emplace("return", TokenTag::keyword_return),
+            m_specials.emplace("while", TokenTag::keyword_while);
             m_specials.emplace("function", TokenTag::keyword_function);
             m_specials.emplace("prototype", TokenTag::keyword_prototype);
             m_specials.emplace("this", TokenTag::keyword_this);
