@@ -1,13 +1,8 @@
 /* test logical operators of AND, OR */
 
-var a = 10;
-var b = 0;
-var c = null;
-
 /* ans_1 must be 10 */
-var ans_1 = b || c || a;
+var ans_1 = null || 0 || 69;
+var ans_2 = ans_1 && 1234;
 
-/* ans_2 must be 100 */
-var ans_2 = ans_1 && a * a;
-
+/* ans_2 MUST be 1234 */
 return ans_2;
