@@ -31,11 +31,12 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
 ### Grammar (Statements)
 ```
 <program> = <stmt>+
-<stmt> = <variable> | <if> | <return> | <function> | <expr-stmt>
+<stmt> = <variable> | <if> | <return> | <while> | <function> | <expr-stmt>
 <variable> = "var" <var-decl> ( "," <var-decl>)* ";"
 <var-decl> = <identifier> ( "=" <expr> )?
-<if> = "if" "(" <expr> ")" <block> ( "else" ( <block> | <if> | <return> | <expr-stmt> ) )?
+<if> = "if" "(" <expr> ")" <block> ( "else" ( <block> | <if> | <return> | <expr-stmt> ) )? ; maybe add dangling while loops later, meh
 <return> = "return" <expr> ";"
+<while> = "while" "(" <expr> ")" <block>   ; just have loops contain block bodies for simplicity!
 <function> = "function" <identifier> "(" ( <identifier> ( "," <identifier> )* )? ")" <block>
 <block> = "{" <stmt>+ "}"
 <expr-stmt> = <call> ( "=" <expr> )? ";"
@@ -45,14 +46,18 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
  1. ~~Fix duplicate constant storage in bytecode.~~
  2. Shrink VM value to 8B. (**PENDING**)
  3. ~~Refactor VM to use TCO?~~
- 4. Add `||` or `&&` operator support.
-    - These logical operators _must_ short circuit. As per the ES5 spec, these logical operators only give either LHS or RHS, _not necessarily_ a boolean.
-        - OR: If LHS is true, yield it. Otherwise, RHS is yielded.
-        - ADD: If LHS is false, yield it. Otherwise, RHS is yielded.
-    - To-Do: implement `op_jump_if`, `op_jump`!
- 5. Add `else` statement support.
- 6. Add `print(arg)` native function.
- 6. Add `while` statement support.
- 7. Add semantic warnings in yellow text.
+ 4. ~~Add `||` or `&&` operator support.~~
+ 5. ~~Add `else` statement support.~~
+ 6. ~~Add `while` statement support.~~
+ 7. Add edge case of JS: support for undefined variable declarations.
+   - `var x;` should be `undefined` IIRC...
  8. Add static-size & heap strings with interning.
- 9. Add objects.
+    - Redo `Object*` pointer and `Object`, `Prototype` utility types as per _ECMAScript 5, Section 8.6.2, Table 8_.
+    - Add implementation-specific `StringBase` virtual class.
+    - Add internal `StaticString` type. This is for constant strings no longer than 16 characters.
+    - Add internal `String` type for flexible strings. This may wrap a `std::string`.
+ 8. Add simple data objects.
+ 9. Add built-in context objects and global objects
+    - Implement `[Console console]` basics: `log`, `prompt` (DerkJS extension)
+    - Implement `this` objects that reference anything in a local scope (and link to parent ones).
+ 10. Add mark and sweep GC.

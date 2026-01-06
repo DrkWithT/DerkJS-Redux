@@ -174,6 +174,12 @@ export namespace DerkJS {
             ++m_rip_p;
         }
 
+        void op_emplace_local(int16_t local_n) noexcept {
+            m_stack[m_rsbp + local_n] = m_stack[m_rsp];
+            --m_rsp;
+            ++m_rip_p;
+        }
+
         void op_dup() noexcept {
             m_status = ExitStatus::opcode_err;
         }
@@ -277,18 +283,20 @@ export namespace DerkJS {
             ++m_rip_p;
         }
 
-        void op_jump_else(int16_t jmp_offset) noexcept {
+        void op_jump_else(int16_t jmp_offset, int16_t on_truthy_pop_n) noexcept {
             if (!m_stack[m_rsp]) {
                 m_rip_p += jmp_offset;
             } else {
+                m_rsp -= on_truthy_pop_n;
                 ++m_rip_p;
             }
         }
 
-        void op_jump_if(int16_t jmp_offset) noexcept {
+        void op_jump_if(int16_t jmp_offset, int16_t on_falsy_pop_n) noexcept {
             if (m_stack[m_rsp]) {
                 m_rip_p += jmp_offset;
             } else {
+                m_rsp -= on_falsy_pop_n;
                 ++m_rip_p;
             }
         }
@@ -466,10 +474,10 @@ export namespace DerkJS {
                     op_test_gte();
                     break;
                 case Opcode::djs_jump_else:
-                    op_jump_else(next_argv[0]);
+                    op_jump_else(next_argv[0], next_argv[1]);
                     break;
                 case Opcode::djs_jump_if:
-                    op_jump_if(next_argv[0]);
+                    op_jump_if(next_argv[0], next_argv[1]);
                     break;
                 case Opcode::djs_jump:
                     op_jump(next_argv[0]);
@@ -501,6 +509,7 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_put_const(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_put_obj_ref(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_pop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_emplace_local(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_mod(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_mul(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_div(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
@@ -526,7 +535,7 @@ export namespace DerkJS {
     using tco_opcode_fn = bool(*)(ExternVMCtx&, int16_t, int16_t);
     constexpr tco_opcode_fn tco_opcodes[static_cast<std::size_t>(Opcode::last)] = {
         op_nop,
-        op_dup, op_put_const, op_put_obj_ref, op_pop,
+        op_dup, op_put_const, op_put_obj_ref, op_pop, op_emplace_local,
         op_mod, op_mul, op_div, op_add, op_sub,
         op_test_falsy, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte,
         op_jump_else, op_jump_if, op_jump,
@@ -563,8 +572,16 @@ export namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_pop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool  {
+    [[nodiscard]] inline auto op_pop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         ctx.rsp -= a0;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_emplace_local(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.stack[ctx.rsbp + a0] = ctx.stack[ctx.rsp];
+        --ctx.rsp;
         ++ctx.rip_p;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
@@ -673,6 +690,7 @@ export namespace DerkJS {
         if (!ctx.stack[ctx.rsp]) {
             ctx.rip_p += a0;
         } else {
+            ctx.rsp -= a1;
             ++ctx.rip_p;
         }
 
@@ -683,6 +701,7 @@ export namespace DerkJS {
         if (ctx.stack[ctx.rsp]) {
             ctx.rip_p += a0;
         } else {
+            ctx.rsp -= a1;
             ++ctx.rip_p;
         }
 

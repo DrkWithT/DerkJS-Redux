@@ -17,6 +17,7 @@ export namespace DerkJS {
         keyword_if,
         keyword_else,
         keyword_return,
+        keyword_while,
         keyword_function,
         keyword_prototype,
         keyword_new,
@@ -226,34 +227,30 @@ export namespace DerkJS {
             const auto temp_line = m_line;
             const auto temp_column = m_column;
             auto dot_count = 0;
-            auto minus_count = 0;
 
             if (const auto prefix_c = source.at(m_pos); prefix_c == '-') {
-                ++minus_count;
+                ++temp_length;
                 ++m_pos;
             }
 
             while (!at_eof()) {
-                if (const auto c = source.at(m_pos); is_numeric(c) || c == '-') {
+                if (const auto c = source.at(m_pos); is_numeric(c)) {
                     update_source_location(c);
                     ++temp_length;
 
                     if (c == '.') ++dot_count;
-                    else if (c == '-') ++minus_count;
                 } else {
                     break;
                 }
             }
 
-            const auto checked_tag = ([] (int dots, int minuses) noexcept -> TokenTag {
-                if (minuses > 1) return TokenTag::unknown;
-
+            const auto checked_tag = ([] (int dots) noexcept -> TokenTag {
                 switch (dots) {
                 case 0: return TokenTag::literal_int;
                 case 1: return TokenTag::literal_real;
                 default: return TokenTag::unknown;
                 }
-            })(dot_count, minus_count);
+            })(dot_count);
 
             return {
                 checked_tag,
@@ -333,6 +330,7 @@ export namespace DerkJS {
             m_specials.emplace("if", TokenTag::keyword_if);
             m_specials.emplace("else", TokenTag::keyword_else);
             m_specials.emplace("return", TokenTag::keyword_return),
+            m_specials.emplace("while", TokenTag::keyword_while);
             m_specials.emplace("function", TokenTag::keyword_function);
             m_specials.emplace("prototype", TokenTag::keyword_prototype);
             m_specials.emplace("this", TokenTag::keyword_this);
@@ -392,7 +390,7 @@ export namespace DerkJS {
                 return lex_block_comment(source);
             } else if (is_whitespace(peek_0)) {
                 return lex_whitespace(source);
-            } else if (is_numeric(peek_0) || (peek_0 == '-' && is_numeric(peek_1))) {
+            } else if ((peek_0 == '-' && is_numeric(peek_1)) || is_numeric(peek_0)) {
                 return lex_numeric(source);
             } else if (is_op_symbol(peek_0)) {
                 return lex_operator(source);

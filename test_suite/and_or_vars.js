@@ -1,13 +1,10 @@
 /* test logical operators of AND, OR */
 
-var a = 10;
-var b = 0;
-var c = null;
+var x = 10;
+var y = 0;
+var z = null;
 
-/* ans_1 must be 10 */
-var ans_1 = b || c || a;
+var ans_2 = z || y || x * x;
 
-/* ans_2 must be 100 */
-var ans_2 = ans_1 && a * a;
-
+/* ans_2 MUST be 100 */
 return ans_2;

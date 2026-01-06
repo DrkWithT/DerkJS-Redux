@@ -315,6 +315,9 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto emit_logical_expr(AstOp logical_operator, const Expr& lhs, const Expr& rhs, const std::string& source) -> std::optional<Arg> {
+            /// NOTE: no matter the stack ops, the local should rest at the bottom of the stack-slice used by the LHS, RHS evals...
+            const auto logical_result_slot = m_next_temp_id;
+
             switch (logical_operator) {
             case AstOp::ast_op_or: {
                 int lhs_jump_if_pos = -1000;
@@ -325,15 +328,16 @@ export namespace DerkJS {
                     return {};
                 } else {
                     lhs_jump_if_pos = m_code.size();
-                    encode_instruction(Opcode::djs_jump_if, Arg {.n = -1, .tag = Location::immediate});
-                    // update_temp_id(-1);
+                    encode_instruction(
+                        Opcode::djs_jump_if,
+                        // NOTE: this relative jump offset is a dud which will be backpatched later!
+                        Arg {.n = -1, .tag = Location::immediate},
+                        // NOTE: optionally pop of LHS temporary IFF LHS is falsy!
+                        Arg {.n = 1, .tag = Location::immediate}
+                    );
                 }
 
-                // 2. Pop the temp LHS if it's false at this control-flow point, saving a stack slot.
-                // encode_instruction(Opcode::djs_pop, Arg {.n = 1, .tag = Location::immediate});
-                // update_temp_id(-1);
-
-                // 3. Emit the RHS evaluation & result since control flow reaching this point must have a falsy LHS.
+                // 2. Emit the RHS evaluation & result since control flow reaching this point must have a falsy LHS.
                 if (auto rhs_locator = emit_expr(rhs, source); !rhs_locator) {
                     return {};
                 } else {
@@ -342,9 +346,10 @@ export namespace DerkJS {
                 }
 
                 m_code[lhs_jump_if_pos].args[0] = post_rhs_jump_pos - lhs_jump_if_pos;
+                m_next_temp_id = logical_result_slot + 1;
 
                 return Arg {
-                    .n = static_cast<int16_t>(current_temp_id()),
+                    .n = static_cast<int16_t>(logical_result_slot),
                     .tag = Location::temp
                 };
             }
@@ -357,15 +362,16 @@ export namespace DerkJS {
                     return {};
                 } else {
                     lhs_jump_else_pos = m_code.size();
-                    encode_instruction(Opcode::djs_jump_else, Arg {.n = -1, .tag = Location::immediate});
-                    // update_temp_id(-1);
+                    encode_instruction(
+                        Opcode::djs_jump_else,
+                        // NOTE: this relative, filler jump will be backpatched later!
+                        Arg {.n = -1, .tag = Location::immediate},
+                        // NOTE: optionally pop of LHS temporary IFF LHS is truthy!
+                        Arg {.n = 1, .tag = Location::immediate}
+                    );
                 }
 
-                // 2. Pop the temp LHS if it's true at this control-flow point, saving a stack slot.
-                // encode_instruction(Opcode::djs_pop, Arg {.n = 1, .tag = Location::immediate});
-                // update_temp_id(-1);
-
-                // 3. Emit the RHS evaluation & result since control flow reaching this point must have a truthy LHS.
+                // 2. Emit the RHS evaluation & result since control flow reaching this point must have a truthy LHS.
                 if (auto rhs_locator = emit_expr(rhs, source); !rhs_locator) {
                     return {};
                 } else {
@@ -374,9 +380,10 @@ export namespace DerkJS {
                 }
 
                 m_code[lhs_jump_else_pos].args[0] = post_rhs_jump_pos - lhs_jump_else_pos;
+                m_next_temp_id = logical_result_slot + 1;
 
                 return Arg {
-                    .n = static_cast<int16_t>(current_temp_id()),
+                    .n = static_cast<int16_t>(logical_result_slot),
                     .tag = Location::temp
                 };
             }
@@ -496,6 +503,7 @@ export namespace DerkJS {
             return result_locator;
         }
 
+        /// TODO: handle complex LHS exprs: a member access must result in a reference being duped to the stack top.
         [[nodiscard]] auto emit_assign(const Assign& expr, const std::string& source) -> std::optional<Arg> {
             /// NOTE: the name-to-Arg mapping of some variable will be updated to this new assignment's RHS's slot. This eliminates the kludge of 'emplacing' values under the stack top which would require some hacky indexing.
             const auto& [assign_lhs, assign_rhs] = expr;
@@ -505,17 +513,22 @@ export namespace DerkJS {
                 return {};
             }
 
-            if (auto var_name_literal = std::get_if<Primitive>(&assign_lhs->data); var_name_literal) {
-                std::string lhs_name = var_name_literal->token.as_string(source);
+            auto var_name_literal = std::get_if<Primitive>(&assign_lhs->data);
 
-                record_item(lhs_name, *assign_rhs_locator);
-
-                return assign_rhs_locator;
+            if (!var_name_literal) {
+                return {};
             }
-            
-            /// TODO: handle complex LHS exprs: a member access must result in a reference being duped to the stack top.
 
-            return {};
+            std::string lhs_name = var_name_literal->token.as_string(source);
+            auto dest_locator = lookup_item(lhs_name);
+
+            if (!dest_locator) {
+                return {};
+            }
+
+            encode_instruction(Opcode::djs_emplace_local, *dest_locator);
+
+            return dest_locator;
         }
 
         [[nodiscard]] auto emit_call(const Call& expr, const std::string& source) -> std::optional<Arg> {
@@ -577,35 +590,37 @@ export namespace DerkJS {
                 return false;
             }
 
-            const auto post_eval_temp_id = current_temp_id();
-
-            /// NOTE: Pop off all temporary values generated the expr-stmt despite side effects- They will not be used as their lifetime is brief.
-            encode_instruction(Opcode::djs_pop, Arg {
-                .n = static_cast<int16_t>(post_eval_temp_id - pre_eval_temp_id),
-                .tag = Location::immediate
-            });
-            update_temp_id(pre_eval_temp_id - post_eval_temp_id);
+            /// TODO: Conditionally pop off all temporary values generated the expr-stmt despite side effects- They may not be used if they're a discarded call result or non-assigned, temporary value.
+            // const auto post_eval_temp_id = current_temp_id();
+            // encode_instruction(Opcode::djs_pop, Arg {
+            //     .n = static_cast<int16_t>(post_eval_temp_id - pre_eval_temp_id),
+            //     .tag = Location::immediate
+            // });
+            // update_temp_id(pre_eval_temp_id - post_eval_temp_id);
 
             return true;
         }
 
         [[nodiscard]] auto emit_var_decl(const VarDecl& stmt, const std::string& source) -> bool {
             const auto& [var_name_token, var_init_expr] = stmt;
+
             
             if (auto var_init_locator = emit_expr(*var_init_expr, source); !var_init_locator) {
                 return false;
             } else {
+                const auto var_local_slot = m_next_temp_id - 1;
                 std::string var_name = var_name_token.as_string(source);
 
-                record_item(var_name, *var_init_locator);
+                record_item(var_name, Arg {
+                    .n = static_cast<int16_t>(var_local_slot),
+                    .tag = Location::temp
+                });
             }
 
             return true;
         }
 
         [[nodiscard]] auto emit_variables(const Variables& stmt, const std::string& source) -> bool {
-            /// NOTE: Here, I handle RHS evaluations and record each slot they end up in, mapping each slot to a variable name... the LHS'es may later need further evaluation- BUT not now since local names' storage become their initializer on the VM stack.
-
             for (const auto& sub_var_decl : stmt.vars) {
                 if (!emit_var_decl(sub_var_decl, source)) {
                     return false;
@@ -626,7 +641,10 @@ export namespace DerkJS {
                 .n = -1,
                 .tag = Location::immediate
             });
-            // update_temp_id(-1);
+
+            /// NOTE: the check (even as truthy) is a temporary boolean, so pop it to avoid stack waste!
+            encode_instruction(Opcode::djs_pop);
+            update_temp_id(-1);
 
             if (!emit_stmt(*stmt_if.body_true, source)) {
                 return false;
@@ -639,7 +657,12 @@ export namespace DerkJS {
             }
 
             const int post_truthy_part_jump_ip = m_code.size();
+
             encode_instruction(Opcode::djs_nop);
+
+            /// NOTE: the check (even if falsy) is a temporary boolean, so pop it to avoid stack waste!
+            encode_instruction(Opcode::djs_pop);
+
             const int falsy_jump_offset = post_truthy_part_jump_ip - pre_if_body_jump_ip;
 
             if (falsy_jump_offset < min_bc_jump_offset || falsy_jump_offset > max_bc_jump_offset) {
@@ -668,6 +691,42 @@ export namespace DerkJS {
             }
 
             encode_instruction(Opcode::djs_ret);
+
+            return true;
+        }
+
+        [[nodiscard]] auto emit_while(const While& loop_by_while, const std::string& source) -> bool {
+            const auto& [loop_expr, loop_body] = loop_by_while;
+
+            /// NOTE: 1. Before the loop begins each iteration, the backwards IP jump must repeat the condition. Therefore, the DJS_JUMP after the body's bytecode must return here if truthy.
+            const int pre_loop_pos = m_code.size();
+            encode_instruction(Opcode::djs_nop);
+
+            if (!emit_expr(*loop_expr, source)) {
+                return false;
+            }
+
+            // 2. Emit a stub DJS_JUMP_ELSE that'll exit the loop when the preceeding check fails. JUMP_ELSE optionally removes the LHS / tested temporary IFF it's truthy!
+            const int loop_checked_jump_pos = m_code.size();
+            encode_instruction(Opcode::djs_jump_else, Arg {.n = -1, .tag = Location::immediate}, Arg {.n = 1, .tag = Location::immediate});
+
+            // 2b. Ensure that the temporary loop-check's boolean is popped just after evaluation
+            if (!emit_stmt(*loop_body, source)) {
+                return false;
+            }
+
+            // 3. Emit the back-jump to repeat the loop, especially the check 1st.
+            const int repeat_loop_jump_pos = m_code.size();
+            encode_instruction(Opcode::djs_jump, Arg {
+                .n = static_cast<int16_t>(pre_loop_pos - repeat_loop_jump_pos),
+                .tag = Location::immediate
+            });
+
+            const int end_loop_pos = m_code.size();
+            encode_instruction(Opcode::djs_nop);
+
+            // 4. Patch loop-exit DJS_JUMP_ELSE here as per Step 2
+            m_code[loop_checked_jump_pos].args[0] = end_loop_pos - loop_checked_jump_pos;
 
             return true;
         }
@@ -720,6 +779,8 @@ export namespace DerkJS {
                 return emit_if(*stmt_if_p, source);
             } else if (auto ret_p = std::get_if<Return>(&stmt.data); ret_p) {
                 return emit_return(*ret_p, source);
+            } else if (auto loop_by_while_p = std::get_if<While>(&stmt.data); loop_by_while_p) {
+                return emit_while(*loop_by_while_p, source);
             } else if (auto block_p = std::get_if<Block>(&stmt.data); block_p) {
                 return emit_block(*block_p, source);
             } else if (auto func_p = std::get_if<FunctionDecl>(&stmt.data); func_p) {
