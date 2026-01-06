@@ -48,9 +48,10 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
  3. ~~Refactor VM to use TCO?~~
  4. ~~Add `||` or `&&` operator support.~~
  5. ~~Add `else` statement support.~~
- 6. Add `while` statement support.
-    - **TEST TEST TEST!!**
- 7. Add static-size & heap strings with interning.
+ 6. ~~Add `while` statement support.~~
+ 7. Add edge case of JS: support for undefined variable declarations.
+   - `var x;` should be `undefined` IIRC...
+ 8. Add static-size & heap strings with interning.
     - Redo `Object*` pointer and `Object`, `Prototype` utility types as per _ECMAScript 5, Section 8.6.2, Table 8_.
     - Add implementation-specific `StringBase` virtual class.
     - Add internal `StaticString` type. This is for constant strings no longer than 16 characters.

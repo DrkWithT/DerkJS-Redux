@@ -1,8 +1,10 @@
 /* test logical operators of AND, OR */
 
-/* ans_1 must be 10 */
-var ans_1 = null || 0 || 69;
-var ans_2 = ans_1 && 1234;
+var x = 10;
+var y = 0;
+var z = null;
 
-/* ans_2 MUST be 1234 */
+var ans_2 = z || y || x * x;
+
+/* ans_2 MUST be 100 */
 return ans_2;
