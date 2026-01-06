@@ -283,18 +283,20 @@ export namespace DerkJS {
             ++m_rip_p;
         }
 
-        void op_jump_else(int16_t jmp_offset) noexcept {
+        void op_jump_else(int16_t jmp_offset, int16_t on_truthy_pop_n) noexcept {
             if (!m_stack[m_rsp]) {
                 m_rip_p += jmp_offset;
             } else {
+                m_rsp -= on_truthy_pop_n;
                 ++m_rip_p;
             }
         }
 
-        void op_jump_if(int16_t jmp_offset) noexcept {
+        void op_jump_if(int16_t jmp_offset, int16_t on_falsy_pop_n) noexcept {
             if (m_stack[m_rsp]) {
                 m_rip_p += jmp_offset;
             } else {
+                m_rsp -= on_falsy_pop_n;
                 ++m_rip_p;
             }
         }
@@ -472,10 +474,10 @@ export namespace DerkJS {
                     op_test_gte();
                     break;
                 case Opcode::djs_jump_else:
-                    op_jump_else(next_argv[0]);
+                    op_jump_else(next_argv[0], next_argv[1]);
                     break;
                 case Opcode::djs_jump_if:
-                    op_jump_if(next_argv[0]);
+                    op_jump_if(next_argv[0], next_argv[1]);
                     break;
                 case Opcode::djs_jump:
                     op_jump(next_argv[0]);
@@ -688,6 +690,7 @@ export namespace DerkJS {
         if (!ctx.stack[ctx.rsp]) {
             ctx.rip_p += a0;
         } else {
+            ctx.rsp -= a1;
             ++ctx.rip_p;
         }
 
@@ -698,6 +701,7 @@ export namespace DerkJS {
         if (ctx.stack[ctx.rsp]) {
             ctx.rip_p += a0;
         } else {
+            ctx.rsp -= a1;
             ++ctx.rip_p;
         }
 
