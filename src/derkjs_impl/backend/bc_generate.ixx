@@ -603,7 +603,6 @@ export namespace DerkJS {
 
         [[nodiscard]] auto emit_var_decl(const VarDecl& stmt, const std::string& source) -> bool {
             const auto& [var_name_token, var_init_expr] = stmt;
-
             
             if (auto var_init_locator = emit_expr(*var_init_expr, source); !var_init_locator) {
                 return false;

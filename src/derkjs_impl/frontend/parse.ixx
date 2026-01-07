@@ -521,14 +521,24 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto parse_var_decl(Lexer& lexer, const std::string& source) -> VarDecl {
+            const auto snippet_begin = m_current.start;
+
             consume(lexer, source, TokenTag::identifier);
 
             Token name_token = m_previous;
 
+            /// NOTE: handle other case of `var x;`... so this example would make `var x = undefined;`
             if (!m_current.match_tag_to(TokenTag::symbol_assign)) {
                 return VarDecl {
                     .name = name_token,
-                    .rhs = {}
+                    .rhs = std::make_unique<Expr>(
+                        Primitive {
+                            .token = Token {TokenTag::keyword_undefined, 0, 0, name_token.line, name_token.column + name_token.length}
+                        },
+                        0,
+                        snippet_begin,
+                        snippet_begin
+                    )
                 };
             }
 
