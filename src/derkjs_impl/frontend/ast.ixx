@@ -46,16 +46,26 @@ export namespace DerkJS {
     };
 
     struct Primitive;
+    struct Object;
     struct Unary;
     struct Binary;
     struct Assign;
     struct Call;
 
-    using Expr = ExprNode<Primitive, Unary, Binary, Assign, Call>;
+    using Expr = ExprNode<Primitive, Object, Unary, Binary, Assign, Call>;
     using ExprPtr = std::unique_ptr<Expr>;
 
     struct Primitive {
         Token token;
+    };
+
+    struct ObjectField {
+        Token name;
+        ExprPtr value;
+    };
+
+    struct Object {
+        std::vector<ObjectField> fields;
     };
 
     struct Unary {

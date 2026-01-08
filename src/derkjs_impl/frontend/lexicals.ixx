@@ -58,6 +58,7 @@ export namespace DerkJS {
         left_bracket,
         right_bracket,
         dot,
+        colon,
         comma,
         semicolon,
         eof,
@@ -378,6 +379,7 @@ export namespace DerkJS {
             case '[': return lex_single(source, TokenTag::left_bracket);
             case ']': return lex_single(source, TokenTag::right_bracket);
             case '.': return lex_single(source, TokenTag::dot);
+            case ':': return lex_single(source, TokenTag::colon);
             case ',': return lex_single(source, TokenTag::comma);
             case ';': return lex_single(source, TokenTag::semicolon);
             default: break;
