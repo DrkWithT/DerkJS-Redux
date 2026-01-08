@@ -60,9 +60,9 @@ namespace DerkJS {
             m_scopes.back().entries.emplace(name, info);
         }
 
-        [[nodiscard]] auto lookup_info(const std::string& name) -> std::optional<SemanticInfo> {
+        [[nodiscard]] auto lookup_info(const std::string& name, int peek_scope_hops) -> std::optional<SemanticInfo> {
             if (auto target_scope_it = std::find_if(
-                m_scopes.rbegin(),
+                m_scopes.rbegin() + peek_scope_hops,
                 m_scopes.rend(),
                 [&name](const Scope& scope) -> bool { return scope.entries.contains(name); }
             ); target_scope_it != m_scopes.rend()) {
@@ -100,10 +100,42 @@ namespace DerkJS {
             case TokenTag::literal_string:
                 return SemanticInfo {ValueCategory::js_temporary};
             case TokenTag::identifier:
-                return lookup_info(current_source.substr(token_start, token_length));
+                return lookup_info(current_source.substr(token_start, token_length), 0);
             default:
                 return {};
             }
+        }
+
+        [[nodiscard]] auto check_object(const Object& object, std::string_view source_name, const std::string& current_source, [[maybe_unused]] int area_start, [[maybe_unused]] int area_length) -> std::optional<SemanticInfo> {
+            // NOTE: object literals can have similarly named fields vs. outside variables, so the depths of scope lookup MUST be differing: LHS is in the object's semantic scope BUT the RHS is in the object's parent scope... Until I deal with `this` ;)
+            enter_scope("anonymous-object");
+
+            for (const auto& [field_name, field_expr] : object.fields) {
+                std::string field_name_lexeme = field_name.as_string(current_source);
+                const auto field_name_start = field_name.start;
+                const auto field_name_length = field_name.length;
+                const auto field_name_line = field_name.line;
+
+                if (lookup_info(field_name_lexeme, 0).has_value()) {
+                    report_error(source_name, field_name_line, current_source, area_start, area_length, field_name_start, field_name_length, "Cannot redeclare property within object.");
+                    leave_scope();
+                    return {};
+                }
+
+                /// TODO: support custom scoped-peek-offsets for check_expr... RHS needs to check 1 scope lower??
+                if (auto field_rhs_info = check_expr(*field_expr, source_name, current_source, area_start, area_length); !field_rhs_info) {
+                    leave_scope();
+                    return {};
+                } else {   
+                    record_info_of(field_name_lexeme, *field_rhs_info);
+                }
+            }
+
+            leave_scope();
+
+            return SemanticInfo {
+                .value_kind = ValueCategory::js_temporary
+            };
         }
 
         [[nodiscard]] auto check_unary(const Unary& unary, std::string_view source_name, const std::string& current_source, int area_start, int area_length) -> std::optional<SemanticInfo> {
@@ -229,6 +261,8 @@ namespace DerkJS {
             const auto expr_text_length = expr.text_length;
             if (auto primitive_p = std::get_if<Primitive>(&expr.data); primitive_p) {
                 return check_primitive(*primitive_p, current_source, expr_text_begin, expr_text_length);
+            } else if (auto object_p = std::get_if<Object>(&expr.data); object_p) {
+                return check_object(*object_p, source_name, current_source, area_start, area_length);
             } else if (auto unary_p = std::get_if<Unary>(&expr.data); unary_p) {
                 return check_unary(*unary_p, source_name, current_source, expr_text_begin, expr_text_length);
             } else if (auto binary_p = std::get_if<Binary>(&expr.data); binary_p) {
