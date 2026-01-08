@@ -1,11 +1,14 @@
 module;
 
 #include <cstdint>
+#include <utility>
+#include <memory>
 #include <vector>
 #include <print>
 
 export module runtime.bytecode;
 
+import runtime.objects;
 import runtime.value;
 
 export namespace DerkJS {
@@ -71,7 +74,7 @@ export namespace DerkJS {
     };
 
     struct Program {
-        std::vector<Object<Value>> heap_items;
+        std::vector<std::unique_ptr<ObjectBase<Value>>> heap_items;
         std::vector<Value> consts;
         std::vector<Instruction> code;
         std::vector<int> offsets;

@@ -106,7 +106,7 @@ namespace DerkJS {
             }
         }
 
-        [[nodiscard]] auto check_object(const Object& object, std::string_view source_name, const std::string& current_source, [[maybe_unused]] int area_start, [[maybe_unused]] int area_length) -> std::optional<SemanticInfo> {
+        [[nodiscard]] auto check_object(const ObjectLiteral& object, std::string_view source_name, const std::string& current_source, [[maybe_unused]] int area_start, [[maybe_unused]] int area_length) -> std::optional<SemanticInfo> {
             // NOTE: object literals can have similarly named fields vs. outside variables, so the depths of scope lookup MUST be differing: LHS is in the object's semantic scope BUT the RHS is in the object's parent scope... Until I deal with `this` ;)
             enter_scope("anonymous-object");
 
@@ -149,22 +149,23 @@ namespace DerkJS {
         }
 
         [[nodiscard]] auto check_binary(const Binary& binary, std::string_view source_name, const std::string& current_source, int area_start, int area_length) -> std::optional<SemanticInfo> {
+            const auto& [expr_lhs, expr_rhs, expr_op] = binary;
+
+            /// NOTE: JS object properties are highly dynamic, so don't check their accesses until runtime!
+            if (expr_op == AstOp::ast_op_dot_access || expr_op == AstOp::ast_op_index_access) {
+                return SemanticInfo {
+                    .value_kind = ValueCategory::js_locator
+                };
+            }
+
             if (
-                auto lhs_info = check_expr(*binary.lhs, source_name, current_source, area_start, area_length),
-                rhs_info = check_expr(*binary.rhs, source_name, current_source, area_start, area_length);
+                auto lhs_info = check_expr(*expr_lhs, source_name, current_source, area_start, area_length),
+                rhs_info = check_expr(*expr_rhs, source_name, current_source, area_start, area_length);
                 lhs_info && rhs_info
             ) {
-                switch (binary.op) {
-                case AstOp::ast_op_dot_access:
-                case AstOp::ast_op_index_access:
-                    return SemanticInfo {
-                        .value_kind = ValueCategory::js_locator
-                    };
-                default:
-                    return SemanticInfo {
-                        .value_kind = ValueCategory::js_temporary
-                    };
-                }
+                return SemanticInfo {
+                    .value_kind = ValueCategory::js_temporary
+                };
             } else if (!lhs_info) {
                 report_error(
                     source_name,
@@ -261,7 +262,7 @@ namespace DerkJS {
             const auto expr_text_length = expr.text_length;
             if (auto primitive_p = std::get_if<Primitive>(&expr.data); primitive_p) {
                 return check_primitive(*primitive_p, current_source, expr_text_begin, expr_text_length);
-            } else if (auto object_p = std::get_if<Object>(&expr.data); object_p) {
+            } else if (auto object_p = std::get_if<ObjectLiteral>(&expr.data); object_p) {
                 return check_object(*object_p, source_name, current_source, area_start, area_length);
             } else if (auto unary_p = std::get_if<Unary>(&expr.data); unary_p) {
                 return check_unary(*unary_p, source_name, current_source, expr_text_begin, expr_text_length);

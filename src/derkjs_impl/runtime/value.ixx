@@ -1,111 +1,21 @@
 module;
 
 #include <cstddef>
-#include <concepts>
 #include <utility>
 #include <memory>
 #include <optional>
-#include <flat_map>
+#include <format>
 #include <string>
 
 export module runtime.value;
 
-/// TODO: 1st, Refactor Object into an ObjectBase interface with Boolean, Number, Object, and Function values.
-/// TODO: 2nd, Add comparison support for `Value`.
+import runtime.objects;
+
+/// TODO: make Boolean, Number, Object, and Function as built-in objects registered to the interpreter before running.
 export namespace DerkJS {
-    template <typename Obj>
-    class Prototype;
-
-    template <typename V>
-    class Prototype {
-    public:
-        enum class FreezeFlag : uint8_t {
-            yes,
-            no
-        };
-
-    private:
-        std::flat_map<std::string, V> m_shape_props;
-        std::vector<int> m_instance_ids;
-        std::shared_ptr<Prototype> m_parent_p;
-        bool m_modifiable;
-
-    public:
-        Prototype(FreezeFlag frozen_flag)
-        : m_shape_props {}, m_instance_ids {}, m_parent_p {}, m_modifiable {frozen_flag == FreezeFlag::no} {}
-
-        Prototype(FreezeFlag frozen_flag, std::shared_ptr<Prototype<V>> parent_p)
-        : m_shape_props {}, m_instance_ids {}, m_parent_p {parent_p}, m_modifiable {frozen_flag == FreezeFlag::no} {}
-
-        [[nodiscard]] auto get_properties() noexcept -> std::flat_map<std::string, V>& {
-            return m_shape_props;
-        }
-
-        [[nodiscard]] auto set_property(const std::string& name, std::same_as<V> auto&& value) {
-            m_shape_props[name] = std::forward<V>(value);
-        }
-
-        [[nodiscard]] auto get_instance_ids() const noexcept -> const std::vector<int>& {
-            return m_instance_ids;
-        }
-
-        void record_instance_id(int id) {
-            m_instance_ids.emplace_back(id);
-        }
-
-        [[maybe_unused]] auto remove_instance_id(int id) -> bool {
-            if (auto inst_id_it = std::find(m_instance_ids.begin(), m_instance_ids.end(), id); inst_id_it != m_instance_ids.end()) {
-                m_instance_ids.erase(inst_id_it);
-
-                return true;
-            }
-
-            return false;
-        }
-
-        [[nodiscard]] auto get_parent() noexcept -> Prototype<V>*;
-
-        [[nodiscard]] auto is_modifiable() const noexcept -> bool {
-            return m_modifiable;
-        }
-    };
-
-    template <typename Value>
-    class Object {
-    private:
-        std::flat_map<std::string, Value> m_props;
-        std::shared_ptr<Prototype<Value>> m_parent_proto;
-        std::string m_kind_name;
-
-    public:
-        Object(const std::string& kind_name, std::shared_ptr<Prototype<Value>> proto)
-        : m_props {}, m_parent_proto {proto}, m_kind_name {kind_name} {
-            for (const auto& proto_shape = m_parent_proto.get_properties(); const auto& [protop_name, protop_value] : proto_shape) {
-                m_props[protop_name] = protop_value;
-            }
-        }
-
-        [[nodiscard]] auto get_prototype() -> Prototype<Value>* {
-            return m_parent_proto.get();
-        }
-
-        [[nodiscard]] auto get_property(const std::string& name) -> Value* {
-            if (auto name_p = std::find(m_props.begin(), m_props.end(), name); name_p != m_props.end()) {
-                return std::addressof(*name_p);
-            }
-
-            return nullptr;
-        }
-
-        void set_property(const std::string& name, std::same_as<Value> auto&& value) {
-            m_props[name] = std::forward<Value>(value);
-        }
-
-        template <typename VM>
-        [[nodiscard]] auto try_invoke(VM& vm, void* current_ctx) -> bool {
-            return vm.invoke_bc_fn(current_ctx, this);
-        }
-    };
+    struct Value;
+    class StaticString;
+    class Object;
 
     struct JSNullOpt {};
     struct JSNaNOpt {};
@@ -132,7 +42,7 @@ export namespace DerkJS {
             bool b;
             int i;
             double d;
-            Object<Value>* obj_p;
+            ObjectBase<Value>* obj_p;
         } m_data;
 
         ValueTag m_tag;
@@ -168,7 +78,7 @@ export namespace DerkJS {
             m_data.d = d;
         }
 
-        constexpr Value(Object<Value>* object_p) noexcept
+        constexpr Value(ObjectBase<Value>* object_p) noexcept
         : m_data {}, m_tag {ValueTag::object} {
             m_data.obj_p = object_p;
         }
@@ -510,8 +420,232 @@ export namespace DerkJS {
             }
         }
 
-        [[nodiscard]] auto to_object() const noexcept -> std::optional<Object<Value>*> {
+        [[nodiscard]] auto to_object() const noexcept -> std::optional<ObjectBase<Value>*> {
+            if (m_tag == ValueTag::object) {
+                return m_data.obj_p;
+            }
+
+            return {};
+        }
+
+        [[nodiscard]] auto deep_clone() const -> Value {
+            switch (m_tag) {
+            case ValueTag::undefined:
+            case ValueTag::null:
+            case ValueTag::boolean:
+            case ValueTag::num_nan: 
+            case ValueTag::num_i32:
+            case ValueTag::num_f64: return *this;
+            case ValueTag::object: return m_data.obj_p->clone();
+            }
+        }
+    };
+
+    /// TODO: implement dynamic strings later!
+    class StaticString : public ObjectBase<Value>, public StringBase {
+    public:
+        static constexpr auto max_length_v = 8;
+        static constexpr auto flag_extensible_v = 0b00000001;
+        static constexpr auto flag_frozen_v = 0b00000010;
+        static constexpr auto flag_prototype_v = 0b10000000;
+
+    private:
+        PropPool<Value> m_own_props;
+        ObjectBase<Value>* m_proto;
+        char m_data[max_length_v];
+        uint8_t m_length;
+        uint8_t m_flags;
+
+        [[nodiscard]] constexpr auto is_full() const noexcept -> bool {
+            return m_length >= max_length_v;
+        }
+
+    public:
+        constexpr StaticString(ObjectBase<Value>* proto_ref, const char* cstr, int length) noexcept
+        : m_data {}, m_length (std::min(length, max_length_v)), m_flags {0x00} {
+            std::copy_n(cstr, length, m_data);
+        }
+
+        //// BEGIN ObjectBase overrides
+
+        [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
+            return this;
+        }
+
+        [[nodiscard]] auto get_class_name() const noexcept -> std::string override {
+            return "string";
+        }
+
+        [[nodiscard]] auto is_extensible() const noexcept -> bool override {
+            return m_flags & flag_extensible_v;
+        }
+
+        [[nodiscard]] auto is_frozen() const noexcept -> bool override {
+            return (m_flags & flag_frozen_v) >> 1;
+        }
+
+        [[nodiscard]] auto is_prototype() const noexcept -> bool override {
+            return (m_flags & flag_prototype_v) >> 7;
+        }
+
+        [[nodiscard]] auto get_prototype() noexcept -> ObjectBase<Value>* override {
+            return m_proto;
+        }
+
+        [[nodiscard]] auto get_property_value(const PropertyHandle& handle) -> Value* override {
+            if (auto property_entry_it = m_own_props.find(handle); property_entry_it != m_own_props.end()) {
+                return &property_entry_it->second;
+            }
+
             return nullptr;
+        }
+
+        [[nodiscard]] auto set_property_value(const PropertyHandle& handle, const Value& value) -> Value* override {
+            if (auto property_entry_it = m_own_props.find(handle); property_entry_it != m_own_props.end()) {
+                property_entry_it->second = value;
+                return &property_entry_it->second;
+            }
+
+            return nullptr;
+        }
+
+        [[nodiscard]] auto del_property_value(const PropertyHandle& handle) -> bool override {
+            return m_own_props.erase(m_own_props.find(handle)) != m_own_props.end();
+        }
+
+        [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
+            auto self_clone = new StaticString {m_proto, m_data, m_length};
+
+            /// TODO: Add properties like .length as needed.
+
+            return self_clone;
+        }
+
+        [[nodiscard]] auto as_string() const -> std::string override {
+            std::string_view data_slice {m_data, m_data + m_length};
+
+            return std::format("'{}'", data_slice);
+        }
+
+
+        //// BEGIN StringBase overrides
+
+        auto is_empty() const noexcept -> bool override {
+            return m_length < 1;
+        }
+
+        auto get_slice([[maybe_unused]] int start, [[maybe_unused]] int length) -> std::unique_ptr<StringBase> override {
+            return {}; // todo
+        }
+
+        auto get_length() const noexcept -> int override {
+            return m_length;
+        }
+
+        void append_front([[maybe_unused]] const StringBase* other_view) override {
+            ; // todo
+        }
+
+        void append_back([[maybe_unused]] const StringBase* other_view) override {
+            ; // todo
+        }
+
+        /// NOTE: This is for String.prototype.indexOf()
+        auto find_substr_pos([[maybe_unused]] const StringBase* other_view) const noexcept -> int override {
+            return -1; // todo
+        }
+
+        [[nodiscard]] auto operator==(const StringBase& other) const noexcept -> bool override {
+            return as_str_view() == other.as_str_view();
+        }
+
+        [[nodiscard]] auto operator<(const StringBase& other) const noexcept -> bool  override {
+            return as_str_view() < other.as_str_view();
+        }
+
+        [[nodiscard]] auto operator>(const StringBase& other) const noexcept -> bool override {
+            return as_str_view() > other.as_str_view();
+        }
+
+        [[nodiscard]] auto as_str_view() const noexcept -> std::string_view override {
+            return std::string_view {m_data, static_cast<std::size_t>(m_length)};
+        }
+    };
+
+    class Object : public ObjectBase<Value> {
+    public:
+        static constexpr auto flag_extensible_v = 0b00000001;
+        static constexpr auto flag_frozen_v = 0b00000010;
+        static constexpr auto flag_prototype_v = 0b10000000;
+
+    private:
+        PropPool<Value> m_own_props;
+        ObjectBase<Value>* m_proto;
+        uint8_t m_flags;
+
+    public:
+        /// NOTE: Creates mutable instances of anonymous objects.
+        Object(ObjectBase<Value>* proto, uint8_t flags = flag_extensible_v)
+        : m_own_props {}, m_proto {proto}, m_flags {flags} {}
+
+        [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
+            return this;
+        }
+
+        [[nodiscard]] auto get_class_name() const noexcept -> std::string override {
+            return "object";
+        }
+
+        [[nodiscard]] auto is_extensible() const noexcept -> bool override {
+            return m_flags & flag_extensible_v;
+        }
+
+        [[nodiscard]] auto is_frozen() const noexcept -> bool override {
+            return (m_flags & flag_frozen_v) >> 1;
+        }
+
+        [[nodiscard]] auto is_prototype() const noexcept -> bool override {
+            return (m_flags & flag_prototype_v) >> 7;
+        }
+
+        [[nodiscard]] auto get_prototype() noexcept -> ObjectBase<Value>* override {
+            return m_proto;
+        }
+
+        [[nodiscard]] auto get_property_value(const PropertyHandle& handle) -> Value* override {
+            if (auto property_entry_it = m_own_props.find(handle); property_entry_it != m_own_props.end()) {
+                return &property_entry_it->second;
+            }
+
+            return m_proto->get_property_value(handle);
+        }
+
+        [[maybe_unused]] auto set_property_value(const PropertyHandle& handle, const Value& value) -> Value* override {
+            if (auto property_entry_it = m_own_props.find(handle); property_entry_it != m_own_props.end()) {
+                property_entry_it->second = value;
+                return &property_entry_it->second;
+            }
+
+            return nullptr;
+        }
+
+        [[nodiscard]] auto del_property_value(const PropertyHandle& handle) -> bool override {
+            return m_own_props.erase(m_own_props.find(handle)) != m_own_props.end();
+        }
+
+        [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
+            /// NOTE: A shared_ptr would be too chunky as it gets passed & a unique_ptr would be tricky to pass into a value without ownership problems against the object pool model required for JS implementation. So, the raw pointer here must be quickly owned!
+            auto self_clone = new Object {m_proto};
+
+            for (const auto& [prop_handle, prop_value] : m_own_props) {
+                self_clone->set_property_value(prop_handle, prop_value.deep_clone());
+            }
+
+            return self_clone;
+        }
+
+        [[nodiscard]] auto as_string() const -> std::string override {
+            return "[object Object]";
         }
     };
 }

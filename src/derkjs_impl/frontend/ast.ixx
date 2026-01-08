@@ -46,13 +46,13 @@ export namespace DerkJS {
     };
 
     struct Primitive;
-    struct Object;
+    struct ObjectLiteral;
     struct Unary;
     struct Binary;
     struct Assign;
     struct Call;
 
-    using Expr = ExprNode<Primitive, Object, Unary, Binary, Assign, Call>;
+    using Expr = ExprNode<Primitive, ObjectLiteral, Unary, Binary, Assign, Call>;
     using ExprPtr = std::unique_ptr<Expr>;
 
     struct Primitive {
@@ -64,7 +64,7 @@ export namespace DerkJS {
         ExprPtr value;
     };
 
-    struct Object {
+    struct ObjectLiteral {
         std::vector<ObjectField> fields;
     };
 

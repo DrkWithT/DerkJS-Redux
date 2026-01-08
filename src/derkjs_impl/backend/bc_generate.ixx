@@ -15,6 +15,7 @@ export module backend.bc_generate;
 
 import frontend.lexicals;
 import frontend.ast;
+import runtime.objects;
 import runtime.value;
 import runtime.bytecode;
 
@@ -37,7 +38,7 @@ export namespace DerkJS {
         };
 
         std::vector<SimStackFrame> m_mappings;
-        std::vector<Object<Value>> m_heap_items;
+        std::vector<std::unique_ptr<ObjectBase<Value>>> m_heap_items;
         std::vector<Value> m_consts;
         std::vector<Instruction> m_code;
         std::vector<int> m_func_offsets;
@@ -94,10 +95,10 @@ export namespace DerkJS {
             }
         }
 
-        [[nodiscard]] auto record_heap_item(std::same_as<Object<Value>> auto&& object) -> Arg {
+        [[nodiscard]] auto record_heap_item(std::same_as<ObjectBase<Value>> auto&& object) -> Arg {
             const int next_object_id = m_heap_items.size();
 
-            m_heap_items.emplace_back(std::forward<Object<Value>>(object));
+            m_heap_items.emplace_back(std::forward<ObjectBase<Value>>(object));
 
             return Arg {
                 .n = static_cast<int16_t>(next_object_id),

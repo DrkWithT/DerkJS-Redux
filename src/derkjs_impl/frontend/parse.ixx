@@ -188,7 +188,7 @@ export namespace DerkJS {
                 consume_any(lexer, source);
 
                 return std::make_unique<Expr>(
-                    Object {
+                    ObjectLiteral {
                         .fields = std::move(fields)
                     },
                     0,
@@ -210,7 +210,7 @@ export namespace DerkJS {
             }
 
             return std::make_unique<Expr>(
-                Object {
+                ObjectLiteral {
                     .fields = std::move(fields)
                 },
                 0,
