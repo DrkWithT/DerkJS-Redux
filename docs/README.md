@@ -14,7 +14,9 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
 
 ### Grammar (Expressions)
 ```
-<primary> = "undefined" | "null" | "this" | <identifier> | <boolean> | <number> | "(" <expr> ")"
+<primary> = "undefined" | "null" | "this" | <identifier> | <boolean> | <number> | <object> | "(" <expr> ")"
+<object> = "{" (<property> ",")* "}"
+<property> = <identifier> : <expr>
 <member> = <primary> ( "." <call> | "[" <expr> "]" )?
 <new> = "new"? <member>
 <call> = <new> ( "(" ( <expr> ( "," <expr> )* )? ")" )?
@@ -49,15 +51,17 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
  4. ~~Add `||` or `&&` operator support.~~
  5. ~~Add `else` statement support.~~
  6. ~~Add `while` statement support.~~
- 7. Add edge case of JS: support for undefined variable declarations.
-   - `var x;` should be `undefined` IIRC...
+ 7. ~~Add support for undefined variable declarations.~~
  8. Add static-size & heap strings with interning.
-    - Redo `Object*` pointer and `Object`, `Prototype` utility types as per _ECMAScript 5, Section 8.6.2, Table 8_.
-    - Add implementation-specific `StringBase` virtual class.
-    - Add internal `StaticString` type. This is for constant strings no longer than 16 characters.
-    - Add internal `String` type for flexible strings. This may wrap a `std::string`.
- 8. Add simple data objects.
- 9. Add built-in context objects and global objects
-    - Implement `[Console console]` basics: `log`, `prompt` (DerkJS extension)
-    - Implement `this` objects that reference anything in a local scope (and link to parent ones).
- 10. Add mark and sweep GC.
+ 9. Add simple data objects.
+    - Add parsing support for simple JS objects.
+    - Each object instance maps property descriptors to values.
+      - Prototype inheritance exists because of any object's prototype chain to the `[null Prototype]` prototype... Built-in prototypes such as `Object` exist just before `[null Prototype]`.
+      - Prototypes can be "template objects".
+      - Some properties are inherent duplicates from its prototype(s).
+      - Some properties are instance-specific properties a.k.a "own" props.
+      - Instances are _clones_ of prototypes!
+      - Implement `this` as a special reference variable to the current context's instance-`Object`.
+ 10. Add built-in context objects and global objects
+    - Implement `[Console console]` basics: `log`, `clear`, `prompt` (DerkJS extension)
+ 11. Add mark and sweep GC.
