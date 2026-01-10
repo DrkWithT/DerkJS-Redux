@@ -213,8 +213,8 @@ export namespace DerkJS {
                 } else { 
                     m_data.i %= rhs_i32_v.value();
                 }
-            } else if (m_tag == ValueTag::val_ref) {
-                return (m_data.ref_p) ? m_data.ref_p->operator%=(other) : false;
+            } else if (m_tag == ValueTag::val_ref && m_data.ref_p) {
+                m_data.ref_p->operator%=(other);
             } else {
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
@@ -256,8 +256,8 @@ export namespace DerkJS {
                 m_data.i *= other.to_num_i32().value();
             } else if (lhs_tag == ValueTag::num_f64 && rhs_tag == lhs_tag) {
                 m_data.i *= other.to_num_f64().value();
-            } else if (m_tag == ValueTag::val_ref) {
-                return (m_data.ref_p) ? m_data.ref_p->operator*=(other) : false;
+            } else if (m_tag == ValueTag::val_ref && m_data.ref_p) {
+                m_data.ref_p->operator*=(other);
             } else {
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
@@ -322,8 +322,8 @@ export namespace DerkJS {
                 } else {   
                     m_data.d /= rhs_f64_v.value();
                 }
-            } else if (m_tag == ValueTag::val_ref) {
-                return (m_data.ref_p) ? m_data.ref_p->operator/=(other) : false;
+            } else if (m_tag == ValueTag::val_ref && m_data.ref_p) {
+                m_data.ref_p->operator/=(other);
             } else {
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
@@ -361,7 +361,7 @@ export namespace DerkJS {
             } else if (lhs_tag == ValueTag::num_f64) {
                 m_data.d += other.to_num_f64().value();
             } else if (m_tag == ValueTag::val_ref) {
-                return (m_data.ref_p) ? m_data.ref_p->operator+=(other) : false;
+                m_data.ref_p->operator+=(other);
             } else {
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
@@ -399,7 +399,7 @@ export namespace DerkJS {
             } else if (lhs_tag == ValueTag::num_f64) {
                 m_data.d -= other.to_num_f64().value();
             } else if (m_tag == ValueTag::val_ref) {
-                return (m_data.ref_p) ? m_data.ref_p->operator-=(other) : false;
+                m_data.ref_p->operator-=(other);
             } else {
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
@@ -470,6 +470,7 @@ export namespace DerkJS {
             case ValueTag::num_i32:
             case ValueTag::num_f64: return *this;
             case ValueTag::object: return m_data.obj_p->clone();
+            case ValueTag::val_ref: return m_data.ref_p->deep_clone();
             }
         }
     };

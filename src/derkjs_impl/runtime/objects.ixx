@@ -87,10 +87,15 @@ export namespace DerkJS {
     private:
         std::vector<std::unique_ptr<ItemBase>> m_items;
         std::vector<int> m_free_slots;
+        int m_next_id;
+        int m_id_max;
 
     public:
         PolyPool(int capacity)
-        : m_items(capacity), m_free_slots {} {}
+        : m_items {}, m_free_slots {}, m_next_id {0}, m_id_max {capacity} {
+            m_items.reserve(capacity);
+            m_items.resize(capacity);
+        }
     
         [[nodiscard]] auto view_items() const noexcept -> const std::vector<std::unique_ptr<ItemBase>>& {
             return m_items;
@@ -98,10 +103,10 @@ export namespace DerkJS {
 
         [[nodiscard]] auto get_next_id() noexcept -> int {
             if (m_free_slots.empty()) {
-                return m_items.size();
+                return (m_next_id < m_id_max) ? m_next_id : -1;
             }
 
-            const int recycled_id = m_free_slots.size();
+            const int recycled_id = m_free_slots.back();
             m_free_slots.pop_back();
 
             return recycled_id;
@@ -149,7 +154,8 @@ export namespace DerkJS {
                 slot_id = m_free_slots.back();
                 m_free_slots.pop_back();
             } else {
-                slot_id = m_items.size();
+                slot_id = m_next_id;
+                ++m_next_id;
             }
 
             m_items[slot_id] = std::make_unique<ItemKind>(std::forward<ItemKind>(item));
@@ -169,7 +175,8 @@ export namespace DerkJS {
                 slot_id = m_free_slots.back();
                 m_free_slots.pop_back();
             } else {
-                slot_id = m_items.size();
+                slot_id = m_next_id;
+                ++m_next_id;
             }
 
             m_items[slot_id] = std::unique_ptr<ItemKind>(item_p);
@@ -191,7 +198,7 @@ export namespace DerkJS {
 
     enum class PropertyHandleTag : uint8_t {
         nil, // dud handle
-        key, // string ID indexing into string pool -> compare indexed strings in access
+        key, // Value ptr -> compare values by operator== overload?
         index, // number -> an Array's own properties -> int to Value
     };
 
