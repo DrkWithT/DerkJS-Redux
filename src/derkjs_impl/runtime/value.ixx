@@ -252,11 +252,11 @@ export namespace DerkJS {
             if (lhs_tag == ValueTag::num_nan || rhs_tag == ValueTag::num_nan) {
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
-            } else if (lhs_tag == ValueTag::num_i32 && rhs_tag == lhs_tag) {
+            } else if (lhs_tag == ValueTag::num_i32) {
                 m_data.i *= other.to_num_i32().value();
-            } else if (lhs_tag == ValueTag::num_f64 && rhs_tag == lhs_tag) {
-                m_data.i *= other.to_num_f64().value();
-            } else if (m_tag == ValueTag::val_ref && m_data.ref_p) {
+            } else if (lhs_tag == ValueTag::num_f64) {
+                m_data.d *= other.to_num_f64().value();
+            } else if (m_tag == ValueTag::val_ref) {
                 m_data.ref_p->operator*=(other);
             } else {
                 m_data.dud = dud_nan_char_v;
@@ -319,10 +319,10 @@ export namespace DerkJS {
                 } else if (*rhs_f64_v == 0) {
                     m_data.dud = dud_nan_char_v;
                     m_tag = ValueTag::num_nan;
-                } else {   
+                } else {
                     m_data.d /= rhs_f64_v.value();
                 }
-            } else if (m_tag == ValueTag::val_ref && m_data.ref_p) {
+            } else if (m_tag == ValueTag::val_ref) {
                 m_data.ref_p->operator/=(other);
             } else {
                 m_data.dud = dud_nan_char_v;
@@ -469,6 +469,7 @@ export namespace DerkJS {
             case ValueTag::num_nan: 
             case ValueTag::num_i32:
             case ValueTag::num_f64: return *this;
+            /// TODO: This `ObjectBase<Value>*` can easily point to a temporary owning pointer to some cloned object, so there needs to be a special way to distinguish this for quickly owning that Object in the VM heap...
             case ValueTag::object: return m_data.obj_p->clone();
             case ValueTag::val_ref: return m_data.ref_p->deep_clone();
             }
@@ -548,6 +549,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
+            // Due to the Value repr needing an ObjectBase<Value>* ptr, the Value clone method returns a Value vs. `std::unique_ptr<Value>`, and the VM only stores Value-s on its stack, having a raw pointer is unavoidable. This may not be so bad since the PolyPool<ObjectBase<Value>> in the VM can quickly own it via `add_item()`.
             auto self_clone = new StaticString {m_proto, m_data, m_length};
 
             /// TODO: Add properties like .length as needed.
@@ -642,7 +644,7 @@ export namespace DerkJS {
         uint8_t m_flags;
 
     public:
-        /// NOTE: Creates mutable instances of anonymous objects.
+        /// NOTE: Creates mutable instances of anonymous objects. Pass the `flag_prototype_v | flag_extensible_v` if needed for Foo.prototype!
         Object(ObjectBase<Value>* proto, uint8_t flags = flag_extensible_v)
         : m_own_props {}, m_proto {proto}, m_flags {flags} {}
 
@@ -692,7 +694,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
-            /// NOTE: A shared_ptr would be too chunky as it gets passed & a unique_ptr would be tricky to pass into a value without ownership problems against the object pool model required for JS implementation. So, the raw pointer here must be quickly owned!
+            // Due to the Value repr needing an ObjectBase<Value>* ptr, the Value clone method returns a Value vs. `std::unique_ptr<Value>`, and the VM only stores Value-s on its stack, having a raw pointer is unavoidable. This may not be so bad since the PolyPool<ObjectBase<Value>> in the VM can quickly own it via `add_item()`.
             auto self_clone = new Object {m_proto};
 
             for (const auto& [prop_handle, prop_value] : m_own_props) {
