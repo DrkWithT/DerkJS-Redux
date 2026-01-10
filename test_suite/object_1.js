@@ -1,14 +1,12 @@
 /*
- Test basic object operations:
- Get / Set properties & display objects.
+ Test basic property accesses:
+ Get or set properties.
  */
 
-var bob = {
-    id: 12340,
-    income_k: 45.75,
-    has_job: true
+var pair = {
+    x: 10,
+    y: -10,
 };
 
-bob.income_k = bob.income_k + 1.25;
-
-return bob.income_k;
+/* Should be 0 */
+return pair.x + pair.y;
