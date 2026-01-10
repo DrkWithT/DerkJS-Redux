@@ -108,7 +108,7 @@ export namespace DerkJS {
         }
 
         void consume(Lexer& lexer, const std::string& source, std::same_as<TokenTag> auto first, std::same_as<TokenTag> auto ... more) {
-            if (m_current.match_tag_to(first, more...)) {
+            if (m_current.match_tag_to(first, more...) && !m_current.match_tag_to(TokenTag::unknown)) {
                 m_previous = m_current;
                 m_current = advance(lexer, source);
                 return;
@@ -230,8 +230,8 @@ export namespace DerkJS {
 
                 return std::make_unique<Expr>(
                     MemberAccess {
-                        .lhs = std::move(lhs_primary),
-                        .rhs = parse_call(lexer, source),
+                        .target = std::move(lhs_primary),
+                        .key = parse_call(lexer, source),
                     },
                     0,
                     snippet_begin,
@@ -246,8 +246,8 @@ export namespace DerkJS {
 
                 return std::make_unique<Expr>(
                     MemberAccess {
-                        .lhs = std::move(lhs_primary),
-                        .rhs = std::move(enclosed_expr),
+                        .target = std::move(lhs_primary),
+                        .key = std::move(enclosed_expr),
                     },
                     0,
                     snippet_begin,

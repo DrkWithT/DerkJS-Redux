@@ -119,8 +119,12 @@ export namespace DerkJS {
             return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
         }
 
+        [[nodiscard]] static constexpr auto is_digit(char c) noexcept -> bool {
+            return (c >= '0' && c <= '9');
+        }
+
         [[nodiscard]] static constexpr auto is_numeric(char c) noexcept -> bool {
-            return (c >= '0' && c <= '9') || c == '.';
+            return is_digit(c) || c == '.';
         }
 
         [[nodiscard]] static constexpr auto is_op_symbol(char c) noexcept -> bool {
@@ -269,7 +273,7 @@ export namespace DerkJS {
             const auto temp_column = m_column;
 
             while (!at_eof()) {
-                if (const auto c = source.at(m_pos); is_alphabetic(c) || is_numeric(c)) {
+                if (const auto c = source.at(m_pos); is_alphabetic(c) || is_digit(c)) {
                     update_source_location(c);
                     ++temp_length;
                 } else {

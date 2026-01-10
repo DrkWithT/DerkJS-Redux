@@ -23,6 +23,11 @@ import runtime.bytecode;
 export namespace DerkJS {
     struct GlobalFuncOpt {};
 
+    enum class NameLookupMode : uint8_t {
+        as_var_name,
+        as_pooled_name
+    };
+
     class BytecodeGenPass {
     private:
         static constexpr int min_bc_jump_offset = std::numeric_limits<int16_t>::min();
@@ -302,10 +307,17 @@ export namespace DerkJS {
             case TokenTag::identifier: {
                 std::string any_name_lexeme = literal_token.as_string(source);
 
+                if (auto pooled_name_id_it = m_poolable_str_ids.find(any_name_lexeme); pooled_name_id_it != m_poolable_str_ids.end()) {
+                    return Arg {
+                        .n = static_cast<int16_t>(pooled_name_id_it->second),
+                        .tag = Location::constant
+                    };
+                }
+
                 if (auto name_locator_opt = lookup_item(any_name_lexeme); name_locator_opt) {
                     if (const auto locator_tag = name_locator_opt->tag; locator_tag == Location::temp) {
                         encode_instruction(djs_dup, *name_locator_opt);
-
+                        
                         return Arg {
                             .n = static_cast<int16_t>(update_temp_id(1)),
                             .tag = Location::temp
@@ -313,7 +325,7 @@ export namespace DerkJS {
                     } else if (locator_tag == Location::constant) {
                         /// NOTE: Push constants as needed within blocks (even in functions), using the dedicated opcode for this case.
                         encode_instruction(Opcode::djs_put_const, *name_locator_opt);
-
+                        
                         return Arg {
                             .n = static_cast<int16_t>(update_temp_id(1)),
                             .tag = Location::temp
@@ -321,7 +333,7 @@ export namespace DerkJS {
                     } else if (locator_tag == Location::heap_obj) {
                         /// NOTE: Push constants as needed within blocks (even in functions).
                         encode_instruction(Opcode::djs_put_obj_ref, *name_locator_opt);
-
+                        
                         return Arg {
                             .n = static_cast<int16_t>(update_temp_id(1)),
                             .tag = Location::temp
@@ -361,12 +373,14 @@ export namespace DerkJS {
                 auto key_id = record_pooled_string(key_str);
 
                 if (key_id == -1) {
+                    std::println("NOTE: could not resolve location of object property '{}'.", obj_key_name);
                     return {};
                 }
 
                 auto key_locator_arg = record_constants(obj_key_name, Value {m_heap_items.get_item(key_id)});
 
                 if (key_locator_arg.n == -1) {
+                    std::println("NOTE: could not record constant for pooled string of property '{}'.", obj_key_name);
                     return {};
                 }
                 
@@ -385,6 +399,8 @@ export namespace DerkJS {
 
                 // 3. Try emitting the bytecode that populates each property of this literal at run time.
                 if (auto obj_prop_rhs_locator = emit_expr(*obj_value, source); obj_prop_rhs_locator) {
+                    const auto popping_count = m_next_temp_id - key_ref_temp_id;
+
                     encode_instruction(
                         Opcode::djs_put_prop,
                         Arg {
@@ -392,11 +408,11 @@ export namespace DerkJS {
                             .tag = Location::temp
                         },
                         Arg { // NOTE: this opcode pops off the stack temporaries once their data is saved in the JS object...
-                            .n = static_cast<int16_t>(current_temp_id() - key_ref_temp_id),
+                            .n = static_cast<int16_t>(popping_count),
                             .tag = Location::immediate
                         }
                     );
-                    update_temp_id(-1);
+                    update_temp_id(-popping_count);
                 } else {
                     return {};
                 }
@@ -509,17 +525,19 @@ export namespace DerkJS {
 
             // 1. Emit target (object)'s reference.
             // This is where the result reference will remain on the stack!
-            const auto pre_access_slot_id = m_next_temp_id;
-            auto target_ref_locator = emit_expr(target_expr, source);
+            const auto pre_access_slot_id = current_temp_id();
+            auto target_ref_locator = emit_expr(*target_expr, source);
 
-            if (!emit_expr(target_expr, source)) {
+            if (!target_ref_locator) {
+                std::println("NOTE: Could not resolve accessed object name for property access.");
                 return {};
             }
 
             // 2. Emit key value evaluation.
-            const auto access_key_slot_id = m_next_temp_id;
+            const auto access_key_slot_id = current_temp_id();
 
-            if (!emit_expr(key_expr, source)) {
+            if (!emit_expr(*key_expr, source)) {
+                std::println("NOTE: Could not resolve object's property name for access.");
                 return {};
             }
 
@@ -535,7 +553,7 @@ export namespace DerkJS {
                 }
             );
 
-            m_next_temp_id = pre_access_slot_id + 1;
+            m_next_temp_id = pre_access_slot_id;
 
             return Arg {
                 .n = static_cast<int16_t>(pre_access_slot_id),
@@ -947,7 +965,7 @@ export namespace DerkJS {
 
     public:
         BytecodeGenPass()
-        : m_mappings {}, m_heap_items {1024}, m_consts {}, m_code {}, m_func_offsets {}, m_next_temp_id {0} {
+        : m_mappings {}, m_heap_items {1024}, m_consts {}, m_code {}, m_func_offsets {}, m_next_temp_id {0}{
             /// NOTE: Consider global scope 1st for global variables / stmts...
             enter_simulated_frame();
         }
