@@ -3,10 +3,8 @@
  Get or set properties.
  */
 
-var pair = {
-    x: 10,
-    y: -10,
+var num = {
+    x: 123
 };
 
-/* Should be 0 */
-return pair.x + pair.y;
+return num.x;

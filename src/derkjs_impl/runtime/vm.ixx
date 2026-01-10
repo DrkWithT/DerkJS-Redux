@@ -604,7 +604,7 @@ export namespace DerkJS {
         ++ctx.rsp;
         ++ctx.rip_p;
 
-        return ;
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_put_obj_ref(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
@@ -622,7 +622,7 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_emplace(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        if (auto& dest_val_ref = ctx.stack[ctx.rsbp + a0]; dest_val_ref.tag() != ValueTag::val_ref) {
+        if (auto& dest_val_ref = ctx.stack[ctx.rsbp + a0]; dest_val_ref.get_tag() != ValueTag::val_ref) {
             // Case 1: the target is a primitive Value on the stack.
             dest_val_ref = ctx.stack[ctx.rsp];
         } else if (auto dest_val_ref_p = dest_val_ref.get_value_ref(); dest_val_ref_p) {
@@ -639,7 +639,7 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_put_obj_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        if (const auto obj_id = ctx.heap.get_next_id(); !ctx.heap.add_item(, Object {nullptr})) {
+        if (const auto obj_id = ctx.heap.get_next_id(); !ctx.heap.add_item(obj_id, Object {nullptr})) {
             return false;
         } else {
             ctx.stack[ctx.rsp + 1] = Value {ctx.heap.get_item(obj_id)};
@@ -652,26 +652,26 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_get_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        if (auto& src_val_ref = ctx.stack[ctx.rsbp + a0]; !src_val_ref.tag() != ValueTag::object) {
+        if (auto& src_val_ref = ctx.stack[ctx.rsbp + a0]; src_val_ref.get_tag() != ValueTag::object) {
             return false;
         } else if (auto src_obj_p = src_val_ref.to_object(); !src_obj_p) {
             return false;
-        } else if (auto src_prop_value_p = src_obj_p->get_property_value(PropertyHandle<Value> {src_obj_p, ctx.stack[ctx.rsbp + a1].get_value_ref()}); !src_prop_value_p) {
+        } else if (auto src_prop_value_p = src_obj_p->get_property_value(PropertyHandle<Value> {src_obj_p, ctx.stack[ctx.rsbp + a1].get_value_ref(), PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)}); !src_prop_value_p) {
             return false;
         } else {
-            ctx.stack[ctx.rbsp + a0] = Value {src_prop_value_p};
-            ctx.rsp = ctx.rbsp + a0;
+            ctx.stack[ctx.rsbp + a0] = Value {src_prop_value_p};
+            ctx.rsp = ctx.rsbp + a0;
             ++ctx.rip_p;
-
-            return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
         }
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_put_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         if (auto obj_p = ctx.stack[ctx.rsbp + a0].to_object(); !obj_p) {
             return false;
         } else {
-            obj_p->set_property_value(PropertyHandle<Value> { obj_p, ctx.stack[ctx.rsp - 1].get_value_ref() }, ctx.stack[ctx.rsp])
+            obj_p->set_property_value(PropertyHandle<Value> { obj_p, ctx.stack[ctx.rsp - 1].get_value_ref(), PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)}, ctx.stack[ctx.rsp]);
         }
 
         ctx.rsp -= a1;

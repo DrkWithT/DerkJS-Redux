@@ -117,7 +117,7 @@ export namespace DerkJS {
             "djs_halt",
         };
 
-        const auto& [prgm_heap_items, prgm_poolable_strs, prgm_consts, prgm_code, prgm_code_offsets, prgm_entry_id] = prgm;
+        const auto& [prgm_heap_items, prgm_consts, prgm_code, prgm_code_offsets, prgm_entry_id] = prgm;
 
         std::println("\x1b[1;33mProgram Dump:\x1b[0m\n\nEntry Chunk ID: {}\n", prgm_entry_id);
 
