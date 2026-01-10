@@ -1,8 +1,6 @@
 module;
 
 #include <cstdint>
-#include <utility>
-#include <memory>
 #include <vector>
 #include <print>
 
@@ -25,13 +23,14 @@ export namespace DerkJS {
         djs_nop,
         djs_dup,
         djs_put_const,
+        djs_put_val_ref, // a0: the id into the value space (VM stack / heap), a1: space-id: 0 -> stack, 1 -> consts, 2 -> heap
         djs_put_obj_ref,
         djs_pop,
-        djs_emplace_local,
-        // djs_create_obj,
-        // djs_get_prop,
-        // djs_put_prop,
-        // djs_del_prop,
+        djs_emplace,
+        djs_put_obj_dud,
+        djs_get_prop, // djs_get_prop <object-ref-value-slot-id> <access-key-value-slot-id> gets a property value's ref based on an object's slot ID with the handle on the stack's top --> Stack placement: <OBJ-REF-LOCAL> ... <PROP-KEY-HANDLE> -- (RSP = <object-ref-value-slot-id>) -- > <VALUE-REF>
+        djs_put_prop, // djs_put_prop <obj-slot-id> <pop-before-place-n> --> Stack placement: <OBJ-REF-LOCAL> ... <PROP-KEY-HANDLE-VALUE> <NEW-VALUE> -- (lazy pop N) --> <OBJ-REF-LOCAL>
+        djs_del_prop, // TODO!
         djs_mod,
         djs_mul,
         djs_div,
@@ -59,6 +58,7 @@ export namespace DerkJS {
         immediate,
         constant,
         heap_obj,
+        pooled_str,
         temp,
         end,
     };
@@ -74,7 +74,9 @@ export namespace DerkJS {
     };
 
     struct Program {
-        std::vector<std::unique_ptr<ObjectBase<Value>>> heap_items;
+        /// Stores initial heap entries to load.
+        PolyPool<ObjectBase<Value>> heap_items;
+
         std::vector<Value> consts;
         std::vector<Instruction> code;
         std::vector<int> offsets;
@@ -86,13 +88,14 @@ export namespace DerkJS {
             "djs_nop",
             "djs_dup",
             "djs_put_const",
+            "djs_put_val_ref",
             "djs_put_obj_ref",
             "djs_pop",
-            "djs_emplace_local",
-            // "djs_create_obj",
-            // "djs_get_prop",
-            // "djs_put_prop",
-            // "djs_del_prop",
+            "djs_emplace",
+            "djs_put_obj_dud",
+            "djs_get_prop", // gets a property value based on RSP: <OBJ-REF>, RSP - 1: <POOLED-STR-REF> 
+            "djs_put_prop", // SEE: djs_get_prop for stack args passing...
+            "djs_del_prop", // SEE: djs_get_prop for stack args passing...
             "djs_mod",
             "djs_mul",
             "djs_div",
@@ -114,7 +117,7 @@ export namespace DerkJS {
             "djs_halt",
         };
 
-        const auto& [prgm_pre_heap, prgm_consts, prgm_code, prgm_code_offsets, prgm_entry_id] = prgm;
+        const auto& [prgm_heap_items, prgm_poolable_strs, prgm_consts, prgm_code, prgm_code_offsets, prgm_entry_id] = prgm;
 
         std::println("\x1b[1;33mProgram Dump:\x1b[0m\n\nEntry Chunk ID: {}\n", prgm_entry_id);
 
