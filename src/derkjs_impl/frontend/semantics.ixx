@@ -138,6 +138,12 @@ namespace DerkJS {
             };
         }
 
+        [[nodiscard]] auto check_member_access([[maybe_unused]] const MemberAccess& member_access, const std::string& current_source, int area_start, int area_length) -> std::optional<SemanticInfo> {
+            return SemanticInfo {
+                .value_kind = ValueCategory::js_locator
+            };
+        }
+
         [[nodiscard]] auto check_unary(const Unary& unary, std::string_view source_name, const std::string& current_source, int area_start, int area_length) -> std::optional<SemanticInfo> {
             if (auto inner_info = check_expr(*unary.inner, source_name, current_source, area_start, area_length); inner_info) {
                 return inner_info;
@@ -264,6 +270,8 @@ namespace DerkJS {
                 return check_primitive(*primitive_p, current_source, expr_text_begin, expr_text_length);
             } else if (auto object_p = std::get_if<ObjectLiteral>(&expr.data); object_p) {
                 return check_object(*object_p, source_name, current_source, area_start, area_length);
+            } else if (auto member_access_p = std::get_if<MemberAccess>(&expr.data); member_access_p) {
+                return check_member_access(*member_access_p, source_name, current_source, area_start, area_length);
             } else if (auto unary_p = std::get_if<Unary>(&expr.data); unary_p) {
                 return check_unary(*unary_p, source_name, current_source, expr_text_begin, expr_text_length);
             } else if (auto binary_p = std::get_if<Binary>(&expr.data); binary_p) {
