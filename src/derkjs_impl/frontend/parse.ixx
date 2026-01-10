@@ -229,10 +229,9 @@ export namespace DerkJS {
                 consume_any(lexer, source);
 
                 return std::make_unique<Expr>(
-                    Binary {
+                    MemberAccess {
                         .lhs = std::move(lhs_primary),
                         .rhs = parse_call(lexer, source),
-                        .op = AstOp::ast_op_dot_access,
                     },
                     0,
                     snippet_begin,
@@ -246,10 +245,9 @@ export namespace DerkJS {
                 consume(lexer, source, TokenTag::right_bracket);
 
                 return std::make_unique<Expr>(
-                    Binary {
+                    MemberAccess {
                         .lhs = std::move(lhs_primary),
                         .rhs = std::move(enclosed_expr),
-                        .op = AstOp::ast_op_index_access,
                     },
                     0,
                     snippet_begin,
