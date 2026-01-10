@@ -3,8 +3,8 @@
  Get or set properties.
  */
 
-var num = {
-    x: 123
+var num_1 = {
+    x: 3
 };
 
-return num.x;
+return num_1.x * num_1.x + num_1.x * num_1.x;

@@ -54,9 +54,6 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
  7. ~~Add support for undefined variable declarations.~~
  8. ~~Add static-size & heap strings with interning.~~
  9. Add simple data objects.
-    - 1: Implement access expr bytecode generation! (props become refs on the stack: `Value*`)
-    - 2: Implement `Object::as_string()`.
-    - 3: Test!
     - Each object instance maps property descriptors to values.
       - Prototype inheritance exists because of any object's prototype chain to the `[null Prototype]` prototype... Built-in prototypes such as `Object` exist just before `[null Prototype]`.
       - Prototypes can be "template objects".
