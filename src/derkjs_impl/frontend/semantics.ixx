@@ -138,7 +138,7 @@ namespace DerkJS {
             };
         }
 
-        [[nodiscard]] auto check_member_access([[maybe_unused]] const MemberAccess& member_access, const std::string& current_source, int area_start, int area_length) -> std::optional<SemanticInfo> {
+        [[nodiscard]] auto check_member_access([[maybe_unused]] const MemberAccess& member_access, [[maybe_unused]] std::string_view source_name, [[maybe_unused]] const std::string& current_source, [[maybe_unused]] int area_start, [[maybe_unused]] int area_length) -> std::optional<SemanticInfo> {
             return SemanticInfo {
                 .value_kind = ValueCategory::js_locator
             };
