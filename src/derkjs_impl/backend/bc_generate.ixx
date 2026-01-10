@@ -51,8 +51,7 @@ export namespace DerkJS {
         std::vector<int> m_func_offsets;
 
         int m_next_temp_id;
-        // bool is_op_emplaced;
-        // bool is_temp_poppable;
+        bool m_handle_props_as_rvals;
 
         void enter_simulated_frame() {
             m_mappings.emplace_back(SimStackFrame {
@@ -308,15 +307,27 @@ export namespace DerkJS {
                 std::string any_name_lexeme = literal_token.as_string(source);
 
                 if (auto pooled_name_id_it = m_poolable_str_ids.find(any_name_lexeme); pooled_name_id_it != m_poolable_str_ids.end()) {
+                    // Push property key-string ref from constants.
+                    encode_instruction(
+                        Opcode::djs_put_val_ref,
+                        Arg {
+                            .n = static_cast<int16_t>(pooled_name_id_it->second),
+                            .tag = Location::immediate
+                        },
+                        Arg {
+                            .n = 1,
+                            .tag = Location::immediate
+                        }
+                    );
                     return Arg {
-                        .n = static_cast<int16_t>(pooled_name_id_it->second),
-                        .tag = Location::constant
+                        .n = static_cast<int16_t>(update_temp_id(1)),
+                        .tag = Location::temp
                     };
                 }
 
                 if (auto name_locator_opt = lookup_item(any_name_lexeme); name_locator_opt) {
                     if (const auto locator_tag = name_locator_opt->tag; locator_tag == Location::temp) {
-                        encode_instruction(djs_dup, *name_locator_opt);
+                        encode_instruction(Opcode::djs_dup, *name_locator_opt);
                         
                         return Arg {
                             .n = static_cast<int16_t>(update_temp_id(1)),
@@ -426,6 +437,8 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto emit_unary(const Unary& expr, const std::string& source) -> std::optional<Arg> {
+            m_handle_props_as_rvals = true;
+
             if (const auto& [unary_expr, unary_op] = expr; unary_op == AstOp::ast_op_bang) {
                 if (!emit_expr(*unary_expr, source)) {
                     return {};
@@ -523,8 +536,7 @@ export namespace DerkJS {
         [[nodiscard]] auto emit_member_access(const MemberAccess& member_access, const std::string& source) -> std::optional<Arg> {
             const auto& [target_expr, key_expr] = member_access;
 
-            // 1. Emit target (object)'s reference.
-            // This is where the result reference will remain on the stack!
+            // 1. Emit target (object)'s reference to ensure it's on the stack.
             const auto pre_access_slot_id = current_temp_id();
             auto target_ref_locator = emit_expr(*target_expr, source);
 
@@ -541,17 +553,12 @@ export namespace DerkJS {
                 return {};
             }
 
-            encode_instruction(
-                Opcode::djs_get_prop,
-                Arg {
-                    .n = static_cast<int16_t>(pre_access_slot_id),
-                    .tag = Location::temp
-                },
-                Arg {
-                    .n = static_cast<int16_t>(access_key_slot_id),
-                    .tag = Location::temp
-                }
-            );
+            encode_instruction(Opcode::djs_get_prop);
+
+            /// NOTE: If the property's access must be treated as a temporary value, just deref it in-place for now- This creates a temporary for computations e.g arithmetic.
+            if (m_handle_props_as_rvals) {
+                encode_instruction(Opcode::djs_deref);
+            }
 
             m_next_temp_id = pre_access_slot_id;
 
@@ -646,6 +653,7 @@ export namespace DerkJS {
             const auto [opcode, is_opcode_lefty, has_logical_eval] = *opcode_associated_pair;
 
             if (has_logical_eval) {
+                m_handle_props_as_rvals = true;
                 return emit_logical_expr(bin_op, *lhs, *rhs, source);
             }
 
@@ -654,10 +662,12 @@ export namespace DerkJS {
             std::optional<Arg> result_locator;
 
             if (is_opcode_lefty) {
+                m_handle_props_as_rvals = true;
                 rhs_locator = emit_expr(*rhs, source);
                 lhs_locator = emit_expr(*lhs, source);
                 result_locator = rhs_locator;
             } else {
+                m_handle_props_as_rvals = true;
                 lhs_locator = emit_expr(*lhs, source);
                 rhs_locator = emit_expr(*rhs, source);
                 result_locator = lhs_locator;
@@ -673,32 +683,52 @@ export namespace DerkJS {
             return result_locator;
         }
 
-        /// TODO: handle complex LHS exprs: a member access must result in a reference being duped to the stack top.
         [[nodiscard]] auto emit_assign(const Assign& expr, const std::string& source) -> std::optional<Arg> {
-            /// NOTE: the name-to-Arg mapping of some variable will be updated to this new assignment's RHS's slot. This eliminates the kludge of 'emplacing' values under the stack top which would require some hacky indexing.
             const auto& [assign_lhs, assign_rhs] = expr;
-            auto assign_rhs_locator = emit_expr(*assign_rhs, source);
 
-            if (!assign_rhs_locator) {
-                return {};
+            if (auto primitive_p = std::get_if<Primitive>(&assign_lhs->data); primitive_p) {
+                /// NOTE: the name-to-Arg mapping of some variable will be updated to this new assignment's RHS's slot. This eliminates the kludge of 'emplacing' values under the stack top which would require some hacky indexing.
+                auto assign_rhs_locator = emit_expr(*assign_rhs, source);
+
+                if (!assign_rhs_locator) {
+                    return {};
+                }
+
+                std::string local_var_name = primitive_p->token.as_string(source);
+                auto local_var_locator = lookup_item(local_var_name);
+
+                if (!local_var_locator) {
+                    return {};
+                }
+
+                encode_instruction(Opcode::djs_emplace, *local_var_locator);
+                update_temp_id(-1);
+
+                return local_var_locator;
+            } else if (auto access_p = std::get_if<MemberAccess>(&assign_lhs->data); access_p) {
+                m_handle_props_as_rvals = false;
+
+                auto prop_locator = emit_member_access(*access_p, source);
+
+                m_handle_props_as_rvals = true;
+
+                if (!prop_locator) {
+                    return {};
+                }
+
+                auto assign_rhs_locator = emit_expr(*assign_rhs, source);
+
+                if (!assign_rhs_locator) {
+                    return {};
+                }
+
+                encode_instruction(Opcode::djs_emplace, *prop_locator);
+                update_temp_id(-1);
+
+                return prop_locator;
             }
 
-            auto var_name_literal = std::get_if<Primitive>(&assign_lhs->data);
-
-            if (!var_name_literal) {
-                return {};
-            }
-
-            std::string lhs_name = var_name_literal->token.as_string(source);
-            auto dest_locator = lookup_item(lhs_name);
-
-            if (!dest_locator) {
-                return {};
-            }
-
-            encode_instruction(Opcode::djs_emplace, *dest_locator);
-
-            return dest_locator;
+            return {};
         }
 
         [[nodiscard]] auto emit_call(const Call& expr, const std::string& source) -> std::optional<Arg> {
@@ -740,9 +770,10 @@ export namespace DerkJS {
             if (auto primitive_p = std::get_if<Primitive>(&expr.data); primitive_p) {
                 return emit_primitive(*primitive_p, source);
             } else if (auto object_p = std::get_if<ObjectLiteral>(&expr.data); object_p) {
+                /// TODO: maybe add opcode support for object cloning... could be good for instances of prototypes.
                 return emit_object_literal(*object_p, source);
             } else if (auto member_access_p = std::get_if<MemberAccess>(&expr.data); member_access_p) {
-                return emit_member_access(*member_access_p, source);
+                return emit_member_access(*member_access_p, source); // add cloning of ref vals for non-assignments
             } else if (auto unary_p = std::get_if<Unary>(&expr.data); unary_p) {
                 return emit_unary(*unary_p, source);
             } else if (auto binary_p = std::get_if<Binary>(&expr.data); binary_p) {
@@ -965,7 +996,7 @@ export namespace DerkJS {
 
     public:
         BytecodeGenPass()
-        : m_mappings {}, m_heap_items {1024}, m_consts {}, m_code {}, m_func_offsets {}, m_next_temp_id {0}{
+        : m_mappings {}, m_heap_items {1024}, m_consts {}, m_code {}, m_func_offsets {}, m_next_temp_id {0}, m_handle_props_as_rvals {true} {
             /// NOTE: Consider global scope 1st for global variables / stmts...
             enter_simulated_frame();
         }

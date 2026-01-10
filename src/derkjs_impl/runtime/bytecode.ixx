@@ -25,10 +25,12 @@ export namespace DerkJS {
         djs_put_const,
         djs_put_val_ref, // a0: the id into the value space (VM stack / heap), a1: space-id: 0 -> stack, 1 -> consts, 2 -> heap
         djs_put_obj_ref,
+        djs_deref, // takes a Value reference from RSP and replaces its stack slot with the deep-dereferenced Value
         djs_pop,
         djs_emplace,
         djs_put_obj_dud,
-        djs_get_prop, // djs_get_prop <object-ref-value-slot-id> <access-key-value-slot-id> gets a property value's ref based on an object's slot ID with the handle on the stack's top --> Stack placement: <OBJ-REF-LOCAL> ... <PROP-KEY-HANDLE> -- (RSP = <object-ref-value-slot-id>) -- > <VALUE-REF>
+        djs_get_prop, // djs_get_prop gets a property value's ref based on an object's ref below a pooled string ref on the stack... the result is placed where the targeted ref was. --> Stack placement: <OBJ-REF-LOCAL> <PROP-KEY-HANDLE> --> <PROP-VALUE-REF>
+        /// TODO: simplify this opcode to take arguments in-place on the stack like `djs_get_prop`!
         djs_put_prop, // djs_put_prop <obj-slot-id> <pop-before-place-n> --> Stack placement: <OBJ-REF-LOCAL> ... <PROP-KEY-HANDLE-VALUE> <NEW-VALUE> -- (lazy pop N) --> <OBJ-REF-LOCAL>
         djs_del_prop, // TODO!
         djs_mod,
@@ -90,6 +92,7 @@ export namespace DerkJS {
             "djs_put_const",
             "djs_put_val_ref",
             "djs_put_obj_ref",
+            "djs_deref",
             "djs_pop",
             "djs_emplace",
             "djs_put_obj_dud",
