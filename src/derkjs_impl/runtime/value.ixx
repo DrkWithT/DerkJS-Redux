@@ -28,8 +28,10 @@ export namespace DerkJS {
         num_i32,
         num_f64,
         object,
+        val_ref
     };
 
+    /// TODO: add support for Value holding a Value* as a reference.
     class Value {
     public:
         static constexpr auto dud_undefined_char_v = '\x00';
@@ -43,6 +45,7 @@ export namespace DerkJS {
             int i;
             double d;
             ObjectBase<Value>* obj_p;
+            Value* ref_p;
         } m_data;
 
         ValueTag m_tag;
@@ -83,6 +86,11 @@ export namespace DerkJS {
             m_data.obj_p = object_p;
         }
 
+        constexpr Value(Value* value_p) noexcept
+        : m_data {}, m_tag {ValueTag::val_ref} {
+            m_data.ref_p = value_p;
+        }
+
         [[nodiscard]] constexpr auto get_tag() const noexcept -> ValueTag {
             return m_tag;
         }
@@ -96,6 +104,8 @@ export namespace DerkJS {
                 return m_data.i ^ 0;
             } else if (m_tag == ValueTag::num_f64) {
                 return m_data.d != 0.0;
+            } else if (m_tag == ValueTag::val_ref) {
+                return (m_data.ref_p) ? m_data.ref_p->is_truthy() : false;
             } else {
                 return true;
             }
@@ -127,6 +137,8 @@ export namespace DerkJS {
                 return (m_data.b ^ other.m_data.b) == 0;
             } else if (lhs_tag == ValueTag::object) {
                 return m_data.obj_p == other.m_data.obj_p;
+            } else if (m_tag == ValueTag::val_ref) {
+                return (m_data.ref_p) ? m_data.ref_p->operator==(other) : false;
             } else {
                 return false;
             }
@@ -137,6 +149,8 @@ export namespace DerkJS {
             // Case 3: convert both sides to Number values if possible. No String values supported yet.
             if (const auto lhs_tag = get_tag(); lhs_tag == ValueTag::num_f64) {
                 return to_num_f64().value_or(0.0) < other.to_num_f64().value_or(0.0);
+            } else if (m_tag == ValueTag::val_ref) {
+                return (m_data.ref_p) ? m_data.ref_p->operator<(other) : false;
             } else {
                 return to_num_i32().value_or(0) < other.to_num_i32().value_or(0);
             }
@@ -147,6 +161,8 @@ export namespace DerkJS {
             // Case 3: convert both sides to Number values if possible. No String values supported yet.
             if (const auto lhs_tag = get_tag(); lhs_tag == ValueTag::num_f64) {
                 return to_num_f64().value_or(0.0) > other.to_num_f64().value_or(0.0);
+            } else if (m_tag == ValueTag::val_ref) {
+                return (m_data.ref_p) ? m_data.ref_p->operator>(other) : false;
             } else {
                 return to_num_i32().value_or(0) > other.to_num_i32().value_or(0);
             }
@@ -197,6 +213,8 @@ export namespace DerkJS {
                 } else { 
                     m_data.i %= rhs_i32_v.value();
                 }
+            } else if (m_tag == ValueTag::val_ref) {
+                return (m_data.ref_p) ? m_data.ref_p->operator%=(other) : false;
             } else {
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
@@ -238,6 +256,8 @@ export namespace DerkJS {
                 m_data.i *= other.to_num_i32().value();
             } else if (lhs_tag == ValueTag::num_f64 && rhs_tag == lhs_tag) {
                 m_data.i *= other.to_num_f64().value();
+            } else if (m_tag == ValueTag::val_ref) {
+                return (m_data.ref_p) ? m_data.ref_p->operator*=(other) : false;
             } else {
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
@@ -302,6 +322,8 @@ export namespace DerkJS {
                 } else {   
                     m_data.d /= rhs_f64_v.value();
                 }
+            } else if (m_tag == ValueTag::val_ref) {
+                return (m_data.ref_p) ? m_data.ref_p->operator/=(other) : false;
             } else {
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
@@ -338,6 +360,8 @@ export namespace DerkJS {
                 m_data.i += other.to_num_i32().value();
             } else if (lhs_tag == ValueTag::num_f64) {
                 m_data.d += other.to_num_f64().value();
+            } else if (m_tag == ValueTag::val_ref) {
+                return (m_data.ref_p) ? m_data.ref_p->operator+=(other) : false;
             } else {
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
@@ -374,6 +398,8 @@ export namespace DerkJS {
                 m_data.i -= other.to_num_i32().value();
             } else if (lhs_tag == ValueTag::num_f64) {
                 m_data.d -= other.to_num_f64().value();
+            } else if (m_tag == ValueTag::val_ref) {
+                return (m_data.ref_p) ? m_data.ref_p->operator-=(other) : false;
             } else {
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
@@ -392,7 +418,8 @@ export namespace DerkJS {
             case ValueTag::boolean: return static_cast<int>(m_data.b);
             case ValueTag::num_i32: return m_data.i;
             case ValueTag::num_f64: return static_cast<int>(m_data.d);
-            case ValueTag::object: // TODO: add obj_p->to_num_i32();
+            case ValueTag::object: return {};
+            case ValueTag::val_ref: return m_data.ref_p->to_num_i32();
             default: return {};
             }
         }
@@ -403,7 +430,8 @@ export namespace DerkJS {
             case ValueTag::boolean: return m_data.b ? 1.0 : 0.0 ;
             case ValueTag::num_i32: return static_cast<double>(m_data.i);
             case ValueTag::num_f64: return m_data.d;
-            case ValueTag::object: // TODO: add obj_p->to_num_f64();
+            case ValueTag::object: return {};
+            case ValueTag::val_ref: return m_data.ref_p->to_num_f64();
             default: return {};
             }
         }
@@ -413,19 +441,24 @@ export namespace DerkJS {
             case ValueTag::undefined: return "undefined";
             case ValueTag::null: return "null";
             case ValueTag::boolean: return std::string { m_data.b ? "true" : "false" };
+            case ValueTag::num_nan: default: return "NaN";
             case ValueTag::num_i32: return std::to_string(m_data.i);
             case ValueTag::num_f64: return std::to_string(m_data.d);
             case ValueTag::object: return "[Object object]";
-            case ValueTag::num_nan: default: return "NaN";
+            case ValueTag::val_ref: return m_data.ref_p->to_string();
             }
         }
 
-        [[nodiscard]] auto to_object() const noexcept -> std::optional<ObjectBase<Value>*> {
+        [[nodiscard]] auto to_object() noexcept -> ObjectBase<Value>* {
             if (m_tag == ValueTag::object) {
                 return m_data.obj_p;
             }
 
-            return {};
+            return nullptr;
+        }
+
+        [[nodiscard]] auto get_value_ref() noexcept -> Value* {
+            return m_data.ref_p;
         }
 
         [[nodiscard]] auto deep_clone() const -> Value {
@@ -450,7 +483,7 @@ export namespace DerkJS {
         static constexpr auto flag_prototype_v = 0b10000000;
 
     private:
-        PropPool<Value> m_own_props;
+        PropPool<PropertyHandle<Value>, Value> m_own_props;
         ObjectBase<Value>* m_proto;
         char m_data[max_length_v];
         uint8_t m_length;
@@ -492,7 +525,11 @@ export namespace DerkJS {
             return m_proto;
         }
 
-        [[nodiscard]] auto get_property_value(const PropertyHandle& handle) -> Value* override {
+        auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<Value>, Value>& override {
+            return m_own_props;
+        }
+
+        [[nodiscard]] auto get_property_value(const PropertyHandle<Value>& handle) -> Value* override {
             if (auto property_entry_it = m_own_props.find(handle); property_entry_it != m_own_props.end()) {
                 return &property_entry_it->second;
             }
@@ -500,16 +537,12 @@ export namespace DerkJS {
             return nullptr;
         }
 
-        [[nodiscard]] auto set_property_value(const PropertyHandle& handle, const Value& value) -> Value* override {
-            if (auto property_entry_it = m_own_props.find(handle); property_entry_it != m_own_props.end()) {
-                property_entry_it->second = value;
-                return &property_entry_it->second;
-            }
-
-            return nullptr;
+        [[maybe_unused]] auto set_property_value(const PropertyHandle<Value>& handle, const Value& value) -> Value* override {
+            m_own_props[handle] = value;
+            return &m_own_props[handle];
         }
 
-        [[nodiscard]] auto del_property_value(const PropertyHandle& handle) -> bool override {
+        [[maybe_unused]] auto del_property_value(const PropertyHandle<Value>& handle) -> bool override {
             return m_own_props.erase(m_own_props.find(handle)) != m_own_props.end();
         }
 
@@ -524,7 +557,31 @@ export namespace DerkJS {
         [[nodiscard]] auto as_string() const -> std::string override {
             std::string_view data_slice {m_data, m_data + m_length};
 
-            return std::format("'{}'", data_slice);
+            return std::format("{}", data_slice);
+        }
+
+        [[nodiscard]] auto operator==(const ObjectBase& other) const noexcept -> bool override {
+            if (get_class_name() != other.get_class_name()) {
+                return false;
+            }
+
+            return as_string() == other.as_string();
+        }
+
+        [[nodiscard]] auto operator<(const ObjectBase& other) const noexcept -> bool override {
+            if (get_class_name() != other.get_class_name()) {
+                return false;
+            }
+
+            return as_string() < other.as_string();
+        }
+
+        [[nodiscard]] auto operator>(const ObjectBase& other) const noexcept -> bool override {
+            if (get_class_name() != other.get_class_name()) {
+                return false;
+            }
+
+            return as_string() > other.as_string();
         }
 
 
@@ -579,7 +636,7 @@ export namespace DerkJS {
         static constexpr auto flag_prototype_v = 0b10000000;
 
     private:
-        PropPool<Value> m_own_props;
+        PropPool<PropertyHandle<Value>, Value> m_own_props;
         ObjectBase<Value>* m_proto;
         uint8_t m_flags;
 
@@ -612,7 +669,11 @@ export namespace DerkJS {
             return m_proto;
         }
 
-        [[nodiscard]] auto get_property_value(const PropertyHandle& handle) -> Value* override {
+        auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<Value>, Value>& override {
+            return m_own_props;
+        }
+
+        [[nodiscard]] auto get_property_value(const PropertyHandle<Value>& handle) -> Value* override {
             if (auto property_entry_it = m_own_props.find(handle); property_entry_it != m_own_props.end()) {
                 return &property_entry_it->second;
             }
@@ -620,16 +681,12 @@ export namespace DerkJS {
             return m_proto->get_property_value(handle);
         }
 
-        [[maybe_unused]] auto set_property_value(const PropertyHandle& handle, const Value& value) -> Value* override {
-            if (auto property_entry_it = m_own_props.find(handle); property_entry_it != m_own_props.end()) {
-                property_entry_it->second = value;
-                return &property_entry_it->second;
-            }
-
-            return nullptr;
+        [[maybe_unused]] auto set_property_value(const PropertyHandle<Value>& handle, const Value& value) -> Value* override {
+            m_own_props[handle] = value;
+            return &m_own_props[handle];
         }
 
-        [[nodiscard]] auto del_property_value(const PropertyHandle& handle) -> bool override {
+        [[maybe_unused]] auto del_property_value(const PropertyHandle<Value>& handle) -> bool override {
             return m_own_props.erase(m_own_props.find(handle)) != m_own_props.end();
         }
 
@@ -646,6 +703,87 @@ export namespace DerkJS {
 
         [[nodiscard]] auto as_string() const -> std::string override {
             return "[object Object]";
+        }
+
+        [[nodiscard]] auto operator==(const ObjectBase& other) const noexcept -> bool override {
+            if (get_class_name() != other.get_class_name()) {
+                return false;
+            }
+
+            const auto& self_props = get_own_prop_pool();
+            const auto& other_props = other.get_own_prop_pool();
+
+            if (self_props.size() != other_props.size()) {
+                return false;
+            }
+
+            auto self_prop_it = self_props.begin();
+
+            while (self_prop_it != self_props.end()) {
+                if (auto prop_pair = other_props.find(self_prop_it->first); prop_pair == other_props.end()) {
+                    return false;
+                } else if (const auto& [prop_key, prop_value] = *prop_pair; prop_key != self_prop_it->first || prop_value != self_prop_it->second) {
+                    return false;
+                }
+
+                ++self_prop_it;
+            }
+
+            return true;
+        }
+
+        [[nodiscard]] auto operator<(const ObjectBase& other) const noexcept -> bool override {
+            if (get_class_name() != other.get_class_name()) {
+                return false;
+            }
+
+            const auto& self_props = get_own_prop_pool();
+            const auto& other_props = other.get_own_prop_pool();
+
+            if (self_props.size() != other_props.size()) {
+                return false;
+            }
+
+            auto self_prop_it = self_props.cbegin();
+
+            while (self_prop_it != self_props.cend()) {
+                if (auto prop_pair = other_props.find(self_prop_it->first); prop_pair == other_props.cend()) {
+                    return false;
+                } else if (const auto& [prop_key, prop_value] = *prop_pair; prop_key < self_prop_it->first || prop_value < self_prop_it->second) {
+                    return false;
+                }
+
+                ++self_prop_it;
+            }
+
+            return true;
+        }
+
+        [[nodiscard]] auto operator>(const ObjectBase& other) const noexcept -> bool override {
+            if (get_class_name() != other.get_class_name()) {
+                return false;
+            }
+
+            const auto& self_props = get_own_prop_pool();
+            const auto& other_props = other.get_own_prop_pool();
+
+            if (self_props.size() != other_props.size()) {
+                return false;
+            }
+
+            auto self_prop_it = self_props.cbegin();
+
+            while (self_prop_it != self_props.cend()) {
+                if (auto prop_pair = other_props.find(self_prop_it->first); prop_pair == other_props.cend()) {
+                    return false;
+                } else if (const auto& [prop_key, prop_value] = *prop_pair; prop_key > self_prop_it->first || prop_value > self_prop_it->second) {
+                    return false;
+                }
+
+                ++self_prop_it;
+            }
+
+            return true;
         }
     };
 }
