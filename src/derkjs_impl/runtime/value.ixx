@@ -1,111 +1,21 @@
 module;
 
 #include <cstddef>
-#include <concepts>
 #include <utility>
 #include <memory>
 #include <optional>
-#include <flat_map>
+#include <format>
 #include <string>
 
 export module runtime.value;
 
-/// TODO: 1st, Refactor Object into an ObjectBase interface with Boolean, Number, Object, and Function values.
-/// TODO: 2nd, Add comparison support for `Value`.
+import runtime.objects;
+
+/// TODO: make Boolean, Number, Object, and Function as built-in objects registered to the interpreter before running.
 export namespace DerkJS {
-    template <typename Obj>
-    class Prototype;
-
-    template <typename V>
-    class Prototype {
-    public:
-        enum class FreezeFlag : uint8_t {
-            yes,
-            no
-        };
-
-    private:
-        std::flat_map<std::string, V> m_shape_props;
-        std::vector<int> m_instance_ids;
-        std::shared_ptr<Prototype> m_parent_p;
-        bool m_modifiable;
-
-    public:
-        Prototype(FreezeFlag frozen_flag)
-        : m_shape_props {}, m_instance_ids {}, m_parent_p {}, m_modifiable {frozen_flag == FreezeFlag::no} {}
-
-        Prototype(FreezeFlag frozen_flag, std::shared_ptr<Prototype<V>> parent_p)
-        : m_shape_props {}, m_instance_ids {}, m_parent_p {parent_p}, m_modifiable {frozen_flag == FreezeFlag::no} {}
-
-        [[nodiscard]] auto get_properties() noexcept -> std::flat_map<std::string, V>& {
-            return m_shape_props;
-        }
-
-        [[nodiscard]] auto set_property(const std::string& name, std::same_as<V> auto&& value) {
-            m_shape_props[name] = std::forward<V>(value);
-        }
-
-        [[nodiscard]] auto get_instance_ids() const noexcept -> const std::vector<int>& {
-            return m_instance_ids;
-        }
-
-        void record_instance_id(int id) {
-            m_instance_ids.emplace_back(id);
-        }
-
-        [[maybe_unused]] auto remove_instance_id(int id) -> bool {
-            if (auto inst_id_it = std::find(m_instance_ids.begin(), m_instance_ids.end(), id); inst_id_it != m_instance_ids.end()) {
-                m_instance_ids.erase(inst_id_it);
-
-                return true;
-            }
-
-            return false;
-        }
-
-        [[nodiscard]] auto get_parent() noexcept -> Prototype<V>*;
-
-        [[nodiscard]] auto is_modifiable() const noexcept -> bool {
-            return m_modifiable;
-        }
-    };
-
-    template <typename Value>
-    class Object {
-    private:
-        std::flat_map<std::string, Value> m_props;
-        std::shared_ptr<Prototype<Value>> m_parent_proto;
-        std::string m_kind_name;
-
-    public:
-        Object(const std::string& kind_name, std::shared_ptr<Prototype<Value>> proto)
-        : m_props {}, m_parent_proto {proto}, m_kind_name {kind_name} {
-            for (const auto& proto_shape = m_parent_proto.get_properties(); const auto& [protop_name, protop_value] : proto_shape) {
-                m_props[protop_name] = protop_value;
-            }
-        }
-
-        [[nodiscard]] auto get_prototype() -> Prototype<Value>* {
-            return m_parent_proto.get();
-        }
-
-        [[nodiscard]] auto get_property(const std::string& name) -> Value* {
-            if (auto name_p = std::find(m_props.begin(), m_props.end(), name); name_p != m_props.end()) {
-                return std::addressof(*name_p);
-            }
-
-            return nullptr;
-        }
-
-        void set_property(const std::string& name, std::same_as<Value> auto&& value) {
-            m_props[name] = std::forward<Value>(value);
-        }
-
-        template <typename VM>
-        [[nodiscard]] auto try_invoke(VM& vm, void* current_ctx) -> bool {
-            return vm.invoke_bc_fn(current_ctx, this);
-        }
-    };
+    struct Value;
+    class StaticString;
+    class Object;
 
     struct JSNullOpt {};
     struct JSNaNOpt {};
@@ -118,8 +28,10 @@ export namespace DerkJS {
         num_i32,
         num_f64,
         object,
+        val_ref
     };
 
+    /// TODO: add support for Value holding a Value* as a reference.
     class Value {
     public:
         static constexpr auto dud_undefined_char_v = '\x00';
@@ -132,7 +44,8 @@ export namespace DerkJS {
             bool b;
             int i;
             double d;
-            Object<Value>* obj_p;
+            ObjectBase<Value>* obj_p;
+            Value* ref_p;
         } m_data;
 
         ValueTag m_tag;
@@ -168,9 +81,14 @@ export namespace DerkJS {
             m_data.d = d;
         }
 
-        constexpr Value(Object<Value>* object_p) noexcept
+        constexpr Value(ObjectBase<Value>* object_p) noexcept
         : m_data {}, m_tag {ValueTag::object} {
             m_data.obj_p = object_p;
+        }
+
+        constexpr Value(Value* value_p) noexcept
+        : m_data {}, m_tag {ValueTag::val_ref} {
+            m_data.ref_p = value_p;
         }
 
         [[nodiscard]] constexpr auto get_tag() const noexcept -> ValueTag {
@@ -186,6 +104,8 @@ export namespace DerkJS {
                 return m_data.i ^ 0;
             } else if (m_tag == ValueTag::num_f64) {
                 return m_data.d != 0.0;
+            } else if (m_tag == ValueTag::val_ref) {
+                return (m_data.ref_p) ? m_data.ref_p->is_truthy() : false;
             } else {
                 return true;
             }
@@ -217,6 +137,8 @@ export namespace DerkJS {
                 return (m_data.b ^ other.m_data.b) == 0;
             } else if (lhs_tag == ValueTag::object) {
                 return m_data.obj_p == other.m_data.obj_p;
+            } else if (m_tag == ValueTag::val_ref) {
+                return (m_data.ref_p) ? m_data.ref_p->operator==(other) : false;
             } else {
                 return false;
             }
@@ -227,6 +149,8 @@ export namespace DerkJS {
             // Case 3: convert both sides to Number values if possible. No String values supported yet.
             if (const auto lhs_tag = get_tag(); lhs_tag == ValueTag::num_f64) {
                 return to_num_f64().value_or(0.0) < other.to_num_f64().value_or(0.0);
+            } else if (m_tag == ValueTag::val_ref) {
+                return (m_data.ref_p) ? m_data.ref_p->operator<(other) : false;
             } else {
                 return to_num_i32().value_or(0) < other.to_num_i32().value_or(0);
             }
@@ -237,6 +161,8 @@ export namespace DerkJS {
             // Case 3: convert both sides to Number values if possible. No String values supported yet.
             if (const auto lhs_tag = get_tag(); lhs_tag == ValueTag::num_f64) {
                 return to_num_f64().value_or(0.0) > other.to_num_f64().value_or(0.0);
+            } else if (m_tag == ValueTag::val_ref) {
+                return (m_data.ref_p) ? m_data.ref_p->operator>(other) : false;
             } else {
                 return to_num_i32().value_or(0) > other.to_num_i32().value_or(0);
             }
@@ -287,6 +213,8 @@ export namespace DerkJS {
                 } else { 
                     m_data.i %= rhs_i32_v.value();
                 }
+            } else if (m_tag == ValueTag::val_ref && m_data.ref_p) {
+                m_data.ref_p->operator%=(other);
             } else {
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
@@ -324,10 +252,12 @@ export namespace DerkJS {
             if (lhs_tag == ValueTag::num_nan || rhs_tag == ValueTag::num_nan) {
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
-            } else if (lhs_tag == ValueTag::num_i32 && rhs_tag == lhs_tag) {
+            } else if (lhs_tag == ValueTag::num_i32) {
                 m_data.i *= other.to_num_i32().value();
-            } else if (lhs_tag == ValueTag::num_f64 && rhs_tag == lhs_tag) {
-                m_data.i *= other.to_num_f64().value();
+            } else if (lhs_tag == ValueTag::num_f64) {
+                m_data.d *= other.to_num_f64().value();
+            } else if (m_tag == ValueTag::val_ref) {
+                m_data.ref_p->operator*=(other);
             } else {
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
@@ -389,9 +319,11 @@ export namespace DerkJS {
                 } else if (*rhs_f64_v == 0) {
                     m_data.dud = dud_nan_char_v;
                     m_tag = ValueTag::num_nan;
-                } else {   
+                } else {
                     m_data.d /= rhs_f64_v.value();
                 }
+            } else if (m_tag == ValueTag::val_ref) {
+                m_data.ref_p->operator/=(other);
             } else {
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
@@ -428,6 +360,8 @@ export namespace DerkJS {
                 m_data.i += other.to_num_i32().value();
             } else if (lhs_tag == ValueTag::num_f64) {
                 m_data.d += other.to_num_f64().value();
+            } else if (m_tag == ValueTag::val_ref) {
+                m_data.ref_p->operator+=(other);
             } else {
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
@@ -464,6 +398,8 @@ export namespace DerkJS {
                 m_data.i -= other.to_num_i32().value();
             } else if (lhs_tag == ValueTag::num_f64) {
                 m_data.d -= other.to_num_f64().value();
+            } else if (m_tag == ValueTag::val_ref) {
+                m_data.ref_p->operator-=(other);
             } else {
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
@@ -482,7 +418,8 @@ export namespace DerkJS {
             case ValueTag::boolean: return static_cast<int>(m_data.b);
             case ValueTag::num_i32: return m_data.i;
             case ValueTag::num_f64: return static_cast<int>(m_data.d);
-            case ValueTag::object: // TODO: add obj_p->to_num_i32();
+            case ValueTag::object: return {};
+            case ValueTag::val_ref: return m_data.ref_p->to_num_i32();
             default: return {};
             }
         }
@@ -493,7 +430,8 @@ export namespace DerkJS {
             case ValueTag::boolean: return m_data.b ? 1.0 : 0.0 ;
             case ValueTag::num_i32: return static_cast<double>(m_data.i);
             case ValueTag::num_f64: return m_data.d;
-            case ValueTag::object: // TODO: add obj_p->to_num_f64();
+            case ValueTag::object: return {};
+            case ValueTag::val_ref: return m_data.ref_p->to_num_f64();
             default: return {};
             }
         }
@@ -503,15 +441,352 @@ export namespace DerkJS {
             case ValueTag::undefined: return "undefined";
             case ValueTag::null: return "null";
             case ValueTag::boolean: return std::string { m_data.b ? "true" : "false" };
+            case ValueTag::num_nan: default: return "NaN";
             case ValueTag::num_i32: return std::to_string(m_data.i);
             case ValueTag::num_f64: return std::to_string(m_data.d);
             case ValueTag::object: return "[Object object]";
-            case ValueTag::num_nan: default: return "NaN";
+            case ValueTag::val_ref: return m_data.ref_p->to_string();
             }
         }
 
-        [[nodiscard]] auto to_object() const noexcept -> std::optional<Object<Value>*> {
+        [[nodiscard]] auto to_object() noexcept -> ObjectBase<Value>* {
+            if (m_tag == ValueTag::object) {
+                return m_data.obj_p;
+            }
+
             return nullptr;
+        }
+
+        [[nodiscard]] auto get_value_ref() noexcept -> Value* {
+            return m_data.ref_p;
+        }
+
+        [[nodiscard]] auto deep_clone() const -> Value {
+            switch (m_tag) {
+            case ValueTag::undefined:
+            case ValueTag::null:
+            case ValueTag::boolean:
+            case ValueTag::num_nan: 
+            case ValueTag::num_i32:
+            case ValueTag::num_f64: return *this;
+            /// TODO: This `ObjectBase<Value>*` can easily point to a temporary owning pointer to some cloned object, so there needs to be a special way to distinguish this for quickly owning that Object in the VM heap...
+            case ValueTag::object: return m_data.obj_p->clone();
+            case ValueTag::val_ref: return m_data.ref_p->deep_clone();
+            }
+        }
+    };
+
+    /// TODO: implement dynamic strings later!
+    class StaticString : public ObjectBase<Value>, public StringBase {
+    public:
+        static constexpr auto max_length_v = 8;
+        static constexpr auto flag_extensible_v = 0b00000001;
+        static constexpr auto flag_frozen_v = 0b00000010;
+        static constexpr auto flag_prototype_v = 0b10000000;
+
+    private:
+        PropPool<PropertyHandle<Value>, Value> m_own_props;
+        ObjectBase<Value>* m_proto;
+        char m_data[max_length_v];
+        uint8_t m_length;
+        uint8_t m_flags;
+
+        [[nodiscard]] constexpr auto is_full() const noexcept -> bool {
+            return m_length >= max_length_v;
+        }
+
+    public:
+        constexpr StaticString(ObjectBase<Value>* proto_ref, const char* cstr, int length) noexcept
+        : m_data {}, m_length (std::min(length, max_length_v)), m_flags {0x00} {
+            std::copy_n(cstr, length, m_data);
+        }
+
+        //// BEGIN ObjectBase overrides
+
+        [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
+            return this;
+        }
+
+        [[nodiscard]] auto get_class_name() const noexcept -> std::string override {
+            return "string";
+        }
+
+        [[nodiscard]] auto is_extensible() const noexcept -> bool override {
+            return m_flags & flag_extensible_v;
+        }
+
+        [[nodiscard]] auto is_frozen() const noexcept -> bool override {
+            return (m_flags & flag_frozen_v) >> 1;
+        }
+
+        [[nodiscard]] auto is_prototype() const noexcept -> bool override {
+            return (m_flags & flag_prototype_v) >> 7;
+        }
+
+        [[nodiscard]] auto get_prototype() noexcept -> ObjectBase<Value>* override {
+            return m_proto;
+        }
+
+        auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<Value>, Value>& override {
+            return m_own_props;
+        }
+
+        [[nodiscard]] auto get_property_value(const PropertyHandle<Value>& handle) -> Value* override {
+            if (auto property_entry_it = m_own_props.find(handle); property_entry_it != m_own_props.end()) {
+                return &property_entry_it->second;
+            }
+
+            return nullptr;
+        }
+
+        [[maybe_unused]] auto set_property_value(const PropertyHandle<Value>& handle, const Value& value) -> Value* override {
+            m_own_props[handle] = value;
+            return &m_own_props[handle];
+        }
+
+        [[maybe_unused]] auto del_property_value(const PropertyHandle<Value>& handle) -> bool override {
+            return m_own_props.erase(m_own_props.find(handle)) != m_own_props.end();
+        }
+
+        [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
+            // Due to the Value repr needing an ObjectBase<Value>* ptr, the Value clone method returns a Value vs. `std::unique_ptr<Value>`, and the VM only stores Value-s on its stack, having a raw pointer is unavoidable. This may not be so bad since the PolyPool<ObjectBase<Value>> in the VM can quickly own it via `add_item()`.
+            auto self_clone = new StaticString {m_proto, m_data, m_length};
+
+            /// TODO: Add properties like .length as needed.
+
+            return self_clone;
+        }
+
+        [[nodiscard]] auto as_string() const -> std::string override {
+            std::string_view data_slice {m_data, m_data + m_length};
+
+            return std::format("{}", data_slice);
+        }
+
+        [[nodiscard]] auto operator==(const ObjectBase& other) const noexcept -> bool override {
+            if (get_class_name() != other.get_class_name()) {
+                return false;
+            }
+
+            return as_string() == other.as_string();
+        }
+
+        [[nodiscard]] auto operator<(const ObjectBase& other) const noexcept -> bool override {
+            if (get_class_name() != other.get_class_name()) {
+                return false;
+            }
+
+            return as_string() < other.as_string();
+        }
+
+        [[nodiscard]] auto operator>(const ObjectBase& other) const noexcept -> bool override {
+            if (get_class_name() != other.get_class_name()) {
+                return false;
+            }
+
+            return as_string() > other.as_string();
+        }
+
+
+        //// BEGIN StringBase overrides
+
+        auto is_empty() const noexcept -> bool override {
+            return m_length < 1;
+        }
+
+        auto get_slice([[maybe_unused]] int start, [[maybe_unused]] int length) -> std::unique_ptr<StringBase> override {
+            return {}; // todo
+        }
+
+        auto get_length() const noexcept -> int override {
+            return m_length;
+        }
+
+        void append_front([[maybe_unused]] const StringBase* other_view) override {
+            ; // todo
+        }
+
+        void append_back([[maybe_unused]] const StringBase* other_view) override {
+            ; // todo
+        }
+
+        /// NOTE: This is for String.prototype.indexOf()
+        auto find_substr_pos([[maybe_unused]] const StringBase* other_view) const noexcept -> int override {
+            return -1; // todo
+        }
+
+        [[nodiscard]] auto operator==(const StringBase& other) const noexcept -> bool override {
+            return as_str_view() == other.as_str_view();
+        }
+
+        [[nodiscard]] auto operator<(const StringBase& other) const noexcept -> bool  override {
+            return as_str_view() < other.as_str_view();
+        }
+
+        [[nodiscard]] auto operator>(const StringBase& other) const noexcept -> bool override {
+            return as_str_view() > other.as_str_view();
+        }
+
+        [[nodiscard]] auto as_str_view() const noexcept -> std::string_view override {
+            return std::string_view {m_data, static_cast<std::size_t>(m_length)};
+        }
+    };
+
+    class Object : public ObjectBase<Value> {
+    public:
+        static constexpr auto flag_extensible_v = 0b00000001;
+        static constexpr auto flag_frozen_v = 0b00000010;
+        static constexpr auto flag_prototype_v = 0b10000000;
+
+    private:
+        PropPool<PropertyHandle<Value>, Value> m_own_props;
+        ObjectBase<Value>* m_proto;
+        uint8_t m_flags;
+
+    public:
+        /// NOTE: Creates mutable instances of anonymous objects. Pass the `flag_prototype_v | flag_extensible_v` if needed for Foo.prototype!
+        Object(ObjectBase<Value>* proto, uint8_t flags = flag_extensible_v)
+        : m_own_props {}, m_proto {proto}, m_flags {flags} {}
+
+        [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
+            return this;
+        }
+
+        [[nodiscard]] auto get_class_name() const noexcept -> std::string override {
+            return "object";
+        }
+
+        [[nodiscard]] auto is_extensible() const noexcept -> bool override {
+            return m_flags & flag_extensible_v;
+        }
+
+        [[nodiscard]] auto is_frozen() const noexcept -> bool override {
+            return (m_flags & flag_frozen_v) >> 1;
+        }
+
+        [[nodiscard]] auto is_prototype() const noexcept -> bool override {
+            return (m_flags & flag_prototype_v) >> 7;
+        }
+
+        [[nodiscard]] auto get_prototype() noexcept -> ObjectBase<Value>* override {
+            return m_proto;
+        }
+
+        auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<Value>, Value>& override {
+            return m_own_props;
+        }
+
+        [[nodiscard]] auto get_property_value(const PropertyHandle<Value>& handle) -> Value* override {
+            if (auto property_entry_it = m_own_props.find(handle); property_entry_it != m_own_props.end()) {
+                return &property_entry_it->second;
+            }
+
+            return m_proto->get_property_value(handle);
+        }
+
+        [[maybe_unused]] auto set_property_value(const PropertyHandle<Value>& handle, const Value& value) -> Value* override {
+            m_own_props[handle] = value;
+            return &m_own_props[handle];
+        }
+
+        [[maybe_unused]] auto del_property_value(const PropertyHandle<Value>& handle) -> bool override {
+            return m_own_props.erase(m_own_props.find(handle)) != m_own_props.end();
+        }
+
+        [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
+            // Due to the Value repr needing an ObjectBase<Value>* ptr, the Value clone method returns a Value vs. `std::unique_ptr<Value>`, and the VM only stores Value-s on its stack, having a raw pointer is unavoidable. This may not be so bad since the PolyPool<ObjectBase<Value>> in the VM can quickly own it via `add_item()`.
+            auto self_clone = new Object {m_proto};
+
+            for (const auto& [prop_handle, prop_value] : m_own_props) {
+                self_clone->set_property_value(prop_handle, prop_value.deep_clone());
+            }
+
+            return self_clone;
+        }
+
+        [[nodiscard]] auto as_string() const -> std::string override {
+            return "[object Object]";
+        }
+
+        [[nodiscard]] auto operator==(const ObjectBase& other) const noexcept -> bool override {
+            if (get_class_name() != other.get_class_name()) {
+                return false;
+            }
+
+            const auto& self_props = get_own_prop_pool();
+            const auto& other_props = other.get_own_prop_pool();
+
+            if (self_props.size() != other_props.size()) {
+                return false;
+            }
+
+            auto self_prop_it = self_props.begin();
+
+            while (self_prop_it != self_props.end()) {
+                if (auto prop_pair = other_props.find(self_prop_it->first); prop_pair == other_props.end()) {
+                    return false;
+                } else if (const auto& [prop_key, prop_value] = *prop_pair; prop_key != self_prop_it->first || prop_value != self_prop_it->second) {
+                    return false;
+                }
+
+                ++self_prop_it;
+            }
+
+            return true;
+        }
+
+        [[nodiscard]] auto operator<(const ObjectBase& other) const noexcept -> bool override {
+            if (get_class_name() != other.get_class_name()) {
+                return false;
+            }
+
+            const auto& self_props = get_own_prop_pool();
+            const auto& other_props = other.get_own_prop_pool();
+
+            if (self_props.size() != other_props.size()) {
+                return false;
+            }
+
+            auto self_prop_it = self_props.cbegin();
+
+            while (self_prop_it != self_props.cend()) {
+                if (auto prop_pair = other_props.find(self_prop_it->first); prop_pair == other_props.cend()) {
+                    return false;
+                } else if (const auto& [prop_key, prop_value] = *prop_pair; prop_key < self_prop_it->first || prop_value < self_prop_it->second) {
+                    return false;
+                }
+
+                ++self_prop_it;
+            }
+
+            return true;
+        }
+
+        [[nodiscard]] auto operator>(const ObjectBase& other) const noexcept -> bool override {
+            if (get_class_name() != other.get_class_name()) {
+                return false;
+            }
+
+            const auto& self_props = get_own_prop_pool();
+            const auto& other_props = other.get_own_prop_pool();
+
+            if (self_props.size() != other_props.size()) {
+                return false;
+            }
+
+            auto self_prop_it = self_props.cbegin();
+
+            while (self_prop_it != self_props.cend()) {
+                if (auto prop_pair = other_props.find(self_prop_it->first); prop_pair == other_props.cend()) {
+                    return false;
+                } else if (const auto& [prop_key, prop_value] = *prop_pair; prop_key > self_prop_it->first || prop_value > self_prop_it->second) {
+                    return false;
+                }
+
+                ++self_prop_it;
+            }
+
+            return true;
         }
     };
 }

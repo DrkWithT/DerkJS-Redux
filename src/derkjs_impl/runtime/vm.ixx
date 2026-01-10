@@ -9,6 +9,7 @@ module;
 
 export module runtime.vm;
 
+import runtime.objects;
 import runtime.value;
 import runtime.bytecode;
 
@@ -74,7 +75,7 @@ export namespace DerkJS {
     struct ExternVMCtx {
         using call_frame_type = CallFrame<DispatchPolicy::tco>;
 
-        // GCHeap<Object<Value>> m_heap;
+        PolyPool<ObjectBase<Value>> heap;
         std::vector<Value> stack;
         std::vector<call_frame_type> frames;
 
@@ -98,7 +99,7 @@ export namespace DerkJS {
         bool has_err;
 
         ExternVMCtx(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit)
-        : stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, rsbp {0}, rsp {-1}, has_err {false} {
+        : heap (std::move(prgm.heap_items)), stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, rsbp {0}, rsp {-1}, has_err {false} {
             stack.reserve(stack_length_limit);
             stack.resize(stack_length_limit);
             frames.reserve(call_frame_limit);
@@ -174,7 +175,7 @@ export namespace DerkJS {
             ++m_rip_p;
         }
 
-        void op_emplace_local(int16_t local_n) noexcept {
+        void op_emplace(int16_t local_n) noexcept {
             m_stack[m_rsbp + local_n] = m_stack[m_rsp];
             --m_rsp;
             ++m_rip_p;
@@ -427,16 +428,33 @@ export namespace DerkJS {
                 case Opcode::djs_put_const:
                     op_push_const(next_argv[0]);
                     break;
+                case Opcode::djs_put_val_ref:
+                    m_status = ExitStatus::opcode_err;
+                    break;
                 case Opcode::djs_put_obj_ref:
+                    m_status = ExitStatus::opcode_err;
+                    break;
+                case Opcode::djs_deref:
                     m_status = ExitStatus::opcode_err;
                     break;
                 case Opcode::djs_pop:
                     op_pop(next_argv[0]);
                     break;
-                // case Opcode::djs_create_obj:
-                // case Opcode::djs_get_prop:
-                // case Opcode::djs_put_prop:
-                // case Opcode::djs_del_prop:
+                case Opcode::djs_emplace:
+                    op_emplace(next_argv[0]);
+                    break;
+                case Opcode::djs_put_obj_dud:
+                    m_status = ExitStatus::opcode_err;
+                    break;
+                case Opcode::djs_get_prop:
+                    m_status = ExitStatus::opcode_err;
+                    break;
+                case Opcode::djs_put_prop:
+                    m_status = ExitStatus::opcode_err;
+                    break;
+                case Opcode::djs_del_prop:
+                    m_status = ExitStatus::opcode_err;
+                    break;
                 case Opcode::djs_mod:
                     op_mod();
                     break;
@@ -507,9 +525,15 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_nop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_dup(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_put_const(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_put_val_ref(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_put_obj_ref(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_deref(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_pop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_emplace_local(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_emplace(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_put_obj_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_get_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_put_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_del_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_mod(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_mul(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_div(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
@@ -535,7 +559,8 @@ export namespace DerkJS {
     using tco_opcode_fn = bool(*)(ExternVMCtx&, int16_t, int16_t);
     constexpr tco_opcode_fn tco_opcodes[static_cast<std::size_t>(Opcode::last)] = {
         op_nop,
-        op_dup, op_put_const, op_put_obj_ref, op_pop, op_emplace_local,
+        op_dup, op_put_const, op_put_val_ref, op_put_obj_ref, op_deref, op_pop, op_emplace,
+        op_put_obj_dud, op_get_prop, op_put_prop, op_del_prop,
         op_mod, op_mul, op_div, op_add, op_sub,
         op_test_falsy, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte,
         op_jump_else, op_jump_if, op_jump,
@@ -565,9 +590,42 @@ export namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
+    [[nodiscard]] inline auto op_put_val_ref(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        switch (a1) {
+        case 0: {
+            ctx.stack[ctx.rsp + 1] = Value {&ctx.stack[ctx.rsbp + a0]};
+        } break;
+        case 1: {
+            ctx.stack[ctx.rsp + 1] = Value {ctx.consts_view + a0};
+        } break;
+        case 2: {
+            ctx.stack[ctx.rsp + 1] = Value {ctx.heap.get_item(a0)};
+        } break;
+        default:
+            return false;
+        }
+
+        ++ctx.rsp;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
     [[nodiscard]] inline auto op_put_obj_ref(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         /// TODO: implement!
         ctx.has_err = true;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_deref(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        if (auto& ref_value_ref = ctx.stack[ctx.rsp]; ref_value_ref.get_tag() != ValueTag::val_ref) {
+            return false;
+        } else {
+            ctx.stack[ctx.rsp] = ref_value_ref.deep_clone();
+        }
+
+        ++ctx.rip_p;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
@@ -579,12 +637,67 @@ export namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_emplace_local(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ctx.stack[ctx.rsbp + a0] = ctx.stack[ctx.rsp];
+    [[nodiscard]] inline auto op_emplace(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        if (auto& dest_val_ref = ctx.stack[ctx.rsbp + a0]; dest_val_ref.get_tag() != ValueTag::val_ref) {
+            // Case 1: the target is a primitive Value on the stack.
+            dest_val_ref = ctx.stack[ctx.rsp];
+        } else if (auto dest_val_ref_p = dest_val_ref.get_value_ref(); dest_val_ref_p) {
+            // Case 2: the target is a valid Value reference on the stack.
+            *dest_val_ref_p = ctx.stack[ctx.rsp];
+        } else {
+            return false;
+        }
+
         --ctx.rsp;
         ++ctx.rip_p;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_put_obj_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        if (const auto obj_id = ctx.heap.get_next_id(); !ctx.heap.add_item(obj_id, Object {nullptr})) {
+            return false;
+        } else {
+            ctx.stack[ctx.rsp + 1] = Value {ctx.heap.get_item(obj_id)};
+        }
+
+        ++ctx.rsp;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_get_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        if (auto& src_val_ref = ctx.stack[ctx.rsp - 1]; src_val_ref.get_tag() != ValueTag::object) {
+            return false;
+        } else if (auto src_obj_p = src_val_ref.to_object(); !src_obj_p) {
+            return false;
+        } else if (auto src_prop_value_p = src_obj_p->get_property_value(PropertyHandle<Value> {src_obj_p, ctx.stack[ctx.rsp].get_value_ref(), PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)}); !src_prop_value_p) {
+            return false;
+        } else {
+            ctx.stack[ctx.rsp - 1] = Value {src_prop_value_p};
+            --ctx.rsp;
+            ++ctx.rip_p;
+        }
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_put_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        if (auto obj_p = ctx.stack[ctx.rsbp + a0].to_object(); !obj_p) {
+            return false;
+        } else {
+            obj_p->set_property_value(PropertyHandle<Value> { obj_p, ctx.stack[ctx.rsp - 1].get_value_ref(), PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)}, ctx.stack[ctx.rsp]);
+        }
+
+        ctx.rsp -= a1;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_del_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        return false; // TODO!
     }
 
     [[nodiscard]] inline auto op_mod(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {

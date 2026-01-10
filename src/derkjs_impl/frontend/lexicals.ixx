@@ -58,6 +58,7 @@ export namespace DerkJS {
         left_bracket,
         right_bracket,
         dot,
+        colon,
         comma,
         semicolon,
         eof,
@@ -118,8 +119,12 @@ export namespace DerkJS {
             return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
         }
 
+        [[nodiscard]] static constexpr auto is_digit(char c) noexcept -> bool {
+            return (c >= '0' && c <= '9');
+        }
+
         [[nodiscard]] static constexpr auto is_numeric(char c) noexcept -> bool {
-            return (c >= '0' && c <= '9') || c == '.';
+            return is_digit(c) || c == '.';
         }
 
         [[nodiscard]] static constexpr auto is_op_symbol(char c) noexcept -> bool {
@@ -268,7 +273,7 @@ export namespace DerkJS {
             const auto temp_column = m_column;
 
             while (!at_eof()) {
-                if (const auto c = source.at(m_pos); is_alphabetic(c) || is_numeric(c)) {
+                if (const auto c = source.at(m_pos); is_alphabetic(c) || is_digit(c)) {
                     update_source_location(c);
                     ++temp_length;
                 } else {
@@ -378,6 +383,7 @@ export namespace DerkJS {
             case '[': return lex_single(source, TokenTag::left_bracket);
             case ']': return lex_single(source, TokenTag::right_bracket);
             case '.': return lex_single(source, TokenTag::dot);
+            case ':': return lex_single(source, TokenTag::colon);
             case ',': return lex_single(source, TokenTag::comma);
             case ';': return lex_single(source, TokenTag::semicolon);
             default: break;

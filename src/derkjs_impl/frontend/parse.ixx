@@ -18,6 +18,7 @@ import frontend.ast;
 export namespace DerkJS {
     enum class SyntaxTag: uint8_t {
         expr_primary,
+        expr_object,
         expr_member,
         expr_new,
         expr_call,
@@ -38,6 +39,7 @@ export namespace DerkJS {
 
     constexpr std::array<std::string_view, static_cast<std::size_t>(SyntaxTag::last)> syntax_names = {
         "expr-primary",
+        "expr-object", 
         "expr-member",
         "expr-new",
         "expr-call",
@@ -50,6 +52,7 @@ export namespace DerkJS {
         "stmt-var",
         "stmt-if",
         "stmt-return",
+        "stmt-while",
         "stmt-function",
         "stmt-expr",
     };
@@ -105,7 +108,7 @@ export namespace DerkJS {
         }
 
         void consume(Lexer& lexer, const std::string& source, std::same_as<TokenTag> auto first, std::same_as<TokenTag> auto ... more) {
-            if (m_current.match_tag_to(first, more...)) {
+            if (m_current.match_tag_to(first, more...) && !m_current.match_tag_to(TokenTag::unknown)) {
                 m_previous = m_current;
                 m_current = advance(lexer, source);
                 return;
@@ -144,6 +147,8 @@ export namespace DerkJS {
                     snippet_begin,
                     primary_txt_length
                 );
+            case TokenTag::left_brace:
+                return parse_object(lexer, source);
             case TokenTag::left_paren:
                 {
                     consume_any(lexer, source);
@@ -160,6 +165,60 @@ export namespace DerkJS {
             std::unreachable();
         }
 
+        [[nodiscard]] auto parse_field(Lexer& lexer, const std::string& source) -> ObjectField {
+            consume(lexer, source, TokenTag::identifier); // TODO: add string key support for object fields!
+
+            Token field_name = m_previous;
+
+            consume(lexer, source, TokenTag::colon);
+
+            return ObjectField {
+                .name = field_name,
+                .value = parse_logical_or(lexer, source)
+            };
+        }
+
+        [[nodiscard]] auto parse_object(Lexer& lexer, const std::string& source) -> ExprPtr {
+            const auto object_lexeme_begin = m_current.start;
+            consume_any(lexer, source); // eat pre-checked '{' since this is only called from parse_primary()
+
+            std::vector<ObjectField> fields;
+
+            if (m_current.match_tag_to(TokenTag::right_brace)) {
+                consume_any(lexer, source);
+
+                return std::make_unique<Expr>(
+                    ObjectLiteral {
+                        .fields = std::move(fields)
+                    },
+                    0,
+                    object_lexeme_begin,
+                    m_current.start - object_lexeme_begin + 1
+                );
+            }
+
+            fields.emplace_back(parse_field(lexer, source));
+
+            while (!at_eof()) {
+                if (m_current.match_tag_to(TokenTag::right_brace)) {
+                    consume_any(lexer, source);
+                    break;
+                }
+
+                consume(lexer, source, TokenTag::comma);
+                fields.emplace_back(parse_field(lexer, source));
+            }
+
+            return std::make_unique<Expr>(
+                ObjectLiteral {
+                    .fields = std::move(fields)
+                },
+                0,
+                object_lexeme_begin,
+                m_current.start - object_lexeme_begin + 1
+            );
+        }
+
         [[nodiscard]] auto parse_member(Lexer& lexer, const std::string& source) -> ExprPtr {
             m_syntax = SyntaxTag::expr_member;
 
@@ -170,10 +229,9 @@ export namespace DerkJS {
                 consume_any(lexer, source);
 
                 return std::make_unique<Expr>(
-                    Binary {
-                        .lhs = std::move(lhs_primary),
-                        .rhs = parse_call(lexer, source),
-                        .op = AstOp::ast_op_dot_access,
+                    MemberAccess {
+                        .target = std::move(lhs_primary),
+                        .key = parse_call(lexer, source),
                     },
                     0,
                     snippet_begin,
@@ -187,10 +245,9 @@ export namespace DerkJS {
                 consume(lexer, source, TokenTag::right_bracket);
 
                 return std::make_unique<Expr>(
-                    Binary {
-                        .lhs = std::move(lhs_primary),
-                        .rhs = std::move(enclosed_expr),
-                        .op = AstOp::ast_op_index_access,
+                    MemberAccess {
+                        .target = std::move(lhs_primary),
+                        .key = std::move(enclosed_expr),
                     },
                     0,
                     snippet_begin,
@@ -521,14 +578,24 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto parse_var_decl(Lexer& lexer, const std::string& source) -> VarDecl {
+            const auto snippet_begin = m_current.start;
+
             consume(lexer, source, TokenTag::identifier);
 
             Token name_token = m_previous;
 
+            /// NOTE: handle other case of `var x;`... so this example would make `var x = undefined;`
             if (!m_current.match_tag_to(TokenTag::symbol_assign)) {
                 return VarDecl {
                     .name = name_token,
-                    .rhs = {}
+                    .rhs = std::make_unique<Expr>(
+                        Primitive {
+                            .token = Token {TokenTag::keyword_undefined, 0, 0, name_token.line, name_token.column + name_token.length}
+                        },
+                        0,
+                        snippet_begin,
+                        snippet_begin
+                    )
                 };
             }
 

@@ -1,7 +1,8 @@
 module;
 
-#include <utility>
+#include <type_traits>
 #include <limits>
+#include <utility>
 
 #include <optional>
 #include <string>
@@ -15,11 +16,17 @@ export module backend.bc_generate;
 
 import frontend.lexicals;
 import frontend.ast;
+import runtime.objects;
 import runtime.value;
 import runtime.bytecode;
 
 export namespace DerkJS {
     struct GlobalFuncOpt {};
+
+    enum class NameLookupMode : uint8_t {
+        as_var_name,
+        as_pooled_name
+    };
 
     class BytecodeGenPass {
     private:
@@ -37,14 +44,14 @@ export namespace DerkJS {
         };
 
         std::vector<SimStackFrame> m_mappings;
-        std::vector<Object<Value>> m_heap_items;
+        PolyPool<ObjectBase<Value>> m_heap_items; // Stores all objects including polymorphic StaticString, etc. from ObjectBase<Value>.
+        std::flat_map<std::string, int> m_poolable_str_ids;
         std::vector<Value> m_consts;
         std::vector<Instruction> m_code;
         std::vector<int> m_func_offsets;
 
         int m_next_temp_id;
-        // bool is_op_emplaced;
-        // bool is_temp_poppable;
+        bool m_handle_props_as_rvals;
 
         void enter_simulated_frame() {
             m_mappings.emplace_back(SimStackFrame {
@@ -94,15 +101,53 @@ export namespace DerkJS {
             }
         }
 
-        [[nodiscard]] auto record_heap_item(std::same_as<Object<Value>> auto&& object) -> Arg {
-            const int next_object_id = m_heap_items.size();
+        [[nodiscard]] auto lookup_pooled_string(const std::string& s) -> int {
+            const auto& str_items = m_heap_items.view_items();
 
-            m_heap_items.emplace_back(std::forward<Object<Value>>(object));
+            for (int str_id = 0; const auto& pooled_str_box : str_items) {
+                if (pooled_str_box->operator==(StaticString(nullptr, s.c_str(), s.length()))) {
+                    return str_id;
+                }
 
-            return Arg {
-                .n = static_cast<int16_t>(next_object_id),
-                .tag = Location::heap_obj
-            };
+                ++str_id;
+            }
+
+            return -1;
+        }
+
+        /// NOTE: returns `int` representing the ID of the newly pooled JS string.
+        [[nodiscard]] auto record_pooled_string(StaticString s) -> int {
+            std::string s_owned_str = s.as_string();
+
+            if (auto existing_pooled_str_id_it = m_poolable_str_ids.find(s_owned_str); existing_pooled_str_id_it != m_poolable_str_ids.end()) {
+                return existing_pooled_str_id_it->second;
+            }
+
+            const auto result_id = m_heap_items.get_next_id();
+            
+            if (!m_heap_items.add_item(result_id, std::move(s))) {
+                return -1;
+            }
+
+            m_poolable_str_ids.emplace(s_owned_str, result_id);
+
+            return result_id;
+        }
+
+        /// NOTE: returns `int` representing the allocated object ID.
+        template <typename ObjectType, typename ... ConstructArgs> requires (std::is_base_of_v<ObjectBase<Value>, ObjectType>)
+        [[nodiscard]] auto record_heap_object_with(ConstructArgs&& ... args) -> int {
+            const auto result_id = m_heap_items.get_next_id();
+
+            if (result_id > std::numeric_limits<int16_t>::max()) {
+                return -1;
+            }
+
+            if (!m_heap_items.add_item(result_id, ObjectType (std::forward<ConstructArgs>(args)...))) {
+                return -1;
+            }
+
+            return result_id;
         }
 
         [[nodiscard]] auto record_constants(const std::string& literal_text, std::same_as<Value> auto&& new_value) -> Arg {
@@ -261,10 +306,29 @@ export namespace DerkJS {
             case TokenTag::identifier: {
                 std::string any_name_lexeme = literal_token.as_string(source);
 
+                if (auto pooled_name_id_it = m_poolable_str_ids.find(any_name_lexeme); pooled_name_id_it != m_poolable_str_ids.end()) {
+                    // Push property key-string ref from constants.
+                    encode_instruction(
+                        Opcode::djs_put_val_ref,
+                        Arg {
+                            .n = static_cast<int16_t>(pooled_name_id_it->second),
+                            .tag = Location::immediate
+                        },
+                        Arg {
+                            .n = 1,
+                            .tag = Location::immediate
+                        }
+                    );
+                    return Arg {
+                        .n = static_cast<int16_t>(update_temp_id(1)),
+                        .tag = Location::temp
+                    };
+                }
+
                 if (auto name_locator_opt = lookup_item(any_name_lexeme); name_locator_opt) {
                     if (const auto locator_tag = name_locator_opt->tag; locator_tag == Location::temp) {
-                        encode_instruction(djs_dup, *name_locator_opt);
-
+                        encode_instruction(Opcode::djs_dup, *name_locator_opt);
+                        
                         return Arg {
                             .n = static_cast<int16_t>(update_temp_id(1)),
                             .tag = Location::temp
@@ -272,7 +336,7 @@ export namespace DerkJS {
                     } else if (locator_tag == Location::constant) {
                         /// NOTE: Push constants as needed within blocks (even in functions), using the dedicated opcode for this case.
                         encode_instruction(Opcode::djs_put_const, *name_locator_opt);
-
+                        
                         return Arg {
                             .n = static_cast<int16_t>(update_temp_id(1)),
                             .tag = Location::temp
@@ -280,7 +344,7 @@ export namespace DerkJS {
                     } else if (locator_tag == Location::heap_obj) {
                         /// NOTE: Push constants as needed within blocks (even in functions).
                         encode_instruction(Opcode::djs_put_obj_ref, *name_locator_opt);
-
+                        
                         return Arg {
                             .n = static_cast<int16_t>(update_temp_id(1)),
                             .tag = Location::temp
@@ -296,7 +360,85 @@ export namespace DerkJS {
             }
         }
 
-        [[nodiscard]] auto emit_unary([[maybe_unused]] const Unary& expr, [[maybe_unused]] const std::string& source) -> std::optional<Arg> {
+        [[nodiscard]] auto emit_object_literal(const ObjectLiteral& object, const std::string& source) -> std::optional<Arg> {
+            const auto& [obj_fields] = object;
+
+            const auto obj_dud_temp_id = update_temp_id(1);
+            encode_instruction(Opcode::djs_put_obj_dud);
+
+            for (const auto& [obj_key_token, obj_value] : obj_fields) {
+                /// TODO: add support for longer property names past 8
+                // 1. Try recording the property key name, but as an interned string too...
+                const auto obj_key_length = obj_key_token.length;
+
+                if (obj_key_length > 8) {
+                    std::println("NOTE [line {}, col {}]: Property name is too long- max length supported is 8.", obj_key_token.line, obj_key_token.column);
+
+                    return {};
+                }
+
+                std::string obj_key_name = source.substr(obj_key_token.start, obj_key_length);
+                StaticString key_str {nullptr, obj_key_name.c_str(), obj_key_length};
+
+                // 2. Try mapping the string to some string pool ID- used at run time to populate properties of an object.
+                auto key_id = record_pooled_string(key_str);
+
+                if (key_id == -1) {
+                    std::println("NOTE: could not resolve location of object property '{}'.", obj_key_name);
+                    return {};
+                }
+
+                auto key_locator_arg = record_constants(obj_key_name, Value {m_heap_items.get_item(key_id)});
+
+                if (key_locator_arg.n == -1) {
+                    std::println("NOTE: could not record constant for pooled string of property '{}'.", obj_key_name);
+                    return {};
+                }
+                
+                const auto key_ref_temp_id = update_temp_id(1);
+                encode_instruction(
+                    Opcode::djs_put_val_ref,
+                    Arg {
+                        .n = static_cast<int16_t>(key_locator_arg.n),
+                        .tag = Location::immediate
+                    },
+                    Arg {
+                        .n = 1, // get Value ref from VM-CONSTS as the immutable property-key's data...
+                        .tag = Location::immediate
+                    }
+                );
+
+                // 3. Try emitting the bytecode that populates each property of this literal at run time.
+                if (auto obj_prop_rhs_locator = emit_expr(*obj_value, source); obj_prop_rhs_locator) {
+                    const auto popping_count = m_next_temp_id - key_ref_temp_id;
+
+                    encode_instruction(
+                        Opcode::djs_put_prop,
+                        Arg {
+                            .n = static_cast<int16_t>(obj_dud_temp_id),
+                            .tag = Location::temp
+                        },
+                        Arg { // NOTE: this opcode pops off the stack temporaries once their data is saved in the JS object...
+                            .n = static_cast<int16_t>(popping_count),
+                            .tag = Location::immediate
+                        }
+                    );
+                    update_temp_id(-popping_count);
+                } else {
+                    return {};
+                }
+            }
+
+            // 4. Yield the local, on-stack location of the object reference.
+            return Arg {
+                .n = static_cast<int16_t>(obj_dud_temp_id),
+                .tag = Location::temp
+            };
+        }
+
+        [[nodiscard]] auto emit_unary(const Unary& expr, const std::string& source) -> std::optional<Arg> {
+            m_handle_props_as_rvals = true;
+
             if (const auto& [unary_expr, unary_op] = expr; unary_op == AstOp::ast_op_bang) {
                 if (!emit_expr(*unary_expr, source)) {
                     return {};
@@ -391,6 +533,41 @@ export namespace DerkJS {
             }
         }
 
+        [[nodiscard]] auto emit_member_access(const MemberAccess& member_access, const std::string& source) -> std::optional<Arg> {
+            const auto& [target_expr, key_expr] = member_access;
+
+            // 1. Emit target (object)'s reference to ensure it's on the stack.
+            const auto pre_access_slot_id = current_temp_id();
+            auto target_ref_locator = emit_expr(*target_expr, source);
+
+            if (!target_ref_locator) {
+                std::println("NOTE: Could not resolve accessed object name for property access.");
+                return {};
+            }
+
+            // 2. Emit key value evaluation.
+            const auto access_key_slot_id = current_temp_id();
+
+            if (!emit_expr(*key_expr, source)) {
+                std::println("NOTE: Could not resolve object's property name for access.");
+                return {};
+            }
+
+            encode_instruction(Opcode::djs_get_prop);
+
+            /// NOTE: If the property's access must be treated as a temporary value, just deref it in-place for now- This creates a temporary for computations e.g arithmetic.
+            if (m_handle_props_as_rvals) {
+                encode_instruction(Opcode::djs_deref);
+            }
+
+            m_next_temp_id = pre_access_slot_id;
+
+            return Arg {
+                .n = static_cast<int16_t>(pre_access_slot_id),
+                .tag = Location::temp
+            };
+        }
+
         [[nodiscard]] auto emit_binary(const Binary& expr, const std::string& source) -> std::optional<Arg> {
             struct OpcodeAssocPair {
                 Opcode op;
@@ -476,6 +653,7 @@ export namespace DerkJS {
             const auto [opcode, is_opcode_lefty, has_logical_eval] = *opcode_associated_pair;
 
             if (has_logical_eval) {
+                m_handle_props_as_rvals = true;
                 return emit_logical_expr(bin_op, *lhs, *rhs, source);
             }
 
@@ -484,10 +662,12 @@ export namespace DerkJS {
             std::optional<Arg> result_locator;
 
             if (is_opcode_lefty) {
+                m_handle_props_as_rvals = true;
                 rhs_locator = emit_expr(*rhs, source);
                 lhs_locator = emit_expr(*lhs, source);
                 result_locator = rhs_locator;
             } else {
+                m_handle_props_as_rvals = true;
                 lhs_locator = emit_expr(*lhs, source);
                 rhs_locator = emit_expr(*rhs, source);
                 result_locator = lhs_locator;
@@ -503,32 +683,52 @@ export namespace DerkJS {
             return result_locator;
         }
 
-        /// TODO: handle complex LHS exprs: a member access must result in a reference being duped to the stack top.
         [[nodiscard]] auto emit_assign(const Assign& expr, const std::string& source) -> std::optional<Arg> {
-            /// NOTE: the name-to-Arg mapping of some variable will be updated to this new assignment's RHS's slot. This eliminates the kludge of 'emplacing' values under the stack top which would require some hacky indexing.
             const auto& [assign_lhs, assign_rhs] = expr;
-            auto assign_rhs_locator = emit_expr(*assign_rhs, source);
 
-            if (!assign_rhs_locator) {
-                return {};
+            if (auto primitive_p = std::get_if<Primitive>(&assign_lhs->data); primitive_p) {
+                /// NOTE: the name-to-Arg mapping of some variable will be updated to this new assignment's RHS's slot. This eliminates the kludge of 'emplacing' values under the stack top which would require some hacky indexing.
+                auto assign_rhs_locator = emit_expr(*assign_rhs, source);
+
+                if (!assign_rhs_locator) {
+                    return {};
+                }
+
+                std::string local_var_name = primitive_p->token.as_string(source);
+                auto local_var_locator = lookup_item(local_var_name);
+
+                if (!local_var_locator) {
+                    return {};
+                }
+
+                encode_instruction(Opcode::djs_emplace, *local_var_locator);
+                update_temp_id(-1);
+
+                return local_var_locator;
+            } else if (auto access_p = std::get_if<MemberAccess>(&assign_lhs->data); access_p) {
+                m_handle_props_as_rvals = false;
+
+                auto prop_locator = emit_member_access(*access_p, source);
+
+                m_handle_props_as_rvals = true;
+
+                if (!prop_locator) {
+                    return {};
+                }
+
+                auto assign_rhs_locator = emit_expr(*assign_rhs, source);
+
+                if (!assign_rhs_locator) {
+                    return {};
+                }
+
+                encode_instruction(Opcode::djs_emplace, *prop_locator);
+                update_temp_id(-1);
+
+                return prop_locator;
             }
 
-            auto var_name_literal = std::get_if<Primitive>(&assign_lhs->data);
-
-            if (!var_name_literal) {
-                return {};
-            }
-
-            std::string lhs_name = var_name_literal->token.as_string(source);
-            auto dest_locator = lookup_item(lhs_name);
-
-            if (!dest_locator) {
-                return {};
-            }
-
-            encode_instruction(Opcode::djs_emplace_local, *dest_locator);
-
-            return dest_locator;
+            return {};
         }
 
         [[nodiscard]] auto emit_call(const Call& expr, const std::string& source) -> std::optional<Arg> {
@@ -569,6 +769,11 @@ export namespace DerkJS {
         [[nodiscard]] auto emit_expr(const Expr& expr, const std::string& source) -> std::optional<Arg> {
             if (auto primitive_p = std::get_if<Primitive>(&expr.data); primitive_p) {
                 return emit_primitive(*primitive_p, source);
+            } else if (auto object_p = std::get_if<ObjectLiteral>(&expr.data); object_p) {
+                /// TODO: maybe add opcode support for object cloning... could be good for instances of prototypes.
+                return emit_object_literal(*object_p, source);
+            } else if (auto member_access_p = std::get_if<MemberAccess>(&expr.data); member_access_p) {
+                return emit_member_access(*member_access_p, source); // add cloning of ref vals for non-assignments
             } else if (auto unary_p = std::get_if<Unary>(&expr.data); unary_p) {
                 return emit_unary(*unary_p, source);
             } else if (auto binary_p = std::get_if<Binary>(&expr.data); binary_p) {
@@ -603,7 +808,6 @@ export namespace DerkJS {
 
         [[nodiscard]] auto emit_var_decl(const VarDecl& stmt, const std::string& source) -> bool {
             const auto& [var_name_token, var_init_expr] = stmt;
-
             
             if (auto var_init_locator = emit_expr(*var_init_expr, source); !var_init_locator) {
                 return false;
@@ -792,7 +996,7 @@ export namespace DerkJS {
 
     public:
         BytecodeGenPass()
-        : m_mappings {}, m_heap_items {}, m_consts {}, m_code {}, m_func_offsets {}, m_next_temp_id {0} {
+        : m_mappings {}, m_heap_items {1024}, m_consts {}, m_code {}, m_func_offsets {}, m_next_temp_id {0}, m_handle_props_as_rvals {true} {
             /// NOTE: Consider global scope 1st for global variables / stmts...
             enter_simulated_frame();
         }
@@ -824,10 +1028,10 @@ export namespace DerkJS {
             m_func_offsets.emplace_back(-1);
 
             return Program {
-                .heap_items = std::exchange(m_heap_items, {}),
-                .consts = std::exchange(m_consts, {}),
-                .code = std::exchange(m_code, {}),
-                .offsets = std::exchange(m_func_offsets, {}),
+                .heap_items = std::move(m_heap_items),
+                .consts = std::move(m_consts),
+                .code = std::move(m_code),
+                .offsets = std::move(m_func_offsets),
                 .entry_func_id = global_func_chunk.n,
             };
         }
