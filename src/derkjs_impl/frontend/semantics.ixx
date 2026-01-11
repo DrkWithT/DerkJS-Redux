@@ -431,7 +431,7 @@ namespace DerkJS {
             return false;
         }
 
-        [[maybe_unused]] auto check_top_level(PrepassFlag should_prepass, const ASTUnit& ast, const std::flat_map<int, std::string>& source_map) -> bool {
+        [[maybe_unused]] auto check_top_level(PrepassFlag should_prepass, const ASTUnit& ast, const std::vector<std::string>& source_map) -> bool {
             m_prepass = should_prepass == PrepassFlag::yes;
 
             for (const auto& [source_filename, ast, src_id] : ast) {
@@ -449,7 +449,7 @@ namespace DerkJS {
             enter_scope("this");
         }
 
-        [[nodiscard]] auto operator()(const ASTUnit& ast, const std::flat_map<int, std::string>& source_map) -> bool {
+        [[nodiscard]] auto operator()(const ASTUnit& ast, const std::vector<std::string>& source_map) -> bool {
             check_top_level(PrepassFlag::yes, ast, source_map);
 
             return check_top_level(PrepassFlag::no, ast, source_map);

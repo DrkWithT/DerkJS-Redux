@@ -331,10 +331,10 @@ export namespace DerkJS {
     public:
         Lexer(std::string_view source) noexcept
         : m_specials {}, m_pos {}, m_end {static_cast<int>(source.size())}, m_line {1}, m_column {1} {
-            m_specials.emplace("var", TokenTag::keyword_var),
+            m_specials.emplace("var", TokenTag::keyword_var);
             m_specials.emplace("if", TokenTag::keyword_if);
             m_specials.emplace("else", TokenTag::keyword_else);
-            m_specials.emplace("return", TokenTag::keyword_return),
+            m_specials.emplace("return", TokenTag::keyword_return);
             m_specials.emplace("while", TokenTag::keyword_while);
             m_specials.emplace("function", TokenTag::keyword_function);
             m_specials.emplace("prototype", TokenTag::keyword_prototype);
