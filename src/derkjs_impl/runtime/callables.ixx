@@ -49,15 +49,15 @@ export namespace DerkJS {
             return false;
         }
 
-        [[nodiscard]] auto get_prototype() noexcept -> ObjectBase<V>* override {
+        [[nodiscard]] auto get_prototype() noexcept -> ObjectBase<Value>* override {
             return nullptr;
         }
 
-        [[nodiscard]] auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<V>, V>& override {
+        [[nodiscard]] auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<Value>, Value>& override {
             return m_own_props;
         }
 
-        [[nodiscard]] auto get_property_value(const PropertyHandle<V>& handle) -> V* override {
+        [[nodiscard]] auto get_property_value([[maybe_unused]] const PropertyHandle<Value>& handle) -> Value* override {
             // if (auto property_entry_it = m_own_props.find(handle); property_entry_it != m_own_props.end()) {
             //     return &property_entry_it->second;
             // }
@@ -65,13 +65,13 @@ export namespace DerkJS {
             return nullptr;
         }
 
-        [[nodiscard]] auto set_property_value(const PropertyHandle<V>& handle, const V& value) -> V* override {
+        [[nodiscard]] auto set_property_value([[maybe_unused]] const PropertyHandle<Value>& handle, [[maybe_unused]] const Value& value) -> Value* override {
             // m_own_props[handle] = value;
             // return &m_own_props[handle];
             return nullptr;
         }
 
-        [[nodiscard]] auto del_property_value(const PropertyHandle<V>& handle) -> bool override {
+        [[nodiscard]] auto del_property_value([[maybe_unused]] const PropertyHandle<Value>& handle) -> bool override {
             // return m_own_props.erase(m_own_props.find(handle)) != m_own_props.end();
             return false;
         }
@@ -82,20 +82,20 @@ export namespace DerkJS {
         }
 
         /// NOTE: this only makes another wrapper around the C++ function ptr, but the raw pointer must be quickly owned by the VM heap (`PolyPool<ObjectBase<Value>>`)!
-        [[nodiscard]] auto clone() const -> ObjectBase<V>* override {
+        [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
             auto copied_native_fn_p = new NativeFunction {m_native_ptr};
 
             return copied_native_fn_p;
         }
 
-        /// NOTE: unlike standard ECMAScript, this just prints `[Function <name>]`
+        /// NOTE: unlike standard ECMAScript, this just prints `[NativeFunction <function-address>]`
         [[nodiscard]] auto as_string() const -> std::string override {
-            return std::format("[{} native-fn-ptr({})]", get_class_name(), m_native_ptr);
+            return std::format("[{} native-fn-ptr({})]", get_class_name(), reinterpret_cast<void*>(m_native_ptr)); // cast to void* needed here to use a valid std::formatter
         }
 
-        /// NOTE: does an equality check for stored C++ function addresses
+        /// NOTE: does an equality check by unique hardware address -> unique instance mapping to a unique C++ function ptr
         [[nodiscard]] auto operator==(const ObjectBase& other) const noexcept -> bool override {
-            return m_native_ptr == other.m_native_ptr;
+            return this == &other;
         }
 
         /// NOTE: yields false- this is a dud

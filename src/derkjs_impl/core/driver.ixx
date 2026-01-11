@@ -7,6 +7,7 @@ module;
 #include <string_view>
 #include <string>
 #include <optional>
+#include <variant>
 #include <vector>
 #include <flat_map>
 
@@ -50,7 +51,7 @@ export namespace DerkJS::Core {
 
     private:
         PolyPool<ObjectBase<Value>> m_js_heap;
-        std::map<std::string_view, TokenTag> m_js_lexicals;
+        std::flat_map<std::string_view, TokenTag> m_js_lexicals;
         std::flat_map<std::string, int> m_pooled_string_index;
         std::flat_map<std::string, int> m_native_obj_index;
         std::vector<std::string> m_src_map;
@@ -81,7 +82,7 @@ export namespace DerkJS::Core {
         [[nodiscard]] auto parse_script(const std::string& file_path, std::string file_source) -> std::optional<ASTUnit> {
             m_src_map.emplace_back(std::move(file_source)); // Source 0 is <main>.js
 
-            Lexer lexer {m_src_map.at(0)};
+            Lexer lexer {m_src_map.at(0), std::move(m_js_lexicals)};
             Parser parser;
 
             return parser(lexer, file_path, m_src_map.at(0));
@@ -96,12 +97,12 @@ export namespace DerkJS::Core {
         [[nodiscard]] auto compile_script(const ASTUnit& ast) -> std::optional<Program> {
             BytecodeGenPass codegen_pass {std::move(m_js_heap), std::move(m_native_obj_index), std::move(m_pooled_string_index)};
 
-            return codegen_pass(ast, m_src_map.at(0));
+            return codegen_pass(ast, m_src_map);
         }
 
     public:
-        Driver(DriverInfo info)
-        : m_js_heap {}, m_js_lexicals {}, m_native_obj_index {}, m_src_map {}, m_app_name {info.name}, m_app_author {info.author}, m_version_major {info.version_major}, m_version_minor {info.version_minor}, m_version_patch {info.version_patch}, m_allow_bytecode_dump {false} {}
+        Driver(DriverInfo info, int heap_obj_capacity)
+        : m_js_heap {heap_obj_capacity}, m_js_lexicals {}, m_native_obj_index {}, m_src_map {}, m_app_name {info.name}, m_app_author {info.author}, m_version_major {info.version_major}, m_version_minor {info.version_minor}, m_version_patch {info.version_patch}, m_allow_bytecode_dump {false} {}
 
         void add_js_lexical(std::string_view lexeme, TokenTag tag) {
             m_js_lexicals.emplace(lexeme, tag);
@@ -109,7 +110,7 @@ export namespace DerkJS::Core {
 
         /// NOTE: takes the native object's name & a StaticString-to-< Value / std::unique_ptr<ObjectBase<Value>> > list to preload.
         template <std::size_t N>
-        [[nodiscard]] auto add_native_object(std::string name, std::array<NativePropertyStub, N> prop_list) -> bool {
+        [[maybe_unused]] auto add_native_object(std::string name, std::array<NativePropertyStub, N> prop_list) -> bool {
             const auto native_obj_heap_id = m_js_heap.get_next_id();
             
             // 1. Get non-owning object pointer and build the object's properties. Intern corresponding properties' handles into the heap.
@@ -135,7 +136,7 @@ export namespace DerkJS::Core {
 
                     /// NOTE: insert property value-object into heap and get its naked ptr. One copy of this ptr is owned, but the other becomes non-owning as a "reference" next...
                     const auto next_prop_value_heap_id = m_js_heap.get_next_id();
-                    auto prop_value_p = m_js_heap.add_item(next_prop_value_heap_id, std::move(**prop_item_as_obj_sp_p));
+                    auto prop_value_p = m_js_heap.add_item(next_prop_value_heap_id, std::move(*prop_item_as_obj_sp_p));
 
                     if (!object_p->set_property_value(temp_prop_handle, Value {prop_value_p})) {
                         return false;

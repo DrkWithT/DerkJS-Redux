@@ -821,10 +821,12 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         /// NOTE: handle a native function call IFF a0 < 0: an object reference is at RSP.
         if (a0 < 0) {
+            const int16_t caller_rsbp = ctx.rsbp;
             ctx.rsbp = ctx.rsp - a1 + 1;
 
-            if (const int16_t caller_rsbp = ctx.rsbp; ctx.stack[ctx.rsp].call(&ctx, a1)) {
-                ctx.rbsp = caller_rsbp;
+            if (auto callable_obj_ref_p = ctx.stack[ctx.rsp].to_object(); callable_obj_ref_p) {
+                ctx.has_err = !callable_obj_ref_p->call(&ctx, a1);
+                ctx.rsbp = caller_rsbp;
                 ++ctx.rip_p;
             } else {
                 ctx.has_err = true;

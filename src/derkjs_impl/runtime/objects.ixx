@@ -121,13 +121,15 @@ export namespace DerkJS {
             return m_items[id].get();
         }
 
-        template <typename ItemKind> requires (std::is_base_of_v<ItemBase, ItemKind>)
+        template <typename ItemKind> requires (std::is_base_of_v<ItemBase, std::remove_cvref_t<ItemKind>>)
         [[maybe_unused]] auto update_item(int id, ItemKind&& item) -> bool {
+            using item_kind_type = std::remove_cvref_t<ItemKind>;
+
             if (id < 0 || id >= static_cast<int>(m_items.size())) {
                 return false;
             }
 
-            m_items[id] = std::make_unique<ItemKind>(std::forward<ItemKind>(item));
+            m_items[id] = std::make_unique<item_kind_type>(std::forward<item_kind_type>(item));
 
             return true;
         }
@@ -143,8 +145,10 @@ export namespace DerkJS {
             return true;
         }
 
-        template <typename ItemKind> requires (std::is_base_of_v<ItemBase, ItemKind>)
+        template <typename ItemKind> requires (std::is_base_of_v<ItemBase, std::remove_cvref_t<ItemKind>>)
         [[nodiscard]] auto add_item(int id, ItemKind&& item) -> ItemBase* {
+            using item_kind_type = std::remove_cvref_t<ItemKind>;
+
             if (id < 0 || id >= static_cast<int>(m_items.size())) {
                 return nullptr;
             }
@@ -159,9 +163,9 @@ export namespace DerkJS {
                 ++m_next_id;
             }
 
-            m_items[slot_id] = std::make_unique<ItemKind>(std::forward<ItemKind>(item));
+            m_items[slot_id] = std::make_unique<item_kind_type>(std::forward<item_kind_type>(item));
 
-            return m_items.data() + slot_id;
+            return m_items[slot_id].get();
         }
 
         template <typename ItemKind> requires (std::is_base_of_v<ItemBase, ItemKind>)
@@ -182,7 +186,28 @@ export namespace DerkJS {
 
             m_items[slot_id] = std::unique_ptr<ItemKind>(item_p);
 
-            return m_items.data() + slot_id;
+            return m_items[slot_id].get();
+        }
+
+        /// NOTE: This overload only exists for the `Driver` to insert property values within insertion of native objects. Please see `./src/derkjs_impl/core/driver.ixx ~ line:138`!
+        [[nodiscard]] auto add_item(int id, std::unique_ptr<ItemBase> item_sp) -> ItemBase* {
+            if (id < 0 || id >= static_cast<int>(m_items.size())) {
+                return nullptr;
+            }
+
+            int slot_id;
+
+            if (!m_free_slots.empty()) {
+                slot_id = m_free_slots.back();
+                m_free_slots.pop_back();
+            } else {
+                slot_id = m_next_id;
+                ++m_next_id;
+            }
+
+            m_items[slot_id] = std::move(item_sp);
+
+            return m_items[slot_id].get();
         }
 
         [[nodiscard]] auto remove_item(int id) -> bool {
@@ -212,15 +237,15 @@ export namespace DerkJS {
     template <typename KeyType>
     struct PropertyHandle {
         void* parent_obj_p; // must refer to the enclosing object's address in memory: helps distinguish properties between different object shapes / types with matching names / IDs
-        KeyType opaque_key; // MUST be a `Value`, but this is templated to avoid circular type referencing
+        KeyType key_value; // MUST be a `Value`, but this is templated to avoid circular type referencing
         PropertyHandleTag tag; // discriminator for whether the property is an index (for own props. in Arrays) vs. a string (for any Object property)
         uint8_t flags;
 
         constexpr PropertyHandle() noexcept
-        : parent_obj_p {}, opaque_key {}, tag {PropertyHandleTag::nil}, flags {0x00} {}
+        : parent_obj_p {}, key_value {}, tag {PropertyHandleTag::nil}, flags {0x00} {}
 
         constexpr PropertyHandle(void* parent_obj_p_, KeyType key_value_, PropertyHandleTag tag_, uint8_t flags_) noexcept
-        : parent_obj_p {parent_obj_p_}, opaque_key {key_value_}, tag {tag_}, flags {flags_} {}
+        : parent_obj_p {parent_obj_p_}, key_value {key_value_}, tag {tag_}, flags {flags_} {}
 
         explicit constexpr operator bool(this auto&& self) noexcept {
             return self.parent_obj_p_ != nullptr && self.opaque_key_p != nullptr && self.tag != PropertyHandleTag::nil;
@@ -236,15 +261,15 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] constexpr auto operator==(const PropertyHandle& other) const noexcept -> bool {
-            return parent_obj_p == other.parent_obj_p && key_value == *other.key_value;
+            return parent_obj_p == other.parent_obj_p && key_value == other.key_value;
         }
 
         [[nodiscard]] constexpr auto operator<(const PropertyHandle& other) const noexcept -> bool {
-            return parent_obj_p < other.parent_obj_p && key_value < *other.key_value;
+            return parent_obj_p < other.parent_obj_p && key_value < other.key_value;
         }
 
         [[nodiscard]] constexpr auto operator>(const PropertyHandle& other) const noexcept -> bool {
-            return parent_obj_p > other.parent_obj_p && key_value > *other.key_value;
+            return parent_obj_p > other.parent_obj_p && key_value > other.key_value;
         }
     };
 }

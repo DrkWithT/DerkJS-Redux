@@ -1031,7 +1031,7 @@ export namespace DerkJS {
             enter_simulated_frame();
         }
 
-        [[nodiscard]] auto operator()([[maybe_unused]] const ASTUnit& tu, [[maybe_unused]] const std::flat_map<int, std::string>& source_map) -> std::optional<Program> {
+        [[nodiscard]] auto operator()([[maybe_unused]] const ASTUnit& tu, [[maybe_unused]] const std::vector<std::string>& source_map) -> std::optional<Program> {
             /// TODO: 1. emit all function decls ONLY as per JS function hoisting.
             for (const auto& [src_filename, decl, src_id] : tu) {
                 if (std::holds_alternative<FunctionDecl>(decl->data)) {

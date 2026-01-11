@@ -6,7 +6,7 @@
 
 import derkjs_impl;
 
-[[nodiscard]] auto native_console_log(DerkJS::ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
+[[nodiscard]] auto native_console_log(DerkJS::ExternVMCtx* ctx, [[maybe_unused]] DerkJS::PropPool<DerkJS::PropertyHandle<DerkJS::Value>, DerkJS::Value>* props, int argc) -> bool {
     const int vm_rsbp = ctx->rsbp;
 
     for (auto passed_arg_local_offset = 0; passed_arg_local_offset < argc; ++passed_arg_local_offset) {
@@ -26,13 +26,16 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    Core::Driver driver {DriverInfo {
-        .name = "DerkJS",
-        .author = "DrkWithT (GitHub)",
-        .version_major = 0,
-        .version_minor = 1,
-        .version_patch = 0
-    }};
+    Core::Driver driver {
+        Core::DriverInfo {
+            .name = "DerkJS",
+            .author = "DrkWithT (GitHub)",
+            .version_major = 0,
+            .version_minor = 1,
+            .version_patch = 0
+        },
+        1024 // increase object count limit for VM if needed
+    };
 
     std::string source_path;
     std::string_view arg_1 = argv[1];
@@ -51,12 +54,48 @@ int main(int argc, char* argv[]) {
         source_path = argv[2];
     }
 
-    NativePropertyStub console_obj_props[] {
-        NativePropertyStub {
-            .name_str = "log",
+    Core::NativePropertyStub console_obj_props[] {
+        Core::NativePropertyStub {
+            .name_str = StaticString {nullptr, "log", 3},
             .item = std::make_unique<NativeFunction>(native_console_log)
         }
     }; 
+
+    driver.add_js_lexical("var", TokenTag::keyword_var);
+    driver.add_js_lexical("if", TokenTag::keyword_if);
+    driver.add_js_lexical("else", TokenTag::keyword_else);
+    driver.add_js_lexical("return", TokenTag::keyword_return);
+    driver.add_js_lexical("while", TokenTag::keyword_while);
+    driver.add_js_lexical("function", TokenTag::keyword_function);
+    driver.add_js_lexical("prototype", TokenTag::keyword_prototype);
+    driver.add_js_lexical("this", TokenTag::keyword_this);
+    driver.add_js_lexical("new", TokenTag::keyword_new);
+    driver.add_js_lexical("undefined", TokenTag::keyword_undefined);
+    driver.add_js_lexical("null", TokenTag::keyword_null);
+    driver.add_js_lexical("true", TokenTag::keyword_true);
+    driver.add_js_lexical("false", TokenTag::keyword_false);
+    driver.add_js_lexical("%", TokenTag::symbol_percent);
+    driver.add_js_lexical("*", TokenTag::symbol_times);
+    driver.add_js_lexical("/", TokenTag::symbol_slash);
+    driver.add_js_lexical("+", TokenTag::symbol_plus);
+    driver.add_js_lexical("-", TokenTag::symbol_minus);
+    driver.add_js_lexical("!", TokenTag::symbol_bang);
+    driver.add_js_lexical("==", TokenTag::symbol_equal);
+    driver.add_js_lexical("!=", TokenTag::symbol_bang_equal);
+    driver.add_js_lexical("===", TokenTag::symbol_strict_equal);
+    driver.add_js_lexical("!==", TokenTag::symbol_strict_bang_equal);
+    driver.add_js_lexical("<", TokenTag::symbol_less);
+    driver.add_js_lexical("<=", TokenTag::symbol_less_equal);
+    driver.add_js_lexical(">", TokenTag::symbol_greater);
+    driver.add_js_lexical(">=", TokenTag::symbol_greater_equal);
+    driver.add_js_lexical("&&", TokenTag::symbol_amps);
+    driver.add_js_lexical("||", TokenTag::symbol_pipes);
+    driver.add_js_lexical("=", TokenTag::symbol_assign);
+    driver.add_js_lexical("%=", TokenTag::symbol_percent_assign);
+    driver.add_js_lexical("*=", TokenTag::symbol_times_assign);
+    driver.add_js_lexical("/=", TokenTag::symbol_slash_assign);
+    driver.add_js_lexical("+=", TokenTag::symbol_plus_assign);
+    driver.add_js_lexical("-=", TokenTag::symbol_minus_assign);
 
     /// TODO: configure driver with "console"
     driver.add_native_object(
@@ -64,5 +103,5 @@ int main(int argc, char* argv[]) {
         std::to_array(std::move(console_obj_props))
     );
 
-    return driver.run<DispatchPolicy::tco>() ? 0 : 1;
+    return driver.run<DispatchPolicy::tco>(source_path) ? 0 : 1;
 }
