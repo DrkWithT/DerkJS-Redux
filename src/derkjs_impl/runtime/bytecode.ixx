@@ -47,8 +47,7 @@ export namespace DerkJS {
         djs_jump_else,
         djs_jump_if,
         djs_jump,
-        djs_call,
-        djs_native_call,
+        djs_call, // Args: <optional-bytecode-offset> <arg-count>: IF the `optional-bytecode-offset` is `-1`, the call tries invoking the stack's top `Value`. There, the Value must have an `ObjectBase<Value>*` pointing to an object implementing `call()`.
         djs_ret,
         djs_halt,
         last,
@@ -114,7 +113,6 @@ export namespace DerkJS {
             "djs_jump_if",
             "djs_jump",
             "djs_call",
-            "djs_native_call",
             "djs_ret",
             "djs_halt",
         };
