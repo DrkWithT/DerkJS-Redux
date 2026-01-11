@@ -60,7 +60,8 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
       - Some properties are inherent duplicates from its prototype(s).
       - Some properties are instance-specific properties a.k.a "own" props.
       - Instances are _clones_ of prototypes!
-      - Implement `this` as a special reference variable to the current context's instance-`Object`.
- 10. Add built-in context objects and global objects
+ 10. Add native Console object that's non-configurable or mutable.
+ 11. Add built-in context objects and global objects for `this`.
+ 12. Implement usage of `this` in constructor functions with `new` & object "methods".
     - Implement `[Console console]` basics: `log`, `clear`, `prompt` (DerkJS extension)
- 11. Add mark and sweep GC.
+ 13. Add mark and sweep GC.

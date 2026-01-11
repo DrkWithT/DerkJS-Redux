@@ -7,4 +7,7 @@ var num_1 = {
     x: 3
 };
 
-return num_1.x * num_1.x + num_1.x * num_1.x;
+num_1.x = 2;
+
+/* Should be 7 */
+return num_1.x * num_1.x + num_1.x + 1;
