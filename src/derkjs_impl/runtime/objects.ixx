@@ -43,7 +43,8 @@ export namespace DerkJS {
         virtual auto get_property_value(const PropertyHandle<V>& handle) -> V* = 0;
         virtual auto set_property_value(const PropertyHandle<V>& handle, const V& value) -> V* = 0;
         virtual auto del_property_value(const PropertyHandle<V>& handle) -> bool = 0;
-        // virtual auto get_property_handle() -> PropertyHandle = 0;
+
+        virtual auto call(void* opaque_ctx_p, int argc) -> bool = 0;
 
         /// For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!
         virtual auto clone() const -> ObjectBase<V>* = 0;
@@ -143,9 +144,9 @@ export namespace DerkJS {
         }
 
         template <typename ItemKind> requires (std::is_base_of_v<ItemBase, ItemKind>)
-        [[nodiscard]] auto add_item(int id, ItemKind&& item) -> bool {
+        [[nodiscard]] auto add_item(int id, ItemKind&& item) -> ItemBase* {
             if (id < 0 || id >= static_cast<int>(m_items.size())) {
-                return false;
+                return nullptr;
             }
 
             int slot_id;
@@ -160,13 +161,13 @@ export namespace DerkJS {
 
             m_items[slot_id] = std::make_unique<ItemKind>(std::forward<ItemKind>(item));
 
-            return true;
+            return m_items.data() + slot_id;
         }
 
         template <typename ItemKind> requires (std::is_base_of_v<ItemBase, ItemKind>)
-        [[nodiscard]] auto add_item(int id, ItemKind* item_p) -> bool {
+        [[nodiscard]] auto add_item(int id, ItemKind* item_p) -> ItemBase* {
             if (id < 0 || id >= static_cast<int>(m_items.size())) {
-                return false;
+                return nullptr;
             }
 
             int slot_id;
@@ -181,7 +182,7 @@ export namespace DerkJS {
 
             m_items[slot_id] = std::unique_ptr<ItemKind>(item_p);
 
-            return true;
+            return m_items.data() + slot_id;
         }
 
         [[nodiscard]] auto remove_item(int id) -> bool {
@@ -198,7 +199,7 @@ export namespace DerkJS {
 
     enum class PropertyHandleTag : uint8_t {
         nil, // dud handle
-        key, // Value ptr -> compare values by operator== overload?
+        key, // Value copy -> compare values by operator== overload?
         index, // number -> an Array's own properties -> int to Value
     };
 
@@ -208,28 +209,18 @@ export namespace DerkJS {
         enumerable = 0b00000100
     };
 
-    template <typename T>
-    concept ComparableKeyKind = requires (T lhs, T rhs) {
-        {auto(lhs == rhs)} -> std::same_as<bool>;
-        {auto(lhs < rhs)} -> std::same_as<bool>;
-        {auto(lhs > rhs)} -> std::same_as<bool>;
-    };
-
-    template <typename T, typename ValueT>
-    concept JSObjectKind = std::is_base_of_v<ObjectBase<ValueT>, T>;
-
     template <typename KeyType>
     struct PropertyHandle {
         void* parent_obj_p; // must refer to the enclosing object's address in memory: helps distinguish properties between different object shapes / types with matching names / IDs
-        KeyType* opaque_key_p; // MUST be a `Value*`, but this is templated to avoid circular type referencing
+        KeyType opaque_key; // MUST be a `Value`, but this is templated to avoid circular type referencing
         PropertyHandleTag tag; // discriminator for whether the property is an index (for own props. in Arrays) vs. a string (for any Object property)
         uint8_t flags;
 
         constexpr PropertyHandle() noexcept
-        : parent_obj_p {}, opaque_key_p {}, tag {PropertyHandleTag::nil}, flags {0x00} {}
+        : parent_obj_p {}, opaque_key {}, tag {PropertyHandleTag::nil}, flags {0x00} {}
 
-        constexpr PropertyHandle(void* parent_obj_p_, KeyType* key_value_p, PropertyHandleTag tag_, uint8_t flags_) noexcept
-        : parent_obj_p {parent_obj_p_}, opaque_key_p {key_value_p}, tag {tag_}, flags {flags_} {}
+        constexpr PropertyHandle(void* parent_obj_p_, KeyType key_value_, PropertyHandleTag tag_, uint8_t flags_) noexcept
+        : parent_obj_p {parent_obj_p_}, opaque_key {key_value_}, tag {tag_}, flags {flags_} {}
 
         explicit constexpr operator bool(this auto&& self) noexcept {
             return self.parent_obj_p_ != nullptr && self.opaque_key_p != nullptr && self.tag != PropertyHandleTag::nil;
@@ -245,15 +236,15 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] constexpr auto operator==(const PropertyHandle& other) const noexcept -> bool {
-            return parent_obj_p == other.parent_obj_p && *opaque_key_p == *other.opaque_key_p;
+            return parent_obj_p == other.parent_obj_p && key_value == *other.key_value;
         }
 
         [[nodiscard]] constexpr auto operator<(const PropertyHandle& other) const noexcept -> bool {
-            return parent_obj_p < other.parent_obj_p && *opaque_key_p < *other.opaque_key_p;
+            return parent_obj_p < other.parent_obj_p && key_value < *other.key_value;
         }
 
         [[nodiscard]] constexpr auto operator>(const PropertyHandle& other) const noexcept -> bool {
-            return parent_obj_p > other.parent_obj_p && *opaque_key_p > *other.opaque_key_p;
+            return parent_obj_p > other.parent_obj_p && key_value > *other.key_value;
         }
     };
 }
