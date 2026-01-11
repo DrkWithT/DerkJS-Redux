@@ -708,6 +708,7 @@ export namespace DerkJS {
             } else if (auto access_p = std::get_if<MemberAccess>(&assign_lhs->data); access_p) {
                 m_handle_props_as_rvals = false;
 
+                const auto pre_lhs_load_slot = m_next_temp_id;
                 auto prop_locator = emit_member_access(*access_p, source);
 
                 m_handle_props_as_rvals = true;
@@ -722,8 +723,17 @@ export namespace DerkJS {
                     return {};
                 }
 
-                encode_instruction(Opcode::djs_emplace, *prop_locator);
-                update_temp_id(-1);
+                const auto post_put_prop_adjustment = m_next_temp_id - pre_lhs_load_slot;
+
+                encode_instruction(
+                    Opcode::djs_put_prop,
+                    *prop_locator,
+                    Arg {
+                        .n = static_cast<int16_t>(post_put_prop_adjustment),
+                        .tag = Location::immediate
+                    }
+                );
+                update_temp_id(-post_put_prop_adjustment);
 
                 return prop_locator;
             }

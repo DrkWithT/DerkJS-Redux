@@ -686,8 +686,8 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_put_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         if (auto obj_p = ctx.stack[ctx.rsbp + a0].to_object(); !obj_p) {
             return false;
-        } else {
-            obj_p->set_property_value(PropertyHandle<Value> { obj_p, ctx.stack[ctx.rsp - 1].get_value_ref(), PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)}, ctx.stack[ctx.rsp]);
+        } else if (!obj_p->set_property_value(PropertyHandle<Value> { obj_p, ctx.stack[ctx.rsp - 1].get_value_ref(), PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)}, ctx.stack[ctx.rsp])) {
+            return false;
         }
 
         ctx.rsp -= a1;
