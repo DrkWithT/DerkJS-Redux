@@ -60,7 +60,14 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
       - Some properties are inherent duplicates from its prototype(s).
       - Some properties are instance-specific properties a.k.a "own" props.
       - Instances are _clones_ of prototypes!
- 10. Add native Console object that's non-configurable or mutable.
+ 10. Add custom natives: Console, Date objects!
+    - Implement native objects and function wrappers for bytecode / native callables!
+      - Bytecode objects just hold an `Instruction` buffer, and `call()` takes an `ExternVMCtx*, PropPool<PropertyHandle<Value>, Value>`.
+    - Implement:
+      - `console.log('Hello World');`
+      - `console.read('Enter something: ');` -> Should print the prompt string and return a line from STDIN??
+      - `Date.nano();` -> Gives a whole number of nanoseconds since the Epoch.
+    - Implement support for function-level & global `this`.
  11. Add built-in context objects and global objects for `this`.
  12. Implement usage of `this` in constructor functions with `new` & object "methods".
     - Implement `[Console console]` basics: `log`, `clear`, `prompt` (DerkJS extension)
