@@ -24,6 +24,7 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
 ### Other Repo Docs:
  - [Subset Grammar](../docs/grammar.md)
  - [OLD Semantic Checking](../docs/sema_checks.md)
+ - [Objects](../docs/objects.md)
 
 ### TO-DO's:
  1. ~~Fix duplicate constant storage in bytecode.~~
@@ -34,22 +35,16 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
  6. ~~Add `while` statement support.~~
  7. ~~Add support for undefined variable declarations.~~
  8. ~~Add static-size & heap strings with interning.~~
- 9. Add simple data objects.
-    - Each object instance maps property descriptors to values.
-      - Prototype inheritance exists because of any object's prototype chain to the `[null Prototype]` prototype... Built-in prototypes such as `Object` exist just before `[null Prototype]`.
-      - Prototypes can be "template objects".
-      - Some properties are inherent duplicates from its prototype(s).
-      - Some properties are instance-specific properties a.k.a "own" props.
-      - Instances are _clones_ of prototypes!
+ 9. ~~Add simple data objects.~~
  10. Add custom natives: Console, Date objects!
     - Implement native objects and function wrappers for bytecode / native callables!
       - Bytecode objects just hold an `Instruction` buffer, and `call()` takes an `ExternVMCtx*, PropPool<PropertyHandle<Value>, Value>`.
     - Implement:
       - `console.log('Hello World');`
-      - `console.read('Enter something: ');` -> Should print the prompt string and return a line from STDIN??
       - `Date.nano();` -> Gives a whole number of nanoseconds since the Epoch.
-    - Implement support for function-level & global `this`.
- 11. Add built-in context objects and global objects for `this`.
+ 11. Add larger strings under `ObjectBase<Value>, StringBase` for string literals.
+  - Add `console.readline(msg: string);`
+ 11. Add support for `this` in functions
+  - Add closure opcode support... Make / modify an implicit JS object locally. It may be returned.
  12. Implement usage of `this` in constructor functions with `new` & object "methods".
-    - Implement `[Console console]` basics: `log`, `clear`, `prompt` (DerkJS extension)
  13. Add mark and sweep GC.
