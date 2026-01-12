@@ -28,6 +28,11 @@ export namespace DerkJS {
         as_pooled_name
     };
 
+    struct PreloadConst {
+        std::string lexeme;
+        Value value;
+    };
+
     class BytecodeGenPass {
     private:
         static constexpr int min_bc_jump_offset = std::numeric_limits<int16_t>::min();
@@ -152,7 +157,8 @@ export namespace DerkJS {
             return result_id;
         }
 
-        [[nodiscard]] auto record_constants(const std::string& literal_text, std::same_as<Value> auto&& new_value) -> Arg {
+        template <typename V> requires (std::is_same_v<std::remove_cvref_t<V>, Value>)
+        [[maybe_unused]] auto record_constants(const std::string& literal_text, V&& new_value) -> Arg {
             if (auto existing_constant = lookup_item(literal_text); !existing_constant) {
                 const int next_const_id = m_consts.size();
                 Arg result_locator {
@@ -299,6 +305,7 @@ export namespace DerkJS {
             case TokenTag::identifier: {
                 std::string any_name_lexeme = literal_token.as_string(source);
 
+                /// TODO: add extra state in native object indexes to distinguish them from regular variable names / conservatively disallow any variable to match any native name?
                 if (auto native_obj_index_it = m_native_obj_index.find(any_name_lexeme); native_obj_index_it != m_native_obj_index.end()) {
                     m_handle_native_obj_call = true;
 
@@ -756,15 +763,20 @@ export namespace DerkJS {
             const auto& [call_args, callee_expr] = expr;
             int arg_count = 0;
 
+            
             for (const auto& arg_box : call_args) {
                 if (auto arg_locator = emit_expr(*arg_box, source); !arg_locator) {
                     return {};
                 }
-
+                
                 ++arg_count;
             }
+            
+            m_handle_props_as_rvals = false;
 
             auto callee_locator = emit_expr(*callee_expr, source);
+
+            m_handle_props_as_rvals = true;
 
             if (!callee_locator) {
                 return {};
@@ -1025,10 +1037,15 @@ export namespace DerkJS {
         }
 
     public:
-        BytecodeGenPass(PolyPool<ObjectBase<Value>> heap_items_, std::flat_map<std::string, int> native_obj_index_, std::flat_map<std::string, int> pooled_string_index)
+        BytecodeGenPass(PolyPool<ObjectBase<Value>> heap_items_, std::flat_map<std::string, int> native_obj_index_, std::flat_map<std::string, int> pooled_string_index, std::vector<PreloadConst> pre_consts)
         : m_mappings {}, m_heap_items (std::move(heap_items_)), m_native_obj_index (std::move(native_obj_index_)), m_poolable_str_ids (std::move(pooled_string_index)), m_consts {}, m_code {}, m_func_offsets {}, m_next_temp_id {0}, m_handle_props_as_rvals {true}, m_handle_native_obj_call {false} {
-            /// NOTE: Consider global scope 1st for global variables / stmts...
+            // 1. Consider global scope 1st for global variables / stmts...
             enter_simulated_frame();
+
+            // 2. Preload any constants resulting from adding native objects.
+            for (auto& [constant_lexeme, constant_value] : pre_consts) {
+                record_constants(constant_lexeme, std::move(constant_value));
+            }
         }
 
         [[nodiscard]] auto operator()([[maybe_unused]] const ASTUnit& tu, [[maybe_unused]] const std::vector<std::string>& source_map) -> std::optional<Program> {

@@ -128,6 +128,17 @@ export namespace DerkJS {
             ++fn_bc_index;
         }
 
+        std::println("\n\x1b[1;33mInitial Heap:\x1b[0m\n");
+
+        for (int heap_id = 0; const auto& heap_cell : prgm_heap_items.view_items()) {
+            if (auto heap_obj_p = heap_cell.get(); heap_obj_p) {
+                std::println("heap-cell:{} -> {}", heap_id, heap_obj_p->as_string());
+                ++heap_id;
+            } else {
+                break;
+            }
+        }
+
         std::println("\n\x1b[1;33mConstants:\x1b[0m\n");
 
         for (int constant_id = 0; const auto& temp_constant : prgm_consts) {
