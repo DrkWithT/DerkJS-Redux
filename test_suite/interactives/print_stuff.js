@@ -1,5 +1,5 @@
 /* TEST Value printing */
 
-console.log(42);
+console.log(10, 5, 2.5, 1.25);
 
 return 0;
