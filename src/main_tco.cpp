@@ -45,7 +45,7 @@ int main(int argc, char* argv[]) {
         return 0;
     } else if (arg_1 == "-v") {
         const auto& [app_name, author_name, major, minor, patch] = driver.get_info();
-        std::println("{} v{}.{}.{}\nBy: {}", app_name, author_name, major, minor, patch);
+        std::println("{} v{}.{}.{}\nBy: {}", app_name, major, minor, patch, author_name);
         return 0;
     } else if (arg_1 == "-d") {
         source_path = argv[2];
