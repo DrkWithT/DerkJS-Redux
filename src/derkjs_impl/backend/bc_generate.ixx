@@ -28,6 +28,11 @@ export namespace DerkJS {
         as_pooled_name
     };
 
+    struct PreloadConst {
+        std::string lexeme;
+        Value value;
+    };
+
     class BytecodeGenPass {
     private:
         static constexpr int min_bc_jump_offset = std::numeric_limits<int16_t>::min();
@@ -35,7 +40,7 @@ export namespace DerkJS {
 
         static constexpr Arg dud_arg {
             .n = 0,
-            .tag = Location::immediate,
+            .tag = Location::immediate
         };
 
         struct SimStackFrame {
@@ -45,6 +50,7 @@ export namespace DerkJS {
 
         std::vector<SimStackFrame> m_mappings;
         PolyPool<ObjectBase<Value>> m_heap_items; // Stores all objects including polymorphic StaticString, etc. from ObjectBase<Value>.
+        std::flat_map<std::string, int> m_native_obj_index; // Maps identifiers to pre-loaded heap objects e.g `console`.
         std::flat_map<std::string, int> m_poolable_str_ids;
         std::vector<Value> m_consts;
         std::vector<Instruction> m_code;
@@ -52,6 +58,7 @@ export namespace DerkJS {
 
         int m_next_temp_id;
         bool m_handle_props_as_rvals;
+        bool m_handle_native_obj_call;
 
         void enter_simulated_frame() {
             m_mappings.emplace_back(SimStackFrame {
@@ -72,7 +79,7 @@ export namespace DerkJS {
                 if (const auto& [locator_n, locator_tag] = targeted_frame->entries.at(lexeme); locator_tag == Location::temp) {
                     return Arg {
                         .n = static_cast<int16_t>(locator_n - targeted_frame->stack_base),
-                        .tag = Location::temp,
+                        .tag = Location::temp
                     };
                 } else {
                     return Arg {
@@ -150,7 +157,8 @@ export namespace DerkJS {
             return result_id;
         }
 
-        [[nodiscard]] auto record_constants(const std::string& literal_text, std::same_as<Value> auto&& new_value) -> Arg {
+        template <typename V> requires (std::is_same_v<std::remove_cvref_t<V>, Value>)
+        [[maybe_unused]] auto record_constants(const std::string& literal_text, V&& new_value) -> Arg {
             if (auto existing_constant = lookup_item(literal_text); !existing_constant) {
                 const int next_const_id = m_consts.size();
                 Arg result_locator {
@@ -187,30 +195,21 @@ export namespace DerkJS {
         /// NOTE: This overload is for no-argument opcode instructions e.g NOP
         void encode_instruction(Opcode op) {
             m_code.emplace_back(Instruction {
-                .args = {
-                    0,
-                    0,
-                },
+                .args = { 0, 0 },
                 .op = op
             });
         }
 
         void encode_instruction(Opcode op, Arg a0) {
             m_code.emplace_back(Instruction {
-                .args = {
-                    a0.n,
-                    0,
-                },
+                .args = { a0.n, 0 },
                 .op = op
             });
         }
 
         void encode_instruction(Opcode op, Arg a0, Arg a1) {
             m_code.emplace_back(Instruction {
-                .args = {
-                    a0.n,
-                    a1.n,
-                },
+                .args = { a0.n, a1.n},
                 .op = op
             });
         }
@@ -306,8 +305,29 @@ export namespace DerkJS {
             case TokenTag::identifier: {
                 std::string any_name_lexeme = literal_token.as_string(source);
 
+                /// TODO: add extra state in native object indexes to distinguish them from regular variable names / conservatively disallow any variable to match any native name?
+                if (auto native_obj_index_it = m_native_obj_index.find(any_name_lexeme); native_obj_index_it != m_native_obj_index.end()) {
+                    m_handle_native_obj_call = true;
+
+                    encode_instruction(
+                        Opcode::djs_put_val_ref,
+                        Arg {
+                            .n = static_cast<int16_t>(native_obj_index_it->second),
+                            .tag = Location::immediate
+                        },
+                        Arg {
+                            .n = 2,
+                            .tag = Location::immediate
+                        }
+                    );
+                    return Arg {
+                        .n = static_cast<int16_t>(update_temp_id(1)),
+                        .tag = Location::temp
+                    };
+                }
+                
+                // Push property key-string ref from constants.
                 if (auto pooled_name_id_it = m_poolable_str_ids.find(any_name_lexeme); pooled_name_id_it != m_poolable_str_ids.end()) {
-                    // Push property key-string ref from constants.
                     encode_instruction(
                         Opcode::djs_put_val_ref,
                         Arg {
@@ -319,6 +339,7 @@ export namespace DerkJS {
                             .tag = Location::immediate
                         }
                     );
+
                     return Arg {
                         .n = static_cast<int16_t>(update_temp_id(1)),
                         .tag = Location::temp
@@ -334,17 +355,15 @@ export namespace DerkJS {
                             .tag = Location::temp
                         };
                     } else if (locator_tag == Location::constant) {
-                        /// NOTE: Push constants as needed within blocks (even in functions), using the dedicated opcode for this case.
                         encode_instruction(Opcode::djs_put_const, *name_locator_opt);
-                        
+
                         return Arg {
                             .n = static_cast<int16_t>(update_temp_id(1)),
                             .tag = Location::temp
                         };
                     } else if (locator_tag == Location::heap_obj) {
-                        /// NOTE: Push constants as needed within blocks (even in functions).
                         encode_instruction(Opcode::djs_put_obj_ref, *name_locator_opt);
-                        
+
                         return Arg {
                             .n = static_cast<int16_t>(update_temp_id(1)),
                             .tag = Location::temp
@@ -465,21 +484,19 @@ export namespace DerkJS {
                 int lhs_jump_if_pos = -1000;
                 int post_rhs_jump_pos = -1000;
 
-                // 1. By the ES5 spec, the logical OR short-circuits: If LHS is truthy, it becomes the result and RHS is not evaluated!
+                // 1. By the ES5 spec, the logical OR short-circuits: If LHS is truthy, it becomes the result and RHS is not evaluated! Relative jump offsets of -1 will be backpatched later.
                 if (auto lhs_locator = emit_expr(lhs, source); !lhs_locator) {
                     return {};
                 } else {
                     lhs_jump_if_pos = m_code.size();
                     encode_instruction(
                         Opcode::djs_jump_if,
-                        // NOTE: this relative jump offset is a dud which will be backpatched later!
                         Arg {.n = -1, .tag = Location::immediate},
-                        // NOTE: optionally pop of LHS temporary IFF LHS is falsy!
                         Arg {.n = 1, .tag = Location::immediate}
                     );
                 }
 
-                // 2. Emit the RHS evaluation & result since control flow reaching this point must have a falsy LHS.
+                // 2. Emit the RHS evaluation & result since control flow reaching this point must have a falsy LHS. Relative jump offsets of -1 will be backpatched later.
                 if (auto rhs_locator = emit_expr(rhs, source); !rhs_locator) {
                     return {};
                 } else {
@@ -708,6 +725,7 @@ export namespace DerkJS {
             } else if (auto access_p = std::get_if<MemberAccess>(&assign_lhs->data); access_p) {
                 m_handle_props_as_rvals = false;
 
+                const auto pre_lhs_load_slot = m_next_temp_id;
                 auto prop_locator = emit_member_access(*access_p, source);
 
                 m_handle_props_as_rvals = true;
@@ -722,8 +740,17 @@ export namespace DerkJS {
                     return {};
                 }
 
-                encode_instruction(Opcode::djs_emplace, *prop_locator);
-                update_temp_id(-1);
+                const auto post_put_prop_adjustment = m_next_temp_id - pre_lhs_load_slot;
+
+                encode_instruction(
+                    Opcode::djs_put_prop,
+                    *prop_locator,
+                    Arg {
+                        .n = static_cast<int16_t>(post_put_prop_adjustment),
+                        .tag = Location::immediate
+                    }
+                );
+                update_temp_id(-post_put_prop_adjustment);
 
                 return prop_locator;
             }
@@ -736,29 +763,48 @@ export namespace DerkJS {
             const auto& [call_args, callee_expr] = expr;
             int arg_count = 0;
 
+            
             for (const auto& arg_box : call_args) {
                 if (auto arg_locator = emit_expr(*arg_box, source); !arg_locator) {
                     return {};
                 }
-
+                
                 ++arg_count;
             }
+            
+            m_handle_props_as_rvals = false;
 
             auto callee_locator = emit_expr(*callee_expr, source);
+
+            m_handle_props_as_rvals = true;
 
             if (!callee_locator) {
                 return {};
             }
 
-            encode_instruction(Opcode::djs_call,
-                *callee_locator,
-                Arg {
-                    .n = static_cast<int16_t>(arg_count),
-                    .tag = Location::immediate
-                }
-            );
+            if (!m_handle_native_obj_call) {
+                encode_instruction(
+                    Opcode::djs_call,
+                    *callee_locator,
+                    Arg {
+                        .n = static_cast<int16_t>(arg_count),
+                        .tag = Location::immediate
+                    }
+                );
+            } else {
+                encode_instruction(
+                    Opcode::djs_call,
+                    Arg {.n = -1, .tag = Location::immediate},
+                    Arg {
+                        .n = static_cast<int16_t>(arg_count),
+                        .tag = Location::immediate
+                    }
+                );
+            }
 
             const auto pre_return_temp_id = update_temp_id(-arg_count);
+
+            m_handle_native_obj_call = false;
 
             return Arg {
                 .n = static_cast<int16_t>(pre_return_temp_id - arg_count),
@@ -773,7 +819,7 @@ export namespace DerkJS {
                 /// TODO: maybe add opcode support for object cloning... could be good for instances of prototypes.
                 return emit_object_literal(*object_p, source);
             } else if (auto member_access_p = std::get_if<MemberAccess>(&expr.data); member_access_p) {
-                return emit_member_access(*member_access_p, source); // add cloning of ref vals for non-assignments
+                return emit_member_access(*member_access_p, source);
             } else if (auto unary_p = std::get_if<Unary>(&expr.data); unary_p) {
                 return emit_unary(*unary_p, source);
             } else if (auto binary_p = std::get_if<Binary>(&expr.data); binary_p) {
@@ -946,14 +992,10 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto emit_function_decl(const FunctionDecl& stmt, const std::string& source) -> bool {
-            /// TODO: emit each function declaration like this:
-            // 1 -> define params as offsets from a new stack offset point (0 relative to the new call frame which would be pushed by the VM)
-            // 2 -> emit the body
             const auto& [func_params, func_name_token, func_body] = stmt;
             std::string func_name = func_name_token.as_string(source);
 
             record_item(func_name, record_this_func());
-
             enter_simulated_frame();
 
             for (const auto& param : func_params) {
@@ -995,13 +1037,18 @@ export namespace DerkJS {
         }
 
     public:
-        BytecodeGenPass()
-        : m_mappings {}, m_heap_items {1024}, m_consts {}, m_code {}, m_func_offsets {}, m_next_temp_id {0}, m_handle_props_as_rvals {true} {
-            /// NOTE: Consider global scope 1st for global variables / stmts...
+        BytecodeGenPass(PolyPool<ObjectBase<Value>> heap_items_, std::flat_map<std::string, int> native_obj_index_, std::flat_map<std::string, int> pooled_string_index, std::vector<PreloadConst> pre_consts)
+        : m_mappings {}, m_heap_items (std::move(heap_items_)), m_native_obj_index (std::move(native_obj_index_)), m_poolable_str_ids (std::move(pooled_string_index)), m_consts {}, m_code {}, m_func_offsets {}, m_next_temp_id {0}, m_handle_props_as_rvals {true}, m_handle_native_obj_call {false} {
+            // 1. Consider global scope 1st for global variables / stmts...
             enter_simulated_frame();
+
+            // 2. Preload any constants resulting from adding native objects.
+            for (auto& [constant_lexeme, constant_value] : pre_consts) {
+                record_constants(constant_lexeme, std::move(constant_value));
+            }
         }
 
-        [[nodiscard]] auto operator()([[maybe_unused]] const ASTUnit& tu, [[maybe_unused]] const std::flat_map<int, std::string>& source_map) -> std::optional<Program> {
+        [[nodiscard]] auto operator()([[maybe_unused]] const ASTUnit& tu, [[maybe_unused]] const std::vector<std::string>& source_map) -> std::optional<Program> {
             /// TODO: 1. emit all function decls ONLY as per JS function hoisting.
             for (const auto& [src_filename, decl, src_id] : tu) {
                 if (std::holds_alternative<FunctionDecl>(decl->data)) {

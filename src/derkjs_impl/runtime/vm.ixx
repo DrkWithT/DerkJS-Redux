@@ -325,10 +325,6 @@ export namespace DerkJS {
             --m_frames_free;
         }
 
-        void op_native_call([[maybe_unused]] int16_t native_id) noexcept {
-            m_status = ExitStatus::opcode_err;
-        }
-
         void op_ret() {
             const auto [callee_sbp, caller_sbp, caller_id, caller_ret_ip] = m_frames.back();
 
@@ -503,9 +499,6 @@ export namespace DerkJS {
                 case djs_call:
                     op_call(next_argv[0], next_argv[1]);
                     break;
-                case djs_native_call:
-                    op_native_call(next_argv[0]);
-                    break;
                 case djs_ret:
                     op_ret();
                     break;
@@ -550,7 +543,6 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_jump_if(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_jump(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_native_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
@@ -564,7 +556,7 @@ export namespace DerkJS {
         op_mod, op_mul, op_div, op_add, op_sub,
         op_test_falsy, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte,
         op_jump_else, op_jump_if, op_jump,
-        op_call, op_native_call, op_ret,
+        op_call, op_ret,
         op_halt
     };
 
@@ -601,8 +593,7 @@ export namespace DerkJS {
         case 2: {
             ctx.stack[ctx.rsp + 1] = Value {ctx.heap.get_item(a0)};
         } break;
-        default:
-            return false;
+        default: return false;
         }
 
         ++ctx.rsp;
@@ -672,7 +663,7 @@ export namespace DerkJS {
             return false;
         } else if (auto src_obj_p = src_val_ref.to_object(); !src_obj_p) {
             return false;
-        } else if (auto src_prop_value_p = src_obj_p->get_property_value(PropertyHandle<Value> {src_obj_p, ctx.stack[ctx.rsp].get_value_ref(), PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)}); !src_prop_value_p) {
+        } else if (auto src_prop_value_p = src_obj_p->get_property_value(PropertyHandle<Value> {src_obj_p, ctx.stack[ctx.rsp], PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)}); !src_prop_value_p) {
             return false;
         } else {
             ctx.stack[ctx.rsp - 1] = Value {src_prop_value_p};
@@ -686,8 +677,8 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_put_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         if (auto obj_p = ctx.stack[ctx.rsbp + a0].to_object(); !obj_p) {
             return false;
-        } else {
-            obj_p->set_property_value(PropertyHandle<Value> { obj_p, ctx.stack[ctx.rsp - 1].get_value_ref(), PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)}, ctx.stack[ctx.rsp]);
+        } else if (!obj_p->set_property_value(PropertyHandle<Value> { obj_p, ctx.stack[ctx.rsp - 1], PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)}, ctx.stack[ctx.rsp])) {
+            return false;
         }
 
         ctx.rsp -= a1;
@@ -828,24 +819,35 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        const int16_t new_callee_sbp = ctx.rsp - a1 + 1;
-        const int16_t old_caller_sbp = ctx.rsbp;
-        const int16_t old_caller_ret_bc_off = ctx.rip_p - ctx.code_bp + 1;
+        /// NOTE: handle a native function call IFF a0 < 0: a value reference to some object reference is at RSP.
+        if (a0 >= 0) {
+            const int16_t new_callee_sbp = ctx.rsp - a1 + 1;
+            const int16_t old_caller_sbp = ctx.rsbp;
+            const int16_t old_caller_ret_bc_off = ctx.rip_p - ctx.code_bp + 1;
 
-        ctx.rip_p = ctx.code_bp + ctx.fn_table_bp[a0];
-        ctx.rsbp = new_callee_sbp;
+            ctx.rip_p = ctx.code_bp + ctx.fn_table_bp[a0];
+            ctx.rsbp = new_callee_sbp;
 
-        ctx.frames.emplace_back(tco_call_frame_type {
-            new_callee_sbp,
-            old_caller_sbp,
-            old_caller_ret_bc_off,
-        });
-
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
-    }
-
-    [[nodiscard]] inline auto op_native_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ctx.has_err = true;
+            ctx.frames.emplace_back(tco_call_frame_type {
+                new_callee_sbp,
+                old_caller_sbp,
+                old_caller_ret_bc_off,
+            });
+        } else if (auto callable_value_ref_p = ctx.stack[ctx.rsp].get_value_ref(); !callable_value_ref_p) {
+            return false;
+        } else if (auto callable_obj_ref_p = callable_value_ref_p->to_object(); !callable_obj_ref_p) {
+            return false;
+        } else {
+            const int16_t caller_rsbp = ctx.rsbp;
+            const int16_t callee_rsbp = ctx.rsp - a1;
+            ctx.rsbp = callee_rsbp;
+            
+            ctx.has_err = !callable_obj_ref_p->call(&ctx, a1);
+            
+            ctx.rsp = callee_rsbp;
+            ctx.rsbp = caller_rsbp;
+            ++ctx.rip_p;
+        }
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
@@ -866,7 +868,6 @@ export namespace DerkJS {
 
     [[nodiscard]] inline auto op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         ctx.has_err = a0 ^ 0; // 1. A non-zero flag is an errorneous exit.
-        ctx.rip_p = ctx.code_bp - 1; // 2. Force a HALT here with a dud RIP!
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
@@ -905,24 +906,6 @@ export namespace DerkJS {
                     return nullptr;
                 }
             }
-        }
-
-        template <typename V> requires (std::is_same_v<std::remove_cvref_t<V>, Value>)
-        void push_value(V&& value) {
-            ++m_ctx.rsp;
-            m_ctx.stack[m_ctx.rsp] = std::forward<V>(value);
-        }
-
-        void lazy_pop_values(int16_t n) noexcept {
-            m_ctx.rsp -= n;
-
-            if (m_ctx.rsp < 0) {
-                m_ctx.has_err = true;
-            }
-        }
-
-        [[nodiscard]] auto peek_local_value(int offset) noexcept -> Value& {
-            return m_ctx.stack[m_ctx.rsbp + offset];
         }
 
         [[nodiscard]] auto peek_final_result() const noexcept -> const Value& {

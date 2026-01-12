@@ -12,37 +12,18 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
  - `use strict` is the locked default.
  - No automatic semicolon insertion.
 
-### Grammar (Expressions)
-```
-<primary> = "undefined" | "null" | "this" | <identifier> | <boolean> | <number> | <object> | "(" <expr> ")"
-<object> = "{" (<property> ",")* "}"
-<property> = <identifier> : <expr>
-<member> = <primary> ( "." <call> | "[" <expr> "]" )?
-<new> = "new"? <member>
-<call> = <new> ( "(" ( <expr> ( "," <expr> )* )? ")" )?
-<unary> = ( "!" )? <call>
-<factor> = <unary> ( ( "%" | "*" | "/" ) <unary> )*
-<term> = <factor> ( ( "+" | "-" ) <factor> )*
-<compare> = <term> ( ( "<" | ">" | "<=" | ">=" ) <term> )*
-<equality> = <compare> ( ( "==" | "!=" | "===" | "!==" ) <compare> )*
-<logical-and> = <equality> ( "&&" <equality> )*
-<logical-or> = <logical-and> ( "||" <logical-and> )*
-<expr> = <logical-or>
-```
+### Simple Demo
+<img src="imgs/DerkJS_console_log.png" size="25%">
 
-### Grammar (Statements)
-```
-<program> = <stmt>+
-<stmt> = <variable> | <if> | <return> | <while> | <function> | <expr-stmt>
-<variable> = "var" <var-decl> ( "," <var-decl>)* ";"
-<var-decl> = <identifier> ( "=" <expr> )?
-<if> = "if" "(" <expr> ")" <block> ( "else" ( <block> | <if> | <return> | <expr-stmt> ) )? ; maybe add dangling while loops later, meh
-<return> = "return" <expr> ";"
-<while> = "while" "(" <expr> ")" <block>   ; just have loops contain block bodies for simplicity!
-<function> = "function" <identifier> "(" ( <identifier> ( "," <identifier> )* )? ")" <block>
-<block> = "{" <stmt>+ "}"
-<expr-stmt> = <call> ( "=" <expr> )? ";"
-```
+### Usage
+ 1. Give `./utility.sh` run permissions.
+ 2. Run `./utility.sh help` to see info on building, sloc count, etc.
+ 3. Run `./build/derkjs_tco -h` for help if you've successfully built the TCO intepreter version.
+  - **WARNING:** The loop switch version of the VM is _not yet updated_ to support simple objects & native objects.
+
+### Other Repo Docs:
+ - [Subset Grammar](../docs/grammar.md)
+ - [OLD Semantic Checking](../docs/sema_checks.md)
 
 ### TO-DO's:
  1. ~~Fix duplicate constant storage in bytecode.~~
@@ -60,7 +41,15 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
       - Some properties are inherent duplicates from its prototype(s).
       - Some properties are instance-specific properties a.k.a "own" props.
       - Instances are _clones_ of prototypes!
-      - Implement `this` as a special reference variable to the current context's instance-`Object`.
- 10. Add built-in context objects and global objects
+ 10. Add custom natives: Console, Date objects!
+    - Implement native objects and function wrappers for bytecode / native callables!
+      - Bytecode objects just hold an `Instruction` buffer, and `call()` takes an `ExternVMCtx*, PropPool<PropertyHandle<Value>, Value>`.
+    - Implement:
+      - `console.log('Hello World');`
+      - `console.read('Enter something: ');` -> Should print the prompt string and return a line from STDIN??
+      - `Date.nano();` -> Gives a whole number of nanoseconds since the Epoch.
+    - Implement support for function-level & global `this`.
+ 11. Add built-in context objects and global objects for `this`.
+ 12. Implement usage of `this` in constructor functions with `new` & object "methods".
     - Implement `[Console console]` basics: `log`, `clear`, `prompt` (DerkJS extension)
- 11. Add mark and sweep GC.
+ 13. Add mark and sweep GC.

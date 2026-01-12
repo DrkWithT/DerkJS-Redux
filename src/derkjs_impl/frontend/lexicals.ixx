@@ -3,7 +3,7 @@ module;
 #include <optional>
 #include <string>
 #include <string_view>
-#include <map>
+#include <flat_map>
 
 export module frontend.lexicals;
 
@@ -101,7 +101,7 @@ export namespace DerkJS {
     class Lexer {
     private:
         // Maps unique, special lexemes to keywords & operators. All string_views here MUST view string literals, having lifetimes akin to Rust's `&'static str`.
-        std::map<std::string_view, TokenTag> m_specials;
+        std::flat_map<std::string_view, TokenTag> m_specials;
         int m_pos;
         int m_end;
         int m_line;
@@ -329,44 +329,8 @@ export namespace DerkJS {
         }
 
     public:
-        Lexer(std::string_view source) noexcept
-        : m_specials {}, m_pos {}, m_end {static_cast<int>(source.size())}, m_line {1}, m_column {1} {
-            m_specials.emplace("var", TokenTag::keyword_var),
-            m_specials.emplace("if", TokenTag::keyword_if);
-            m_specials.emplace("else", TokenTag::keyword_else);
-            m_specials.emplace("return", TokenTag::keyword_return),
-            m_specials.emplace("while", TokenTag::keyword_while);
-            m_specials.emplace("function", TokenTag::keyword_function);
-            m_specials.emplace("prototype", TokenTag::keyword_prototype);
-            m_specials.emplace("this", TokenTag::keyword_this);
-            m_specials.emplace("new", TokenTag::keyword_new);
-            m_specials.emplace("undefined", TokenTag::keyword_undefined);
-            m_specials.emplace("null", TokenTag::keyword_null);
-            m_specials.emplace("true", TokenTag::keyword_true);
-            m_specials.emplace("false", TokenTag::keyword_false);
-            m_specials.emplace("%", TokenTag::symbol_percent);
-            m_specials.emplace("*", TokenTag::symbol_times);
-            m_specials.emplace("/", TokenTag::symbol_slash);
-            m_specials.emplace("+", TokenTag::symbol_plus);
-            m_specials.emplace("-", TokenTag::symbol_minus);
-            m_specials.emplace("!", TokenTag::symbol_bang);
-            m_specials.emplace("==", TokenTag::symbol_equal);
-            m_specials.emplace("!=", TokenTag::symbol_bang_equal);
-            m_specials.emplace("===", TokenTag::symbol_strict_equal);
-            m_specials.emplace("!==", TokenTag::symbol_strict_bang_equal);
-            m_specials.emplace("<", TokenTag::symbol_less);
-            m_specials.emplace("<=", TokenTag::symbol_less_equal);
-            m_specials.emplace(">", TokenTag::symbol_greater);
-            m_specials.emplace(">=", TokenTag::symbol_greater_equal);
-            m_specials.emplace("&&", TokenTag::symbol_amps);
-            m_specials.emplace("||", TokenTag::symbol_pipes);
-            m_specials.emplace("=", TokenTag::symbol_assign);
-            m_specials.emplace("%=", TokenTag::symbol_percent_assign);
-            m_specials.emplace("*=", TokenTag::symbol_times_assign);
-            m_specials.emplace("/=", TokenTag::symbol_slash_assign);
-            m_specials.emplace("+=", TokenTag::symbol_plus_assign);
-            m_specials.emplace("-=", TokenTag::symbol_minus_assign);
-        }
+        Lexer(std::string_view source, std::flat_map<std::string_view, TokenTag> lexicals) noexcept
+        : m_specials (std::move(lexicals)), m_pos {}, m_end {static_cast<int>(source.size())}, m_line {1}, m_column {1} {}
 
         [[nodiscard]] auto operator()(const std::string& source) -> Token {
             if (at_eof()) {
