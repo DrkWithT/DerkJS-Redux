@@ -18,7 +18,7 @@ export namespace DerkJS {
      */
     class NativeFunction : public ObjectBase<Value> {
     public:
-        /// Points to a native, top-level C++ function for DerkJS. Args: JS VM's context, an optional property pool for the wrapping `NativeFunction`, and argument count passed (to compute the base offset of locals). After the call, the native MUST NOT mutate RBP or RIP at all.
+        /// Points to a native, top-level C++ function for DerkJS. Args: JS VM's context, an optional property pool for the wrapping `NativeFunction`, and argument count passed (to compute the base offset of locals). Importantly, the native MUST NOT mutate RBP, RSP, or RIP at all.
         using native_func_p = bool(*)(ExternVMCtx*, PropPool<PropertyHandle<Value>, Value>*, int);
 
     private:

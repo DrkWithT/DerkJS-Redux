@@ -819,19 +819,8 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        /// NOTE: handle a native function call IFF a0 < 0: an object reference is at RSP.
-        if (a0 < 0) {
-            const int16_t caller_rsbp = ctx.rsbp;
-            ctx.rsbp = ctx.rsp - a1 + 1;
-
-            if (auto callable_obj_ref_p = ctx.stack[ctx.rsp].to_object(); callable_obj_ref_p) {
-                ctx.has_err = !callable_obj_ref_p->call(&ctx, a1);
-                ctx.rsbp = caller_rsbp;
-                ++ctx.rip_p;
-            } else {
-                ctx.has_err = true;
-            }
-        } else {
+        /// NOTE: handle a native function call IFF a0 < 0: a value reference to some object reference is at RSP.
+        if (a0 >= 0) {
             const int16_t new_callee_sbp = ctx.rsp - a1 + 1;
             const int16_t old_caller_sbp = ctx.rsbp;
             const int16_t old_caller_ret_bc_off = ctx.rip_p - ctx.code_bp + 1;
@@ -844,6 +833,20 @@ export namespace DerkJS {
                 old_caller_sbp,
                 old_caller_ret_bc_off,
             });
+        } else if (auto callable_value_ref_p = ctx.stack[ctx.rsp].get_value_ref(); !callable_value_ref_p) {
+            return false;
+        } else if (auto callable_obj_ref_p = callable_value_ref_p->to_object(); !callable_obj_ref_p) {
+            return false;
+        } else {
+            const int16_t caller_rsbp = ctx.rsbp;
+            const int16_t callee_rsbp = ctx.rsp - a1;
+            ctx.rsbp = callee_rsbp;
+            
+            ctx.has_err = !callable_obj_ref_p->call(&ctx, a1);
+            
+            ctx.rsp = callee_rsbp;
+            ctx.rsbp = caller_rsbp;
+            ++ctx.rip_p;
         }
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);

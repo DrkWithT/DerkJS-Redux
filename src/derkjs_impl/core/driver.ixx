@@ -54,6 +54,7 @@ export namespace DerkJS::Core {
         std::flat_map<std::string_view, TokenTag> m_js_lexicals;
         std::flat_map<std::string, int> m_pooled_string_index;
         std::flat_map<std::string, int> m_native_obj_index;
+        std::vector<PreloadConst> m_preloaded_consts;
         std::vector<std::string> m_src_map;
         std::string_view m_app_name;
         std::string_view m_app_author;
@@ -66,6 +67,7 @@ export namespace DerkJS::Core {
             std::ifstream reader {file_path};
 
             if (!reader.is_open()) {
+                std::println(std::cerr, "NOTE: could not read source: '{}'", file_path);
                 return {};
             }
 
@@ -95,7 +97,7 @@ export namespace DerkJS::Core {
         }
 
         [[nodiscard]] auto compile_script(const ASTUnit& ast) -> std::optional<Program> {
-            BytecodeGenPass codegen_pass {std::move(m_js_heap), std::move(m_native_obj_index), std::move(m_pooled_string_index)};
+            BytecodeGenPass codegen_pass {std::move(m_js_heap), std::move(m_native_obj_index), std::move(m_pooled_string_index), std::move(m_preloaded_consts)};
 
             return codegen_pass(ast, m_src_map);
         }
@@ -111,8 +113,6 @@ export namespace DerkJS::Core {
         /// NOTE: takes the native object's name & a StaticString-to-< Value / std::unique_ptr<ObjectBase<Value>> > list to preload.
         template <std::size_t N>
         [[maybe_unused]] auto add_native_object(std::string name, std::array<NativePropertyStub, N> prop_list) -> bool {
-            const auto native_obj_heap_id = m_js_heap.get_next_id();
-            
             // 1. Get non-owning object pointer and build the object's properties. Intern corresponding properties' handles into the heap.
             auto object = std::make_unique<Object>(nullptr); // Blank JS object with no prototype.
             auto object_p = object.get();
@@ -125,8 +125,14 @@ export namespace DerkJS::Core {
                 if (!interned_str_ptr) {
                     return false;
                 }
+
+                std::string prop_identifier_text {prop_name.as_string()};
     
-                m_pooled_string_index.emplace(prop_name.as_string(), next_key_heap_id);
+                m_pooled_string_index.emplace(prop_identifier_text, next_key_heap_id);
+                m_preloaded_consts.emplace_back(PreloadConst {
+                    .lexeme = prop_identifier_text,
+                    .value = Value {interned_str_ptr}
+                });
 
                 // 2b. Put property Value: has a non-owning pointer to some object / primitive
                 // 2c. Insert the property by PropertyHandle<Value> -> stored value
@@ -151,8 +157,17 @@ export namespace DerkJS::Core {
                 }
             }
 
-            if (m_js_heap.add_item(native_obj_heap_id, std::move(*object))) {
+            const auto native_obj_heap_id = m_js_heap.get_next_id();
+
+            if (auto obj_new_addr = m_js_heap.add_item(native_obj_heap_id, std::move(*object)); obj_new_addr) {
                 m_native_obj_index.emplace(name, native_obj_heap_id);
+
+                /// NOTE: Treat native objects as global constants- This "preloaded" reference-wrapper as a constant will be usable in the runtime.
+                m_preloaded_consts.emplace_back(PreloadConst {
+                    .lexeme = name,
+                    .value = Value {obj_new_addr}
+                });
+
                 return true;
             }
 
@@ -186,6 +201,10 @@ export namespace DerkJS::Core {
 
             if (!prgm) {
                 return false;
+            }
+
+            if (m_allow_bytecode_dump) {
+                disassemble_program(prgm.value());
             }
 
             DerkJS::VM<Dp> vm {prgm.value(), default_stack_size, default_call_depth_limit};
