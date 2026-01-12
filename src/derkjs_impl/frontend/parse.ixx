@@ -231,7 +231,7 @@ export namespace DerkJS {
                 return std::make_unique<Expr>(
                     MemberAccess {
                         .target = std::move(lhs_primary),
-                        .key = parse_call(lexer, source),
+                        .key = parse_member(lexer, source),
                     },
                     0,
                     snippet_begin,

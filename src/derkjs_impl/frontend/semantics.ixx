@@ -95,6 +95,10 @@ namespace DerkJS {
             const auto& [token_tag, token_start, token_length, token_line, token_column] = primitive.token;
 
             switch (token_tag) {
+            case TokenTag::keyword_undefined:
+            case TokenTag::keyword_null:
+            case TokenTag::keyword_true:
+            case TokenTag::keyword_false:
             case TokenTag::literal_int:
             case TokenTag::literal_real:
             case TokenTag::literal_string:
@@ -301,9 +305,11 @@ namespace DerkJS {
             for (const auto& [var_name, var_init_expr] : variables.vars) {
                 std::string var_name_lexeme = current_source.substr(var_name.start, var_name.length);
 
-                if (auto init_expr_info = check_expr(*var_init_expr, source_name, current_source, area_start, area_length); init_expr_info) {
-                    record_info_of(var_name_lexeme, *init_expr_info);
-                } else {
+                record_info_of(var_name_lexeme, SemanticInfo {
+                    .value_kind = ValueCategory::js_locator
+                });
+
+                if (!check_expr(*var_init_expr, source_name, current_source, area_start, area_length)) {
                     report_error(
                         source_name,
                         m_line,
