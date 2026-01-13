@@ -73,10 +73,6 @@ export namespace DerkJS {
         /// NOTE: This is for String.prototype.indexOf()
         virtual auto find_substr_pos(const StringBase* other_view) const noexcept -> int = 0;
 
-        virtual auto operator==(const StringBase& other) const noexcept -> bool = 0;
-        virtual auto operator<(const StringBase& other) const noexcept -> bool = 0;
-        virtual auto operator>(const StringBase& other) const noexcept -> bool = 0;
-
         virtual auto as_str_view() const noexcept -> std::string_view = 0;
     };
 
