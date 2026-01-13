@@ -169,8 +169,38 @@ export namespace DerkJS {
             };
         }
 
+        [[nodiscard]] auto lex_between(const std::string& source, TokenTag tag, char delim) noexcept -> Token {
+            update_source_location(source.at(m_pos)); // skip leading quote
+
+            const auto temp_start = m_pos;
+            auto temp_length = 0;
+            const auto temp_line = m_line;
+            const auto temp_column = m_column;
+            bool closed = false;
+
+            while (!at_eof()) {
+                if (const auto c = source.at(m_pos); c != delim) {
+                    ++temp_length;
+                    ++m_pos;
+                } else {
+                    closed = true;
+                    ++m_pos;
+                    break;
+                }
+            }
+
+            const auto deduced_tag = (closed) ? tag : TokenTag::unknown;
+
+            return {
+                deduced_tag,
+                temp_start,
+                temp_line,
+                temp_column
+            };
+        }
+
         [[nodiscard]] auto lex_whitespace(const std::string& source) noexcept -> Token {
-            auto temp_start = m_pos;
+            const auto temp_start = m_pos;
             auto temp_length = 0;
             const auto temp_line = m_line;
             const auto temp_column = m_column;
@@ -350,6 +380,7 @@ export namespace DerkJS {
             case ':': return lex_single(source, TokenTag::colon);
             case ',': return lex_single(source, TokenTag::comma);
             case ';': return lex_single(source, TokenTag::semicolon);
+            case '\'': case '\"': return lex_between(source, TokenTag::literal_string, peek_0);
             default: break;
             }
 
