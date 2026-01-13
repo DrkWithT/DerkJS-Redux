@@ -18,17 +18,18 @@ import derkjs_impl;
     return true;
 }
 
-[[nodiscard]] auto native_console_read_line(DerkJS::ExternVMCtx* ctx, [[maybe_unused]] DerkJS::PropPool<DerkJS::PropertyHandle<DerkJS::Value>, Value>, int argc) -> bool {    
+[[nodiscard]] auto native_console_read_line(DerkJS::ExternVMCtx* ctx, [[maybe_unused]] DerkJS::PropPool<DerkJS::PropertyHandle<DerkJS::Value>, DerkJS::Value>* props, int argc) -> bool {    
     /// NOTE: Show user the passed-in prompt string: It MUST be the 1st argument on the stack.
-    std::print("{}", ctx.stack[ctx.rsbp].to_string());
+    const auto passed_rbsp = ctx->rsbp;
+    std::print("{}", ctx->stack[passed_rbsp].to_string().value());
 
     std::string temp_line;
     std::getline(std::cin, temp_line);
 
-    if (auto line_str_p = ctx.heap.add_item(ctx.heap.get_next_id(), DynamicString {std::move(temp_line)}); !line_str_p) {
+    if (auto line_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), DerkJS::DynamicString {std::move(temp_line)}); !line_str_p) {
         return false;
     } else {
-        ctx.stack[ctx.rsbp] = Value {line_str_p};
+        ctx->stack[passed_rbsp] = DerkJS::Value {line_str_p};
         return true;
     }
 }

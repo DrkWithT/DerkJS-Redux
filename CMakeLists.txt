@@ -16,6 +16,7 @@ target_sources(
     src/derkjs_impl/frontend/semantics.ixx
     src/derkjs_impl/runtime/objects.ixx
     src/derkjs_impl/runtime/callables.ixx
+    src/derkjs_impl/runtime/strings.ixx
     src/derkjs_impl/runtime/value.ixx
     src/derkjs_impl/runtime/bytecode.ixx
     src/derkjs_impl/backend/bc_generate.ixx
