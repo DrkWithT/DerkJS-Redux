@@ -18,6 +18,7 @@ import frontend.lexicals;
 import frontend.ast;
 import runtime.objects;
 import runtime.value;
+import runtime.strings;
 import runtime.bytecode;
 
 export namespace DerkJS {
@@ -124,6 +125,24 @@ export namespace DerkJS {
 
         /// NOTE: returns `int` representing the ID of the newly pooled JS string.
         [[nodiscard]] auto record_pooled_string(StaticString s) -> int {
+            std::string s_owned_str = s.as_string();
+
+            if (auto existing_pooled_str_id_it = m_poolable_str_ids.find(s_owned_str); existing_pooled_str_id_it != m_poolable_str_ids.end()) {
+                return existing_pooled_str_id_it->second;
+            }
+
+            const auto result_id = m_heap_items.get_next_id();
+            
+            if (!m_heap_items.add_item(result_id, std::move(s))) {
+                return -1;
+            }
+
+            m_poolable_str_ids.emplace(s_owned_str, result_id);
+
+            return result_id;
+        }
+
+        [[nodiscard]] auto record_pooled_string(DynamicString s) -> int {
             std::string s_owned_str = s.as_string();
 
             if (auto existing_pooled_str_id_it = m_poolable_str_ids.find(s_owned_str); existing_pooled_str_id_it != m_poolable_str_ids.end()) {
@@ -296,6 +315,31 @@ export namespace DerkJS {
                 });
 
                 encode_instruction(Opcode::djs_put_const, dbl_lt_locator);
+
+                return Arg {
+                    .n = static_cast<int16_t>(update_temp_id(1)),
+                    .tag = Location::temp
+                };
+            }
+            case TokenTag::literal_string: {
+                std::string str_lt_lexeme = literal_token.as_string(source);
+                DynamicString str_obj {str_lt_lexeme};
+
+                auto ds_id = record_pooled_string(str_obj);
+
+                if (ds_id == -1) {
+                    std::println("NOTE: could not resolve location of object property '{}'.", obj_key_name);
+                    return {};
+                }
+
+                auto ds_locator_arg = record_constants(obj_key_name, Value {m_heap_items.get_item(ds_id)});
+
+                if (ds_locator_arg.n == -1) {
+                    std::println("NOTE: could not record constant ref for literal '{}'.", obj_key_name);
+                    return {};
+                }
+
+                encode_instruction(Opcode::djs_put_const, ds_locator_arg);
 
                 return Arg {
                     .n = static_cast<int16_t>(update_temp_id(1)),
