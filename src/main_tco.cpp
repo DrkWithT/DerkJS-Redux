@@ -18,6 +18,21 @@ import derkjs_impl;
     return true;
 }
 
+[[nodiscard]] auto native_console_read_line(DerkJS::ExternVMCtx* ctx, [[maybe_unused]] DerkJS::PropPool<DerkJS::PropertyHandle<DerkJS::Value>, Value>, int argc) -> bool {    
+    /// NOTE: Show user the passed-in prompt string: It MUST be the 1st argument on the stack.
+    std::print("{}", ctx.stack[ctx.rsbp].to_string());
+
+    std::string temp_line;
+    std::getline(std::cin, temp_line);
+
+    if (auto line_str_p = ctx.heap.add_item(ctx.heap.get_next_id(), DynamicString {std::move(temp_line)}); !line_str_p) {
+        return false;
+    } else {
+        ctx.stack[ctx.rsbp] = Value {line_str_p};
+        return true;
+    }
+}
+
 int main(int argc, char* argv[]) {
     using namespace DerkJS;
 
@@ -32,7 +47,7 @@ int main(int argc, char* argv[]) {
             .author = "DrkWithT (GitHub)",
             .version_major = 0,
             .version_minor = 1,
-            .version_patch = 0
+            .version_patch = 2
         },
         1024 // increase object count limit for VM if needed
     };
@@ -58,6 +73,10 @@ int main(int argc, char* argv[]) {
         Core::NativePropertyStub {
             .name_str = StaticString {nullptr, "log", 3},
             .item = std::make_unique<NativeFunction>(native_console_log)
+        },
+        Core::NativePropertyStub {
+            .name_str = StaticString {nullptr, "readln", 6},
+            .item = std::make_unique<NativeFunction>(native_console_read_line)
         }
     }; 
 
@@ -97,7 +116,6 @@ int main(int argc, char* argv[]) {
     driver.add_js_lexical("+=", TokenTag::symbol_plus_assign);
     driver.add_js_lexical("-=", TokenTag::symbol_minus_assign);
 
-    /// TODO: configure driver with "console"
     driver.add_native_object(
         "console",
         std::to_array(std::move(console_obj_props))
