@@ -42,9 +42,9 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
     - Implement:
       - `console.log('Hello World');`
       - `Date.nano();` -> Gives a whole number of nanoseconds since the Epoch.
- 11. Add larger strings under `ObjectBase<Value>, StringBase` for string literals.
-  - Add `console.readline(msg: string);`
- 11. Add support for `this` in functions
+ 11. ~~Add larger strings under `ObjectBase<Value>, StringBase` for string literals.~~
+  - ~~Add `console.readline(msg: string);`~~
+ 12. Add support for `this` in functions
   - Add closure opcode support... Make / modify an implicit JS object locally. It may be returned.
- 12. Implement usage of `this` in constructor functions with `new` & object "methods".
- 13. Add mark and sweep GC.
+ 13. Implement usage of `this` in constructor functions with `new` & object "methods".
+ 14. Add mark and sweep GC.
