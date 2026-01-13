@@ -180,11 +180,11 @@ export namespace DerkJS {
 
             while (!at_eof()) {
                 if (const auto c = source.at(m_pos); c != delim) {
+                    update_source_location(c);
                     ++temp_length;
-                    ++m_pos;
                 } else {
+                    update_source_location(c);
                     closed = true;
-                    ++m_pos;
                     break;
                 }
             }
@@ -194,6 +194,7 @@ export namespace DerkJS {
             return {
                 deduced_tag,
                 temp_start,
+                temp_length,
                 temp_line,
                 temp_column
             };
@@ -380,7 +381,8 @@ export namespace DerkJS {
             case ':': return lex_single(source, TokenTag::colon);
             case ',': return lex_single(source, TokenTag::comma);
             case ';': return lex_single(source, TokenTag::semicolon);
-            case '\'': case '\"': return lex_between(source, TokenTag::literal_string, peek_0);
+            case '\'': return lex_between(source, TokenTag::literal_string, '\'');
+            case '\"': return lex_between(source, TokenTag::literal_string, '\"');
             default: break;
             }
 

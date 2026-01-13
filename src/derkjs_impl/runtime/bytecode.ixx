@@ -58,7 +58,6 @@ export namespace DerkJS {
         immediate,
         constant,
         heap_obj,
-        pooled_str,
         temp,
         end,
     };
