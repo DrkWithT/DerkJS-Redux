@@ -1,7 +1,5 @@
-/* test extension: console.readline() */
+/* test extension: console.readln() */
 
 var s = console.readln("Enter some words: ");
 
-console.log(s);
-
-return 0;
+return s;

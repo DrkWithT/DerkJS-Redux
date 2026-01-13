@@ -26,6 +26,7 @@ import frontend.semantics;
 import runtime.objects;
 import runtime.value;
 import runtime.callables;
+import runtime.strings;
 import runtime.bytecode;
 import runtime.vm;
 import backend.bc_generate;
@@ -52,9 +53,7 @@ export namespace DerkJS::Core {
     private:
         PolyPool<ObjectBase<Value>> m_js_heap;
         std::flat_map<std::string_view, TokenTag> m_js_lexicals;
-        std::flat_map<std::string, int> m_pooled_string_index;
-        std::flat_map<std::string, int> m_native_obj_index;
-        std::vector<PreloadConst> m_preloaded_consts;
+        std::vector<PreloadItem> m_preloads;
         std::vector<std::string> m_src_map;
         std::string_view m_app_name;
         std::string_view m_app_author;
@@ -97,9 +96,10 @@ export namespace DerkJS::Core {
         }
 
         [[nodiscard]] auto compile_script(const ASTUnit& ast) -> std::optional<Program> {
-            BytecodeGenPass codegen_pass {std::move(m_js_heap), std::move(m_native_obj_index), std::move(m_pooled_string_index), std::move(m_preloaded_consts)};
+            // BytecodeGenPass codegen_pass {std::move(m_js_heap), ... TODO!!};
+            // return codegen_pass(ast, m_src_map);
 
-            return codegen_pass(ast, m_src_map);
+            return {};
         }
 
     public:
@@ -110,67 +110,10 @@ export namespace DerkJS::Core {
             m_js_lexicals.emplace(lexeme, tag);
         }
 
-        /// NOTE: takes the native object's name & a StaticString-to-< Value / std::unique_ptr<ObjectBase<Value>> > list to preload.
+        /// NOTE: takes the native object's name & a StaticString <-> "item" list to preload. The item is a primitive Value OR ObjectBase<Value>.
         template <std::size_t N>
         [[maybe_unused]] auto add_native_object(std::string name, std::array<NativePropertyStub, N> prop_list) -> bool {
-            // 1. Get non-owning object pointer and build the object's properties. Intern corresponding properties' handles into the heap.
-            auto object = std::make_unique<Object>(nullptr); // Blank JS object with no prototype.
-            auto object_p = object.get();
-
-            for (auto& [prop_name, prop_item] : prop_list) {
-                const auto next_key_heap_id = m_js_heap.get_next_id();
-                auto interned_str_ptr = m_js_heap.add_item(next_key_heap_id, prop_name);
-
-                // 2a. Put interned property string
-                if (!interned_str_ptr) {
-                    return false;
-                }
-
-                std::string prop_identifier_text {prop_name.as_string()};
-    
-                m_pooled_string_index.emplace(prop_identifier_text, next_key_heap_id);
-                m_preloaded_consts.emplace_back(PreloadConst {
-                    .lexeme = prop_identifier_text,
-                    .value = Value {interned_str_ptr}
-                });
-
-                // 2b. Put property Value: has a non-owning pointer to some object / primitive
-                // 2c. Insert the property by PropertyHandle<Value> -> stored value
-                if (auto prop_item_as_obj_sp_p = std::get_if<std::unique_ptr<ObjectBase<Value>>>(&prop_item); prop_item_as_obj_sp_p) {
-                    /// NOTE: here, the descriptor is for an immutable property... Mutating a native object would probably be risky to program correctness.
-                    PropertyHandle<Value> temp_prop_handle {object_p, Value {interned_str_ptr}, PropertyHandleTag::key, 0};
-
-                    /// NOTE: insert property value-object into heap and get its naked ptr. One copy of this ptr is owned, but the other becomes non-owning as a "reference" next...
-                    const auto next_prop_value_heap_id = m_js_heap.get_next_id();
-                    auto prop_value_p = m_js_heap.add_item(next_prop_value_heap_id, std::move(*prop_item_as_obj_sp_p));
-
-                    if (!object_p->set_property_value(temp_prop_handle, Value {prop_value_p})) {
-                        return false;
-                    }
-                } else {
-                    /// TODO: use object_p, Value {interned_str_ptr} to make descriptor.
-                    PropertyHandle<Value> temp_primitive_prop_handle {object_p, Value {interned_str_ptr}, PropertyHandleTag::key, 0};
-
-                    if (!object_p->set_property_value(temp_primitive_prop_handle, std::get<Value>(prop_item))) {
-                        return false;
-                    }
-                }
-            }
-
-            const auto native_obj_heap_id = m_js_heap.get_next_id();
-
-            if (auto obj_new_addr = m_js_heap.add_item(native_obj_heap_id, std::move(*object)); obj_new_addr) {
-                m_native_obj_index.emplace(name, native_obj_heap_id);
-
-                /// NOTE: Treat native objects as global constants- This "preloaded" reference-wrapper as a constant will be usable in the runtime.
-                m_preloaded_consts.emplace_back(PreloadConst {
-                    .lexeme = name,
-                    .value = Value {obj_new_addr}
-                });
-
-                return true;
-            }
-
+            // todo: re-implement this based on what codegen needs to be preloaded...
             return false;
         }
 
