@@ -6,13 +6,14 @@ module;
 #include <array>
 #include <string>
 #include <sstream>
+#include <format>
 
 export module runtime.strings;
 
 import runtime.objects;
 import runtime.value;
 
-namespace DerkJS {
+export namespace DerkJS {
     /// TODO: implement dynamic strings later!
     class StaticString : public ObjectBase<Value>, public StringBase {
     public:
@@ -109,7 +110,7 @@ namespace DerkJS {
                 return false;
             }
 
-            return as_str_view() == other.as_str_view();
+            return as_str_view() == other.as_string();
         }
 
         [[nodiscard]] auto operator<(const ObjectBase& other) const noexcept -> bool override {
@@ -117,7 +118,7 @@ namespace DerkJS {
                 return false;
             }
 
-            return as_str_view() < other.as_str_view();
+            return as_str_view() < other.as_string();
         }
 
         [[nodiscard]] auto operator>(const ObjectBase& other) const noexcept -> bool override {
@@ -125,7 +126,7 @@ namespace DerkJS {
                 return false;
             }
 
-            return as_str_view() > other.as_str_view();
+            return as_str_view() > other.as_string();
         }
 
 
@@ -181,102 +182,102 @@ namespace DerkJS {
 
         /// BEGIN ObjectBase overrides
 
-        virtual auto get_unique_addr() noexcept -> void* override {
+        [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
             return this;
         }
 
-        virtual auto get_class_name() const noexcept -> std::string override {
+        [[nodiscard]] auto get_class_name() const noexcept -> std::string override {
             return "string";
         }
 
-        virtual auto is_extensible() const noexcept -> bool override {
+        [[nodiscard]] auto is_extensible() const noexcept -> bool override {
             return false;
         }
 
-        virtual auto is_frozen() const noexcept -> bool override {
+        [[nodiscard]] auto is_frozen() const noexcept -> bool override {
             return false;
         }
 
-        virtual auto is_prototype() const noexcept -> bool override {
+        [[nodiscard]] auto is_prototype() const noexcept -> bool override {
             return false;
         }
 
-        virtual auto get_prototype() noexcept -> ObjectBase<V>* override {
+        [[nodiscard]] auto get_prototype() noexcept -> ObjectBase<Value>* override {
             return nullptr;
         }
 
-        virtual auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<V>, V>& override {
+        [[nodiscard]] auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<Value>, Value>& override {
             return m_own_props;
         }
 
-        virtual auto get_property_value([[maybe_unused]] const PropertyHandle<V>& handle) -> V* override {
+        [[nodiscard]] auto get_property_value([[maybe_unused]] const PropertyHandle<Value>& handle) -> Value* override {
             return nullptr;
         }
 
-        virtual auto set_property_value([[maybe_unused]] const PropertyHandle<V>& handle, const V& value) -> V* override {
+        [[nodiscard]] auto set_property_value([[maybe_unused]] const PropertyHandle<Value>& handle, const Value& value) -> Value* override {
             return nullptr;
         }
 
-        virtual auto del_property_value([[maybe_unused]] const PropertyHandle<V>& handle) -> bool override {
+        [[nodiscard]] auto del_property_value([[maybe_unused]] const PropertyHandle<Value>& handle) -> bool override {
             return false;
         }
 
-        virtual auto call([[maybe_unused]] void* opaque_ctx_p, [[maybe_unused]] int argc) -> bool override {
+        [[maybe_unused]] auto call([[maybe_unused]] void* opaque_ctx_p, [[maybe_unused]] int argc) -> bool override {
             return false;
         }
 
         /// For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!
-        virtual auto clone() const -> ObjectBase<V>* override {
+        [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
             auto cloned_self = new DynamicString {m_data};
 
             return cloned_self;
         }
 
         /// NOTE: For default printing of objects, etc. to the console (stdout). 
-        virtual auto as_string() const -> std::string override {
+        [[nodiscard]] auto as_string() const -> std::string override {
             return m_data;
         }
 
-        virtual auto operator==(const ObjectBase& other) const noexcept -> bool override {
-            return m_data == other.m_data;
+        [[nodiscard]] auto operator==(const ObjectBase& other) const noexcept -> bool override {
+            return m_data == other.as_string();
         }
 
-        virtual auto operator<(const ObjectBase& other) const noexcept -> bool override {
-            return m_data < other.m_data;
+        [[nodiscard]] auto operator<(const ObjectBase& other) const noexcept -> bool override {
+            return m_data < other.as_string();
         }
 
-        virtual auto operator>(const ObjectBase& other) const noexcept -> bool override {
-            return m_data > other.m_data;
+        [[nodiscard]] auto operator>(const ObjectBase& other) const noexcept -> bool override {
+            return m_data > other.as_string();
         }
 
         /// BEGIN StringBase overrides
 
-        virtual auto is_empty() const noexcept -> bool override {
+        [[nodiscard]] auto is_empty() const noexcept -> bool override {
             return m_data.empty();
         }
 
-        virtual auto get_slice(int start, int length) -> std::unique_ptr<StringBase> override {
+        [[nodiscard]] auto get_slice(int start, int length) -> std::unique_ptr<StringBase> override {
             return std::make_unique<DynamicString>(m_data.substr(start, length));
         }
 
-        virtual auto get_length() const noexcept -> int override {
+        [[nodiscard]] auto get_length() const noexcept -> int override {
             return m_data.size();
         }
 
-        virtual void append_front(const StringBase* other_view) override {
-            m_data = std::format("{}{}", other_view.as_str_view(), std::move(m_data));
+        void append_front(const StringBase* other_view) override {
+            m_data = std::format("{}{}", other_view->as_str_view(), std::move(m_data));
         }
 
-        virtual void append_back(const StringBase* other_view) override {
-            m_data.append_range(other_view.as_str_view());
+        void append_back(const StringBase* other_view) override {
+            m_data.append_range(other_view->as_str_view());
         }
 
         /// NOTE: This is for String.prototype.indexOf()
-        virtual auto find_substr_pos(const StringBase* other_view) const noexcept -> int override {
+        [[nodiscard]] auto find_substr_pos([[maybe_unused]] const StringBase* other_view) const noexcept -> int override {
             return -1; // TODO: implement!
         }
 
-        virtual auto as_str_view() const noexcept -> std::string_view override {
+        [[nodiscard]] auto as_str_view() const noexcept -> std::string_view override {
             return std::string_view {m_data.c_str(), m_data.c_str() + m_data.length()};
         }
     };

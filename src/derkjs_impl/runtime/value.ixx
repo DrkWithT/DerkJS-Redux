@@ -443,7 +443,7 @@ export namespace DerkJS {
             case ValueTag::num_nan: default: return "NaN";
             case ValueTag::num_i32: return std::to_string(m_data.i);
             case ValueTag::num_f64: return std::to_string(m_data.d);
-            case ValueTag::object: return "[Object object]";
+            case ValueTag::object: return m_data.obj_p->as_string();
             case ValueTag::val_ref: return m_data.ref_p->to_string();
             }
         }
