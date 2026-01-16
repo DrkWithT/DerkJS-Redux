@@ -681,7 +681,7 @@ export namespace DerkJS {
             return false;
         }
 
-        ctx.rsp -= a1;
+        ctx.rsp -= 2;
         ++ctx.rip_p;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
