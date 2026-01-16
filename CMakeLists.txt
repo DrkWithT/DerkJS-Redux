@@ -25,13 +25,15 @@ target_sources(
 )
 
 if (USE_TCO_WITH_BC_VM)
+    add_executable(derkjs_tco src/main_tco.cpp)
+
     if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-        set(CMAKE_BUILD_TYPE "RelWIthDebInfo")
-        message(WARNING "CMAKE_BUILD_TYPE was set to 'Debug'- Reset to 'RelWithDebInfo' build for TCO.")
+        message(WARNING "CMAKE_BUILD_TYPE was set to 'Debug'- TCO will not apply & the VM can stack overflow.")
+        target_link_options(derkjs_tco PRIVATE "-fsanitize=address")
+    else ()
+        target_compile_options(derkjs_tco PRIVATE "-foptimize-sibling-calls")
     endif ()
 
-    add_executable(derkjs_tco src/main_tco.cpp)
-    target_compile_options(derkjs_tco PRIVATE "-foptimize-sibling-calls")
     target_link_directories(derkjs_tco PUBLIC ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} PUBLIC ${MY_LLVM_LIBCXX_DIR})
     target_link_libraries(derkjs_tco PUBLIC derkjs_impl)
 
