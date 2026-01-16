@@ -123,7 +123,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] constexpr auto operator==(const Value& other) const noexcept -> bool {
-            if (const auto lhs_tag = get_tag(), rhs_tag = other.get_tag(); lhs_tag != rhs_tag) {
+            if (const auto lhs_tag = get_tag(), rhs_tag = other.get_tag(); lhs_tag != rhs_tag && lhs_tag != ValueTag::val_ref && rhs_tag != ValueTag::val_ref) {
                 return false;
             } else if (lhs_tag == ValueTag::undefined || lhs_tag == ValueTag::null) {
                 return true;
@@ -136,8 +136,8 @@ export namespace DerkJS {
                 return (m_data.b ^ other.m_data.b) == 0;
             } else if (lhs_tag == ValueTag::object) {
                 return m_data.obj_p == other.m_data.obj_p;
-            } else if (m_tag == ValueTag::val_ref) {
-                return (m_data.ref_p) ? m_data.ref_p->operator==(other) : false;
+            } else if (lhs_tag == ValueTag::val_ref) {
+                return (m_data.ref_p) ? m_data.ref_p->operator==(other.deep_clone()) : false;
             } else {
                 return false;
             }
@@ -468,8 +468,8 @@ export namespace DerkJS {
             case ValueTag::num_nan: 
             case ValueTag::num_i32:
             case ValueTag::num_f64: return *this;
-            /// TODO: This `ObjectBase<Value>*` can easily point to a temporary owning pointer to some cloned object, so there needs to be a special way to distinguish this for quickly owning that Object in the VM heap...
-            case ValueTag::object: return m_data.obj_p->clone();
+            // copy object reference for avoiding ownership problems
+            case ValueTag::object: return m_data.obj_p;
             case ValueTag::val_ref: return m_data.ref_p->deep_clone();
             }
         }
@@ -520,7 +520,9 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_property_value(const PropertyHandle<Value>& handle) -> Value* override {
-            if (auto property_entry_it = m_own_props.find(handle); property_entry_it != m_own_props.end()) {
+            if (auto property_entry_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&handle](const auto& prop_pair) -> bool {
+                return prop_pair.first == handle;
+            }); property_entry_it != m_own_props.end()) {
                 return &property_entry_it->second;
             }
 
@@ -528,12 +530,18 @@ export namespace DerkJS {
         }
 
         [[maybe_unused]] auto set_property_value(const PropertyHandle<Value>& handle, const Value& value) -> Value* override {
-            m_own_props[handle] = value;
-            return &m_own_props[handle];
+            if (auto old_prop_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&handle](const auto& prop_pair) -> bool {
+                return prop_pair.first == handle;
+            }); old_prop_it == m_own_props.end()) {
+                m_own_props.emplace_back(handle, value);
+                return &m_own_props.back().second;
+            } else {
+                return &old_prop_it->second;
+            }
         }
 
         [[maybe_unused]] auto del_property_value(const PropertyHandle<Value>& handle) -> bool override {
-            return m_own_props.erase(m_own_props.find(handle)) != m_own_props.end();
+            return false; // TODO
         }
 
         [[nodiscard]] auto call([[maybe_unused]] void* opaque_ctx_p, [[maybe_unused]] int argc) -> bool override {
@@ -556,8 +564,12 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto operator==(const ObjectBase& other) const noexcept -> bool override {
-            if (get_class_name() != other.get_class_name()) {
-                return false;
+            if (this == &other) {
+                return true;
+            }
+
+            if (get_class_name() == other.get_class_name()) {
+                return true;
             }
 
             const auto& self_props = get_own_prop_pool();
@@ -567,17 +579,7 @@ export namespace DerkJS {
                 return false;
             }
 
-            auto self_prop_it = self_props.begin();
-
-            while (self_prop_it != self_props.end()) {
-                if (auto prop_pair = other_props.find(self_prop_it->first); prop_pair == other_props.end()) {
-                    return false;
-                } else if (const auto& [prop_key, prop_value] = *prop_pair; prop_key != self_prop_it->first || prop_value != self_prop_it->second) {
-                    return false;
-                }
-
-                ++self_prop_it;
-            }
+            // TODO
 
             return true;
         }
@@ -594,17 +596,7 @@ export namespace DerkJS {
                 return false;
             }
 
-            auto self_prop_it = self_props.cbegin();
-
-            while (self_prop_it != self_props.cend()) {
-                if (auto prop_pair = other_props.find(self_prop_it->first); prop_pair == other_props.cend()) {
-                    return false;
-                } else if (const auto& [prop_key, prop_value] = *prop_pair; prop_key < self_prop_it->first || prop_value < self_prop_it->second) {
-                    return false;
-                }
-
-                ++self_prop_it;
-            }
+            // TODO
 
             return true;
         }
@@ -621,17 +613,7 @@ export namespace DerkJS {
                 return false;
             }
 
-            auto self_prop_it = self_props.cbegin();
-
-            while (self_prop_it != self_props.cend()) {
-                if (auto prop_pair = other_props.find(self_prop_it->first); prop_pair == other_props.cend()) {
-                    return false;
-                } else if (const auto& [prop_key, prop_value] = *prop_pair; prop_key > self_prop_it->first || prop_value > self_prop_it->second) {
-                    return false;
-                }
-
-                ++self_prop_it;
-            }
+            // TODO
 
             return true;
         }

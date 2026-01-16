@@ -6,7 +6,6 @@ module;
 #include <memory>
 
 #include <vector>
-#include <map>
 #include <string>
 #include <string_view>
 
@@ -22,7 +21,7 @@ export namespace DerkJS {
      * @tparam V This parameter must be a `Value` wrapper from `derkjs_impl/runtime/value.ixx`.
      */
     template <typename H, typename V>
-    using PropPool = std::map<H, V>;
+    using PropPool = std::vector<std::pair<H, V>>;
 
     /**
      * @brief This virtual base class is an interface for all "objects" in DerkJS. Concrete sub-types from `ObjectBase` include `Object`s. Though all objects have a "template" object with the default values to properties of their type-structure- The prototype! For now, let's assume instances are clones of the prototype's "template".
@@ -142,7 +141,7 @@ export namespace DerkJS {
         }
 
         template <typename ItemKind> requires (std::is_base_of_v<ItemBase, std::remove_cvref_t<ItemKind>>)
-        [[nodiscard]] auto add_item(int id, ItemKind&& item) -> ItemBase* {
+        [[maybe_unused]] auto add_item(int id, ItemKind&& item) -> ItemBase* {
             using item_kind_type = std::remove_cvref_t<ItemKind>;
 
             if (id < 0 || id >= static_cast<int>(m_items.size())) {
@@ -186,7 +185,7 @@ export namespace DerkJS {
         }
 
         /// NOTE: This overload only exists for the `Driver` to insert property values within insertion of native objects. Please see `./src/derkjs_impl/core/driver.ixx ~ line:138`!
-        [[nodiscard]] auto add_item(int id, std::unique_ptr<ItemBase> item_sp) -> ItemBase* {
+        [[maybe_unused]] auto add_item(int id, std::unique_ptr<ItemBase> item_sp) -> ItemBase* {
             if (id < 0 || id >= static_cast<int>(m_items.size())) {
                 return nullptr;
             }
@@ -261,11 +260,11 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] constexpr auto operator<(const PropertyHandle& other) const noexcept -> bool {
-            return parent_obj_p < other.parent_obj_p && key_value < other.key_value;
+            return parent_obj_p == other.parent_obj_p && key_value < other.key_value;
         }
 
         [[nodiscard]] constexpr auto operator>(const PropertyHandle& other) const noexcept -> bool {
-            return parent_obj_p > other.parent_obj_p && key_value > other.key_value;
+            return parent_obj_p == other.parent_obj_p && key_value > other.key_value;
         }
     };
 }

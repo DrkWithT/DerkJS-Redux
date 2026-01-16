@@ -69,21 +69,16 @@ export namespace DerkJS {
             return m_own_props;
         }
 
-        [[nodiscard]] auto get_property_value(const PropertyHandle<Value>& handle) -> Value* override {
-            if (auto property_entry_it = m_own_props.find(handle); property_entry_it != m_own_props.end()) {
-                return &property_entry_it->second;
-            }
-
+        [[nodiscard]] auto get_property_value([[maybe_unused]] const PropertyHandle<Value>& handle) -> Value* override {
             return nullptr;
         }
 
-        [[maybe_unused]] auto set_property_value(const PropertyHandle<Value>& handle, const Value& value) -> Value* override {
-            m_own_props[handle] = value;
-            return &m_own_props[handle];
+        [[maybe_unused]] auto set_property_value([[maybe_unused]] const PropertyHandle<Value>& handle, const Value& value) -> Value* override {
+            return nullptr;
         }
 
-        [[maybe_unused]] auto del_property_value(const PropertyHandle<Value>& handle) -> bool override {
-            return m_own_props.erase(m_own_props.find(handle)) != m_own_props.end();
+        [[maybe_unused]] auto del_property_value([[maybe_unused]] const PropertyHandle<Value>& handle) -> bool override {
+            return false;
         }
 
         [[nodiscard]] auto call([[maybe_unused]] void* opaque_ctx_p, [[maybe_unused]] int argc) -> bool override {
@@ -106,11 +101,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto operator==(const ObjectBase& other) const noexcept -> bool override {
-            if (get_class_name() != other.get_class_name()) {
-                return false;
-            }
-
-            return as_str_view() == other.as_string();
+            return this == &other || as_str_view() == other.as_string();
         }
 
         [[nodiscard]] auto operator<(const ObjectBase& other) const noexcept -> bool override {
@@ -239,7 +230,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto operator==(const ObjectBase& other) const noexcept -> bool override {
-            return m_data == other.as_string();
+            return this == &other || m_data == other.as_string();
         }
 
         [[nodiscard]] auto operator<(const ObjectBase& other) const noexcept -> bool override {
