@@ -1,7 +1,7 @@
 ## Bytecode Generation
 
 ### Name & Symbol Mappings
- - Mapping:
+ - Mapping of type `Arg`:
     - The "id" into the entity space
     - Entity space (scoped enum tag):
         - code_chunk
@@ -28,4 +28,5 @@
     - AND: the LHS is the result iff FALSY, but the RHS is taken otherwise
  - Calls always place their result on the 1st slot where the callee's locals are (the caller's `RSP - ARG_COUNT (+ 1)?`).
  - Normal function declarations must have their precise offsets within the bytecode recorded in a "function index table". Their names will be mapped to a function index from `[0, N)` where `N` is the count of top-level function decls which are 1st processed. Each function index is-premapped to an _absolute_ position within the entire bytecode buffer.
- - 
+   - **NOTE:** Function declarations have a different stack temp counter vs. the implicit top-level function.
+ - The `this` value should be an object filled per function call with a reference to the parent `this`, imitating closures?

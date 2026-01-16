@@ -7,7 +7,9 @@ function get_quad(x, y) {
         return 2;
     } else if (x < 0.0 && y < 0.0) {
         return 3;
-    } else return 4;
+    } else {
+        return 4;
+    }
 }
 
 /* NOTE: This should give 3 */
