@@ -72,11 +72,11 @@ int main(int argc, char* argv[]) {
 
     Core::NativePropertyStub console_obj_props[] {
         Core::NativePropertyStub {
-            .name_str = StaticString {nullptr, "log", 3},
+            .name_str = "log",
             .item = std::make_unique<NativeFunction>(native_console_log)
         },
         Core::NativePropertyStub {
-            .name_str = StaticString {nullptr, "readln", 6},
+            .name_str = "readln",
             .item = std::make_unique<NativeFunction>(native_console_read_line)
         }
     }; 
