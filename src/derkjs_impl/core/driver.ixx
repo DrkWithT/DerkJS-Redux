@@ -41,7 +41,7 @@ export namespace DerkJS::Core {
     };
 
     struct NativePropertyStub {
-        StaticString name_str;
+        std::string name_str;
         std::variant<std::unique_ptr<ObjectBase<Value>>, Value> item;
     };
 
@@ -51,7 +51,6 @@ export namespace DerkJS::Core {
         static constexpr std::size_t default_call_depth_limit = 208;
 
     private:
-        PolyPool<ObjectBase<Value>> m_js_heap;
         std::flat_map<std::string_view, TokenTag> m_js_lexicals;
         std::vector<PreloadItem> m_preloads;
         std::vector<std::string> m_src_map;
@@ -60,6 +59,7 @@ export namespace DerkJS::Core {
         int m_version_major;
         int m_version_minor;
         int m_version_patch;
+        int m_max_heap_object_n;
         bool m_allow_bytecode_dump;
 
         [[nodiscard]] auto read_script(const std::string& file_path) -> std::string {
@@ -96,15 +96,13 @@ export namespace DerkJS::Core {
         }
 
         [[nodiscard]] auto compile_script(const ASTUnit& ast) -> std::optional<Program> {
-            // BytecodeGenPass codegen_pass {std::move(m_js_heap), ... TODO!!};
-            // return codegen_pass(ast, m_src_map);
-
-            return {};
+            BytecodeGenPass codegen_pass {std::move(m_preloads), m_max_heap_object_n};
+            return codegen_pass(ast, m_src_map);
         }
 
     public:
-        Driver(DriverInfo info, int heap_obj_capacity)
-        : m_js_heap {heap_obj_capacity}, m_js_lexicals {}, m_native_obj_index {}, m_src_map {}, m_app_name {info.name}, m_app_author {info.author}, m_version_major {info.version_major}, m_version_minor {info.version_minor}, m_version_patch {info.version_patch}, m_allow_bytecode_dump {false} {}
+        Driver(DriverInfo info, int max_heap_object_count)
+        : m_js_lexicals {}, m_src_map {}, m_app_name {info.name}, m_app_author {info.author}, m_version_major {info.version_major}, m_version_minor {info.version_minor}, m_version_patch {info.version_patch}, m_max_heap_object_n {max_heap_object_count}, m_allow_bytecode_dump {false} {}
 
         void add_js_lexical(std::string_view lexeme, TokenTag tag) {
             m_js_lexicals.emplace(lexeme, tag);
@@ -113,8 +111,60 @@ export namespace DerkJS::Core {
         /// NOTE: takes the native object's name & a StaticString <-> "item" list to preload. The item is a primitive Value OR ObjectBase<Value>.
         template <std::size_t N>
         [[maybe_unused]] auto add_native_object(std::string name, std::array<NativePropertyStub, N> prop_list) -> bool {
-            // todo: re-implement this based on what codegen needs to be preloaded...
-            return false;
+            auto object_p = std::make_unique<Object>(nullptr);
+
+            for (auto& [stub_name, item] : prop_list) {
+                auto prop_name_p = std::make_unique<DynamicString>(stub_name);
+                auto prop_name_value = Value {prop_name_p.get()};
+
+                m_preloads.emplace_back(PreloadItem {
+                    .lexeme = stub_name,
+                    .entity = prop_name_value,
+                    .location = Location::constant
+                });
+
+                m_preloads.emplace_back(PreloadItem {
+                    .lexeme = "",
+                    .entity = std::move(prop_name_p),
+                    .location = Location::heap_obj
+                });
+
+                if (auto item_as_primitive_p = std::get_if<Value>(&item); item_as_primitive_p) {
+                    PropertyHandle<Value> prop_value_desc {object_p.get(), prop_name_value, PropertyHandleTag::key, 0x00}; // immutable property referencing its underlying value
+
+                    if (!object_p->set_property_value(prop_value_desc, *item_as_primitive_p)) {
+                        return false;
+                    }
+                } else {
+                    auto item_as_object_p = std::get_if<std::unique_ptr<ObjectBase<Value>>>(&item);
+                    PropertyHandle<Value> prop_obj_desc {object_p.get(), prop_name_value, PropertyHandleTag::key, 0x00};
+
+                    if (!object_p->set_property_value(prop_obj_desc, Value {item_as_object_p->get()})) {
+                        return false;
+                    } else {
+                        /// NOTE: Here, prepare an anonymous JS Object value to be inserted into the heap, likely referenced by this object.
+                        m_preloads.emplace_back(PreloadItem {
+                            .lexeme = "",
+                            .entity = std::move(*item_as_object_p),
+                            .location = Location::heap_obj
+                        });
+                    }
+                }
+            }
+
+            m_preloads.emplace_back(PreloadItem {
+                .lexeme = name,
+                .entity = Value {object_p.get()},
+                .location = Location::constant
+            });
+
+            m_preloads.emplace_back(PreloadItem {
+                .lexeme = "",
+                .entity = std::move(object_p),
+                .location = Location::heap_obj
+            });
+
+            return true;
         }
 
         void enable_bc_dump(bool flag) noexcept {
