@@ -23,8 +23,6 @@ export namespace DerkJS {
         djs_nop,
         djs_dup,
         djs_put_const,
-        djs_put_val_ref, // Args: the id into the value space (VM stack / heap) and then the discriminator: 0 -> stack, 1 -> consts, 2 -> heap
-        djs_put_obj_ref,
         djs_deref, // Args: Value reference from RSP to overwrite with the fully-dereferenced Value.
         djs_pop,
         djs_emplace, // Args: target Value slot, but treatment varies. 1: stack temp gets replaced entirely, 2: value ref is followed through and then the original replaced, 3: object
@@ -48,6 +46,7 @@ export namespace DerkJS {
         djs_jump_if,
         djs_jump,
         djs_call, // Args: <optional-bytecode-offset> <arg-count>: IF the `optional-bytecode-offset` is `-1`, the call tries invoking the stack's top `Value`. There, the Value must have an `ObjectBase<Value>*` pointing to an object implementing `call()`.
+        djs_native_call, // Args: <arg-count>: Assumes the top stack value references a `FunctionObject` to invoke on the <arg-count> temporaries below.
         djs_ret,
         djs_halt,
         last,
@@ -87,8 +86,6 @@ export namespace DerkJS {
             "djs_nop",
             "djs_dup",
             "djs_put_const",
-            "djs_put_val_ref",
-            "djs_put_obj_ref",
             "djs_deref",
             "djs_pop",
             "djs_emplace",
@@ -112,6 +109,7 @@ export namespace DerkJS {
             "djs_jump_if",
             "djs_jump",
             "djs_call",
+            "djs_native_call",
             "djs_ret",
             "djs_halt",
         };

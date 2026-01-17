@@ -424,12 +424,6 @@ export namespace DerkJS {
                 case Opcode::djs_put_const:
                     op_push_const(next_argv[0]);
                     break;
-                case Opcode::djs_put_val_ref:
-                    m_status = ExitStatus::opcode_err;
-                    break;
-                case Opcode::djs_put_obj_ref:
-                    m_status = ExitStatus::opcode_err;
-                    break;
                 case Opcode::djs_deref:
                     m_status = ExitStatus::opcode_err;
                     break;
@@ -518,8 +512,6 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_nop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_dup(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_put_const(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_put_val_ref(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_put_obj_ref(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_deref(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_pop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_emplace(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
@@ -543,6 +535,7 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_jump_if(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_jump(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_native_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
@@ -551,12 +544,12 @@ export namespace DerkJS {
     using tco_opcode_fn = bool(*)(ExternVMCtx&, int16_t, int16_t);
     constexpr tco_opcode_fn tco_opcodes[static_cast<std::size_t>(Opcode::last)] = {
         op_nop,
-        op_dup, op_put_const, op_put_val_ref, op_put_obj_ref, op_deref, op_pop, op_emplace,
+        op_dup, op_put_const, op_deref, op_pop, op_emplace,
         op_put_obj_dud, op_get_prop, op_put_prop, op_del_prop,
         op_mod, op_mul, op_div, op_add, op_sub,
         op_test_falsy, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte,
         op_jump_else, op_jump_if, op_jump,
-        op_call, op_ret,
+        op_call, op_native_call, op_ret,
         op_halt
     };
 
@@ -578,33 +571,6 @@ export namespace DerkJS {
         ctx.stack[ctx.rsp + 1] = ctx.consts_view[a0];
         ++ctx.rsp;
         ++ctx.rip_p;
-
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
-    }
-
-    [[nodiscard]] inline auto op_put_val_ref(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        switch (a1) {
-        case 0: {
-            ctx.stack[ctx.rsp + 1] = Value {&ctx.stack[ctx.rsbp + a0]};
-        } break;
-        case 1: {
-            ctx.stack[ctx.rsp + 1] = Value {ctx.consts_view + a0};
-        } break;
-        case 2: {
-            ctx.stack[ctx.rsp + 1] = Value {ctx.heap.get_item(a0)};
-        } break;
-        default: return false;
-        }
-
-        ++ctx.rsp;
-        ++ctx.rip_p;
-
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
-    }
-
-    [[nodiscard]] inline auto op_put_obj_ref(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        /// TODO: implement!
-        ctx.has_err = true;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
@@ -819,37 +785,40 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        /// NOTE: handle a native function call IFF a0 < 0: a value reference to some object reference is at RSP.
-        if (a0 >= 0) {
-            const int16_t new_callee_sbp = ctx.rsp - a1 + 1;
-            const int16_t old_caller_sbp = ctx.rsbp;
-            const int16_t old_caller_ret_bc_off = ctx.rip_p - ctx.code_bp + 1;
+        const int16_t new_callee_sbp = ctx.rsp - a1 + 1;
+        const int16_t old_caller_sbp = ctx.rsbp;
+        const int16_t old_caller_ret_bc_off = ctx.rip_p - ctx.code_bp + 1;
 
-            ctx.rip_p = ctx.code_bp + ctx.fn_table_bp[a0];
-            ctx.rsbp = new_callee_sbp;
+        ctx.rip_p = ctx.code_bp + ctx.fn_table_bp[a0];
+        ctx.rsbp = new_callee_sbp;
 
-            ctx.frames.emplace_back(tco_call_frame_type {
-                new_callee_sbp,
-                old_caller_sbp,
-                old_caller_ret_bc_off,
-            });
-        } else if (auto callable_value_ref_p = ctx.stack[ctx.rsp].get_value_ref(); !callable_value_ref_p) {
+        ctx.frames.emplace_back(tco_call_frame_type {
+            new_callee_sbp,
+            old_caller_sbp,
+            old_caller_ret_bc_off,
+        });
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_native_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        if (auto callable_value_ref_p = ctx.stack[ctx.rsp].get_value_ref(); !callable_value_ref_p) {
             return false;
         } else if (auto callable_obj_ref_p = callable_value_ref_p->to_object(); !callable_obj_ref_p) {
             return false;
         } else {
-            const int16_t callee_rsbp = ctx.rsp - a1;
+            const int16_t callee_rsbp = ctx.rsp - a0;
             const int16_t caller_rsbp = ctx.rsbp;
+
             ctx.rsbp = callee_rsbp;
-            
-            ctx.has_err = !callable_obj_ref_p->call(&ctx, a1);
-            
+            ctx.has_err = !callable_obj_ref_p->call(&ctx, a0);
+
             ctx.rsp = callee_rsbp;
             ctx.rsbp = caller_rsbp;
             ++ctx.rip_p;
+   
+            return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
         }
-
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
