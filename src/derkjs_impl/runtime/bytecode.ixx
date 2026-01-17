@@ -30,7 +30,7 @@ export namespace DerkJS {
         djs_emplace, // Args: target Value slot, but treatment varies. 1: stack temp gets replaced entirely, 2: value ref is followed through and then the original replaced, 3: object
         djs_put_obj_dud,
         djs_get_prop, // djs_get_prop gets a property value's ref based on an object's ref below a pooled string ref on the stack... the result is placed where the targeted ref was. --> Stack placement: <OBJ-REF-LOCAL> <PROP-KEY-HANDLE> --> <PROP-VALUE-REF>
-        djs_put_prop, // djs_put_prop <obj-ref-slot-id> <lazy-pop-N> --> Stack placement: <PROP-KEY-HANDLE-VALUE> <NEW-VALUE> -- (lazy-pop-N) --> <OBJ-REF-LOCAL>
+        djs_put_prop, // djs_put_prop <obj-ref-slot-id> --> Stack placement: <PROP-KEY-HANDLE-VALUE> <NEW-VALUE> --> ...
         djs_del_prop, // TODO!
         djs_mod,
         djs_mul,
@@ -58,7 +58,6 @@ export namespace DerkJS {
         immediate,
         constant,
         heap_obj,
-        pooled_str,
         temp,
         end,
     };

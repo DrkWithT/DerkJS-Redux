@@ -6,6 +6,7 @@ module;
 
 #include <optional>
 #include <string>
+#include <array>
 #include <vector>
 #include <variant>
 #include <flat_map>
@@ -18,23 +19,66 @@ import frontend.lexicals;
 import frontend.ast;
 import runtime.objects;
 import runtime.value;
+import runtime.strings;
 import runtime.bytecode;
 
 export namespace DerkJS {
-    struct GlobalFuncOpt {};
-
-    enum class NameLookupMode : uint8_t {
-        as_var_name,
-        as_pooled_name
+    struct PreloadItem {
+        std::string lexeme; // empty strings are for hidden items e.g function object in console.log
+        std::variant<std::unique_ptr<ObjectBase<Value>>, Value> entity;
+        Location location;
     };
 
-    struct PreloadConst {
-        std::string lexeme;
-        Value value;
+    struct FindGlobalConstsOpt {};
+    struct FindGlobalNamesOpt {};
+    struct FindLocalsOpt {};
+    struct RecordLocalTempOpt {};
+
+    struct OpcodeDelta {
+        int offset;      // opcode's magnitude of RSP increment or decrement
+        bool implicit;   // if opcode's effect on RSP follows delta / outside calculation
+    };
+
+    struct CodeGenScope {
+        std::flat_map<std::string, Arg> locals;
+        int next_temp_id;   // Tracks next stack slot for a local value
     };
 
     class BytecodeGenPass {
     private:
+        static constexpr std::array<OpcodeDelta, static_cast<std::size_t>(Opcode::last)> m_opcode_deltas = {
+            OpcodeDelta { .offset = 0, .implicit = true }, // NOP
+            OpcodeDelta { .offset = 1, .implicit = true }, // DUP
+            OpcodeDelta { .offset = 1, .implicit = true }, // PUT_CONST
+            OpcodeDelta { .offset = 1, .implicit = true }, // PUT_VAL_REF
+            OpcodeDelta { .offset = 1, .implicit = true }, // PUT_OBJ_REF
+            OpcodeDelta { .offset = 0, .implicit = true }, // DEREF
+            OpcodeDelta { .offset = 0, .implicit = false }, // POP-N
+            OpcodeDelta { .offset = -1, .implicit = true }, // EMPLACE
+            OpcodeDelta { .offset = 1, .implicit = true }, // PUT_OBJ_DUD
+            OpcodeDelta { .offset = -1, .implicit = true }, // GET_PROP
+            OpcodeDelta { .offset = -2, .implicit = true }, // PUT_PROP
+            OpcodeDelta { .offset = -2, .implicit = true }, // DEL_PROP
+            OpcodeDelta { .offset = -1, .implicit = true }, // MOD
+            OpcodeDelta { .offset = -1, .implicit = true }, // MUL
+            OpcodeDelta { .offset = -1, .implicit = true }, // DIV
+            OpcodeDelta { .offset = -1, .implicit = true }, // ADD
+            OpcodeDelta { .offset = -1, .implicit = true }, // SUB
+            OpcodeDelta { .offset = 1, .implicit = true }, // TEST_FALSY
+            OpcodeDelta { .offset = -1, .implicit = true }, // TEST_STRICT_EQ
+            OpcodeDelta { .offset = -1, .implicit = true }, // TEST_STRICT_NE
+            OpcodeDelta { .offset = -1, .implicit = true }, // TEST_LT
+            OpcodeDelta { .offset = -1, .implicit = true }, // TEST_LTE
+            OpcodeDelta { .offset = -1, .implicit = true }, // TEST_GT
+            OpcodeDelta { .offset = -1, .implicit = true }, // TEST_GTE
+            OpcodeDelta { .offset = 0, .implicit = false }, // JUMP_ELSE
+            OpcodeDelta { .offset = 0, .implicit = false }, // JUMP_IF
+            OpcodeDelta { .offset = 0, .implicit = true }, // JUMP
+            OpcodeDelta { .offset = 0, .implicit = false }, // CALL
+            OpcodeDelta { .offset = 0, .implicit = false }, // RET
+            OpcodeDelta { .offset = 0, .implicit = true }, // CALL
+        };
+
         static constexpr int min_bc_jump_offset = std::numeric_limits<int16_t>::min();
         static constexpr int max_bc_jump_offset = std::numeric_limits<int16_t>::max();
 
@@ -43,431 +87,262 @@ export namespace DerkJS {
             .tag = Location::immediate
         };
 
-        struct SimStackFrame {
-            std::flat_map<std::string, Arg> entries;
-            int stack_base;
-        };
+        // 1st priority lookup: contains interned strings & primitive constants from top-level
+        std::flat_map<std::string, Arg> m_global_consts_map;
 
-        std::vector<SimStackFrame> m_mappings;
-        PolyPool<ObjectBase<Value>> m_heap_items; // Stores all objects including polymorphic StaticString, etc. from ObjectBase<Value>.
-        std::flat_map<std::string, int> m_native_obj_index; // Maps identifiers to pre-loaded heap objects e.g `console`.
-        std::flat_map<std::string, int> m_poolable_str_ids;
+        // 2nd priority lookup: contains function names, variable names, etc. at top level
+        std::flat_map<std::string, Arg> m_globals_map;
+
+        // 3rd priority lookup
+        std::vector<CodeGenScope> m_local_maps;
+
+        // filled with interned strings -> object-refs in consts -> stack temporaries
+        PolyPool<ObjectBase<Value>> m_heap;
+
+        // filled with primitive literals & interned string refs
         std::vector<Value> m_consts;
+
+        // single buffer for all bytecode
         std::vector<Instruction> m_code;
-        std::vector<int> m_func_offsets;
 
-        int m_next_temp_id;
-        bool m_handle_props_as_rvals;
-        bool m_handle_native_obj_call;
+        // filled with global function IDs -> absolute offsets into the bytecode blob
+        std::vector<int> m_chunk_offsets;
 
-        void enter_simulated_frame() {
-            m_mappings.emplace_back(SimStackFrame {
-                .entries = {},
-                .stack_base = m_next_temp_id - 1
-            });
+        // Whether an object member access is assignable or read-from
+        bool m_access_as_lval;
+
+        // Overload for universal lookup via priorities 1, 2, 3
+        [[nodiscard]] auto lookup_symbol(const std::string& symbol) -> std::optional<Arg> {
+            return lookup_symbol(symbol, FindGlobalConstsOpt {})
+                .or_else([&symbol, this]() { return lookup_symbol(symbol, FindGlobalNamesOpt {}); })
+                .or_else([&symbol, this]() { return lookup_symbol(symbol, FindLocalsOpt {}); });
         }
 
-        void leave_simulated_frame() {
-            m_next_temp_id = m_mappings.back().stack_base + 1;
-            m_mappings.pop_back();
-        }
-
-        [[nodiscard]] auto lookup_item(const std::string& lexeme) -> std::optional<Arg> {
-            if (auto targeted_frame = std::find_if(m_mappings.rbegin(), m_mappings.rend(), [&lexeme](const SimStackFrame& frame) -> bool {
-                return frame.entries.contains(lexeme);
-            }); targeted_frame != m_mappings.rend()) {
-                if (const auto& [locator_n, locator_tag] = targeted_frame->entries.at(lexeme); locator_tag == Location::temp) {
-                    return Arg {
-                        .n = static_cast<int16_t>(locator_n - targeted_frame->stack_base),
-                        .tag = Location::temp
-                    };
-                } else {
-                    return Arg {
-                        .n = locator_n,
-                        .tag = locator_tag
-                    };
-                }
+        // Overloads for group-specific symbol lookups
+        [[nodiscard]] auto lookup_symbol(const std::string& symbol, [[maybe_unused]] FindGlobalConstsOpt opt) -> std::optional<Arg> {
+            if (auto global_consts_opt = m_global_consts_map.find(symbol); global_consts_opt != m_global_consts_map.end()) {
+                return global_consts_opt->second;
             }
 
             return {};
         }
 
-        void record_item(const std::string& name, Arg locator) {
-            auto& targeted_frame = m_mappings.back();
-
-            if (const auto& [locator_n, locator_tag] = locator; locator_tag != Location::temp)
-            {
-                targeted_frame.entries[name] = locator;
-            } else {
-                const auto absolute_temp_id = static_cast<int16_t>(locator_n + m_mappings.back().stack_base);
-
-                targeted_frame.entries[name] = {
-                    .n = absolute_temp_id,
-                    .tag = Location::temp
-                };
+        [[nodiscard]] auto lookup_symbol(const std::string& symbol, [[maybe_unused]] FindGlobalNamesOpt opt) -> std::optional<Arg> {
+            if (auto top_local_opt = m_globals_map.find(symbol); top_local_opt != m_globals_map.end()) {
+                return top_local_opt->second;
             }
+
+            return {};
         }
 
-        [[nodiscard]] auto lookup_pooled_string(const std::string& s) -> int {
-            const auto& str_items = m_heap_items.view_items();
-
-            for (int str_id = 0; const auto& pooled_str_box : str_items) {
-                if (pooled_str_box->operator==(StaticString(nullptr, s.c_str(), s.length()))) {
-                    return str_id;
-                }
-
-                ++str_id;
+        [[nodiscard]] auto lookup_symbol(const std::string& symbol, [[maybe_unused]] FindLocalsOpt opt) -> std::optional<Arg> {
+            if (auto fn_local_opt = m_local_maps.back().locals.find(symbol); fn_local_opt != m_local_maps.back().locals.end()) {
+                return fn_local_opt->second;
             }
 
-            return -1;
+            return {};
         }
 
-        /// NOTE: returns `int` representing the ID of the newly pooled JS string.
-        [[nodiscard]] auto record_pooled_string(StaticString s) -> int {
-            std::string s_owned_str = s.as_string();
+        template <typename Item>
+        [[maybe_unused]] auto record_valued_symbol(const std::string& symbol, Item&& item) -> std::optional<Arg> {
+            using plain_item_type = std::remove_cvref_t<Item>;
 
-            if (auto existing_pooled_str_id_it = m_poolable_str_ids.find(s_owned_str); existing_pooled_str_id_it != m_poolable_str_ids.end()) {
-                return existing_pooled_str_id_it->second;
+            if (auto existing_arg = lookup_symbol(symbol); existing_arg) {
+                return existing_arg;
             }
 
-            const auto result_id = m_heap_items.get_next_id();
-            
-            if (!m_heap_items.add_item(result_id, std::move(s))) {
-                return -1;
-            }
-
-            m_poolable_str_ids.emplace(s_owned_str, result_id);
-
-            return result_id;
-        }
-
-        /// NOTE: returns `int` representing the allocated object ID.
-        template <typename ObjectType, typename ... ConstructArgs> requires (std::is_base_of_v<ObjectBase<Value>, ObjectType>)
-        [[nodiscard]] auto record_heap_object_with(ConstructArgs&& ... args) -> int {
-            const auto result_id = m_heap_items.get_next_id();
-
-            if (result_id > std::numeric_limits<int16_t>::max()) {
-                return -1;
-            }
-
-            if (!m_heap_items.add_item(result_id, ObjectType (std::forward<ConstructArgs>(args)...))) {
-                return -1;
-            }
-
-            return result_id;
-        }
-
-        template <typename V> requires (std::is_same_v<std::remove_cvref_t<V>, Value>)
-        [[maybe_unused]] auto record_constants(const std::string& literal_text, V&& new_value) -> Arg {
-            if (auto existing_constant = lookup_item(literal_text); !existing_constant) {
-                const int next_const_id = m_consts.size();
-                Arg result_locator {
-                    .n = static_cast<int16_t>(next_const_id),
+            if constexpr (std::is_same_v<plain_item_type, Value>) {
+                // 1a. For global primitive constants:
+                const int16_t next_global_const_id = m_consts.size();
+                Arg next_global_loc {
+                    .n = next_global_const_id,
                     .tag = Location::constant
                 };
-                
-                record_item(literal_text, result_locator);
-                m_consts.emplace_back(std::forward<Value>(new_value));
 
-                return result_locator;
-            } else if (existing_constant->tag == Location::constant) {
-                return *existing_constant;
-            } else {
-                return Arg {
-                    .n = -1,
-                    .tag = Location::immediate
+                m_consts.emplace_back(std::forward<Item>(item));
+                m_global_consts_map[symbol] = next_global_loc;
+
+                return next_global_loc;
+            } else if constexpr (std::is_same_v<plain_item_type, StaticString> || std::is_same_v<plain_item_type, DynamicString> || std::is_same_v<plain_item_type, std::unique_ptr<ObjectBase<Value>>>) {
+                // 1a, 1b. For global & interned string references as constants:
+                const int16_t next_global_ref_const_id = m_consts.size();
+                Arg next_global_ref_loc {
+                    .n = next_global_ref_const_id,
+                    .tag = Location::constant
                 };
+
+                if (auto heap_static_str_p = m_heap.add_item(m_heap.get_next_id(), std::move(item)); heap_static_str_p) {
+                    m_consts.emplace_back(Value {heap_static_str_p});
+                    m_global_consts_map[symbol] = next_global_ref_loc;
+                } else {
+                    return {};
+                }
+
+                return next_global_ref_loc;
+            } else if constexpr (std::is_same_v<plain_item_type, RecordLocalTempOpt>) {
+                // 3. For named locals in functions:
+                const int16_t next_local_id = m_local_maps.back().next_temp_id;
+                Arg next_local_loc {
+                    .n = next_local_id,
+                    .tag = Location::temp
+                };
+
+                m_local_maps.back().locals[symbol] = next_local_loc;
+                ++m_local_maps.back().next_temp_id;
+
+                return next_local_loc;
             }
+
+            return {};
         }
+    
+        [[nodiscard]] auto record_function_begin(const std::string& func_name) -> int {
+            const int next_fn_id = m_chunk_offsets.size();
+            int abs_code_offset = m_code.size();
 
-        [[nodiscard]] auto record_this_func() -> Arg {
-            const int next_func_id = m_func_offsets.size();
-            const int next_func_code_offset = m_code.size();
+            if (m_globals_map.contains(func_name)) {
+                return -1;
+            }
 
-            m_func_offsets.emplace_back(next_func_code_offset);
-
-            return Arg {
-                .n = static_cast<int16_t>(next_func_id),
+            m_chunk_offsets.emplace_back(abs_code_offset);
+            m_globals_map[func_name] = Arg {
+                .n = static_cast<int16_t>(next_fn_id),
                 .tag = Location::code_chunk
             };
+
+            return next_fn_id;
         }
 
-        /// NOTE: This overload is for no-argument opcode instructions e.g NOP
-        void encode_instruction(Opcode op) {
+        [[maybe_unused]] auto apply_stack_delta_with(Opcode op, std::optional<int> manual_delta) -> int {
+            const auto copied_next_temp_id = m_local_maps.back().next_temp_id;
+
+            if (const auto [delta_n, delta_is_implicit] = m_opcode_deltas.at(static_cast<std::size_t>(op)); delta_is_implicit) {
+                m_local_maps.back().next_temp_id += delta_n;
+            } else {
+                m_local_maps.back().next_temp_id += manual_delta.value_or(0);
+            }
+
+            return copied_next_temp_id;
+        }
+
+        /// NOTE: This overload is for no-argument opcodes
+        [[maybe_unused]] auto encode_instruction(Opcode op, std::optional<int> manual_delta) -> int {
             m_code.emplace_back(Instruction {
                 .args = { 0, 0 },
                 .op = op
             });
+
+            return apply_stack_delta_with(op, manual_delta);
         }
 
-        void encode_instruction(Opcode op, Arg a0) {
+        /// NOTE: this overload is for single-argument opcodes
+        [[maybe_unused]] auto encode_instruction(Opcode op, Arg a0, std::optional<int> manual_delta) -> int {
             m_code.emplace_back(Instruction {
                 .args = { a0.n, 0 },
                 .op = op
             });
+
+            return apply_stack_delta_with(op, manual_delta);
         }
 
-        void encode_instruction(Opcode op, Arg a0, Arg a1) {
+        /// NOTE: this overload is for double-argument opcodes
+        [[maybe_unused]] auto encode_instruction(Opcode op, Arg a0, Arg a1, std::optional<int> manual_delta) -> int {
             m_code.emplace_back(Instruction {
                 .args = { a0.n, a1.n},
                 .op = op
             });
-        }
 
-        [[maybe_unused]] auto update_temp_id(int delta) -> int {
-            const auto next_temp_id = m_next_temp_id;
-
-            m_next_temp_id += delta;
-
-            return next_temp_id;
-        }
-
-        [[nodiscard]] auto current_temp_id() const noexcept -> int {
-            return m_next_temp_id - 1;
+            return apply_stack_delta_with(op, manual_delta);
         }
 
         [[nodiscard]] auto emit_primitive(const Primitive& expr, const std::string& source) -> std::optional<Arg> {
-            const auto& literal_token = expr.token;
+            std::string atom_lexeme = expr.token.as_string(source);
+            const TokenTag expr_token_tag = expr.token.tag;
 
-            switch (literal_token.tag) {
-            case TokenTag::keyword_undefined: {
-                auto undef_lt_locator = record_constants("undefined", Value {});
-
-                encode_instruction(Opcode::djs_put_const, undef_lt_locator);
-
-                return Arg {
-                    .n = static_cast<int16_t>(update_temp_id(1)),
-                    .tag = Location::temp
-                };
-            }
-            case TokenTag::keyword_null:{
-                auto null_lt_locator = record_constants("null", Value {JSNullOpt {}});
-
-                encode_instruction(Opcode::djs_put_const, null_lt_locator);
-
-                return Arg {
-                    .n = static_cast<int16_t>(update_temp_id(1)),
-                    .tag = Location::temp
-                };
-            }
-            case TokenTag::keyword_true: {
-                auto boolean_lt_locator = record_constants("true", Value {
-                    true
-                });
-
-                encode_instruction(Opcode::djs_put_const, boolean_lt_locator);
-
-                return Arg {
-                    .n = static_cast<int16_t>(update_temp_id(1)),
-                    .tag = Location::temp
-                };
-            }
-            case TokenTag::keyword_false: {
-                auto boolean_lt_locator = record_constants("false", Value {
-                    false
-                });
-
-                encode_instruction(Opcode::djs_put_const, boolean_lt_locator);
-
-                return Arg {
-                    .n = static_cast<int16_t>(update_temp_id(1)),
-                    .tag = Location::temp
-                };
-            }
-            case TokenTag::literal_int: {
-                std::string int_lexeme = literal_token.as_string(source);
-
-                auto int_lt_locator = record_constants(int_lexeme, Value {
-                    std::stoi(int_lexeme)
-                });
-
-                encode_instruction(Opcode::djs_put_const, int_lt_locator);
-
-                return Arg {
-                    .n = static_cast<int16_t>(update_temp_id(1)),
-                    .tag = Location::temp
-                };
-            }
-            case TokenTag::literal_real: {
-                std::string dbl_lexeme = literal_token.as_string(source);
-
-                auto dbl_lt_locator = record_constants(dbl_lexeme, Value {
-                    std::stod(dbl_lexeme)
-                });
-
-                encode_instruction(Opcode::djs_put_const, dbl_lt_locator);
-
-                return Arg {
-                    .n = static_cast<int16_t>(update_temp_id(1)),
-                    .tag = Location::temp
-                };
-            }
-            case TokenTag::identifier: {
-                std::string any_name_lexeme = literal_token.as_string(source);
-
-                /// TODO: add extra state in native object indexes to distinguish them from regular variable names / conservatively disallow any variable to match any native name?
-                if (auto native_obj_index_it = m_native_obj_index.find(any_name_lexeme); native_obj_index_it != m_native_obj_index.end()) {
-                    m_handle_native_obj_call = true;
-
-                    encode_instruction(
-                        Opcode::djs_put_val_ref,
-                        Arg {
-                            .n = static_cast<int16_t>(native_obj_index_it->second),
-                            .tag = Location::immediate
-                        },
-                        Arg {
-                            .n = 2,
-                            .tag = Location::immediate
-                        }
-                    );
-                    return Arg {
-                        .n = static_cast<int16_t>(update_temp_id(1)),
-                        .tag = Location::temp
-                    };
-                }
-                
-                // Push property key-string ref from constants.
-                if (auto pooled_name_id_it = m_poolable_str_ids.find(any_name_lexeme); pooled_name_id_it != m_poolable_str_ids.end()) {
-                    encode_instruction(
-                        Opcode::djs_put_val_ref,
-                        Arg {
-                            .n = static_cast<int16_t>(pooled_name_id_it->second),
-                            .tag = Location::immediate
-                        },
-                        Arg {
-                            .n = 1,
-                            .tag = Location::immediate
-                        }
-                    );
-
-                    return Arg {
-                        .n = static_cast<int16_t>(update_temp_id(1)),
-                        .tag = Location::temp
-                    };
-                }
-
-                if (auto name_locator_opt = lookup_item(any_name_lexeme); name_locator_opt) {
-                    if (const auto locator_tag = name_locator_opt->tag; locator_tag == Location::temp) {
-                        encode_instruction(Opcode::djs_dup, *name_locator_opt);
-                        
-                        return Arg {
-                            .n = static_cast<int16_t>(update_temp_id(1)),
-                            .tag = Location::temp
-                        };
-                    } else if (locator_tag == Location::constant) {
-                        encode_instruction(Opcode::djs_put_const, *name_locator_opt);
-
-                        return Arg {
-                            .n = static_cast<int16_t>(update_temp_id(1)),
-                            .tag = Location::temp
-                        };
-                    } else if (locator_tag == Location::heap_obj) {
-                        encode_instruction(Opcode::djs_put_obj_ref, *name_locator_opt);
-
-                        return Arg {
-                            .n = static_cast<int16_t>(update_temp_id(1)),
-                            .tag = Location::temp
-                        };
+            auto primitive_locator = ([&, this] () -> std::optional<Arg> {
+                switch (expr_token_tag) {
+                case TokenTag::keyword_undefined:
+                    return record_valued_symbol(atom_lexeme, Value {});
+                case TokenTag::keyword_null:
+                    return record_valued_symbol(atom_lexeme, Value {JSNullOpt {}});
+                case TokenTag::keyword_true: case TokenTag::keyword_false:
+                    return record_valued_symbol(atom_lexeme, Value {atom_lexeme == "true"});
+                case TokenTag::literal_int:
+                    return record_valued_symbol(atom_lexeme, Value {std::stoi(atom_lexeme)});
+                case TokenTag::literal_real:
+                    return record_valued_symbol(atom_lexeme, Value {std::stod(atom_lexeme)});
+                case TokenTag::literal_string: {
+                    if (const int atom_text_length = atom_lexeme.length(); atom_text_length <= StaticString::max_length_v) {
+                        return record_valued_symbol(atom_lexeme, StaticString {nullptr, atom_lexeme.c_str(), atom_text_length});
                     } else {
-                        return *name_locator_opt;
+                        return record_valued_symbol(atom_lexeme, DynamicString {std::move(atom_lexeme)});
                     }
                 }
+                case TokenTag::identifier:
+                    return lookup_symbol(atom_lexeme);
+                default: return {};
+                }
+            })();
 
+            if (!primitive_locator) {
                 return {};
+            } else if (const auto primitive_locate_type = primitive_locator->tag; primitive_locate_type == Location::constant) {
+                encode_instruction(Opcode::djs_put_const, *primitive_locator, {});
+            } else if (primitive_locate_type == Location::temp) {
+                encode_instruction(Opcode::djs_dup, *primitive_locator, {});
+            } else {
+                // Handle `code_chunk` locations AKA globally user-defined functions
             }
-            default: return {};
-            }
+
+            return primitive_locator;
         }
 
         [[nodiscard]] auto emit_object_literal(const ObjectLiteral& object, const std::string& source) -> std::optional<Arg> {
-            const auto& [obj_fields] = object;
+            const auto obj_result_slot = encode_instruction(Opcode::djs_put_obj_dud, {});
 
-            const auto obj_dud_temp_id = update_temp_id(1);
-            encode_instruction(Opcode::djs_put_obj_dud);
+            for (const auto& [prop_name_token, prop_init_expr] : object.fields) {
+                std::string prop_name = prop_name_token.as_string(source);
 
-            for (const auto& [obj_key_token, obj_value] : obj_fields) {
-                /// TODO: add support for longer property names past 8
-                // 1. Try recording the property key name, but as an interned string too...
-                const auto obj_key_length = obj_key_token.length;
-
-                if (obj_key_length > 8) {
-                    std::println("NOTE [line {}, col {}]: Property name is too long- max length supported is 8.", obj_key_token.line, obj_key_token.column);
-
-                    return {};
-                }
-
-                std::string obj_key_name = source.substr(obj_key_token.start, obj_key_length);
-                StaticString key_str {nullptr, obj_key_name.c_str(), obj_key_length};
-
-                // 2. Try mapping the string to some string pool ID- used at run time to populate properties of an object.
-                auto key_id = record_pooled_string(key_str);
-
-                if (key_id == -1) {
-                    std::println("NOTE: could not resolve location of object property '{}'.", obj_key_name);
-                    return {};
-                }
-
-                auto key_locator_arg = record_constants(obj_key_name, Value {m_heap_items.get_item(key_id)});
-
-                if (key_locator_arg.n == -1) {
-                    std::println("NOTE: could not record constant for pooled string of property '{}'.", obj_key_name);
-                    return {};
-                }
-                
-                const auto key_ref_temp_id = update_temp_id(1);
-                encode_instruction(
-                    Opcode::djs_put_val_ref,
-                    Arg {
-                        .n = static_cast<int16_t>(key_locator_arg.n),
-                        .tag = Location::immediate
-                    },
-                    Arg {
-                        .n = 1, // get Value ref from VM-CONSTS as the immutable property-key's data...
-                        .tag = Location::immediate
+                std::optional<Arg> prop_name_locator = ([this] (std::string name_s) {
+                    if (const int name_length = name_s.length(); name_length <= StaticString::max_length_v) {
+                        return record_valued_symbol(name_s, StaticString {nullptr, name_s.c_str(), name_length});
+                    } else {
+                        return record_valued_symbol(name_s, DynamicString {std::move(name_s)});
                     }
-                );
+                })(prop_name);
 
-                // 3. Try emitting the bytecode that populates each property of this literal at run time.
-                if (auto obj_prop_rhs_locator = emit_expr(*obj_value, source); obj_prop_rhs_locator) {
-                    const auto popping_count = m_next_temp_id - key_ref_temp_id;
-
-                    encode_instruction(
-                        Opcode::djs_put_prop,
-                        Arg {
-                            .n = static_cast<int16_t>(obj_dud_temp_id),
-                            .tag = Location::temp
-                        },
-                        Arg { // NOTE: this opcode pops off the stack temporaries once their data is saved in the JS object...
-                            .n = static_cast<int16_t>(popping_count),
-                            .tag = Location::immediate
-                        }
-                    );
-                    update_temp_id(-popping_count);
-                } else {
+                if (!prop_name_locator) {
                     return {};
                 }
+
+                encode_instruction(Opcode::djs_put_const, *prop_name_locator, {});
+
+                if (!emit_expr(*prop_init_expr, source)) {
+                    return {};
+                }
+
+                encode_instruction(
+                    Opcode::djs_put_prop,
+                    Arg {
+                        .n = static_cast<int16_t>(obj_result_slot),
+                        .tag = Location::temp
+                    },
+                    {}
+                );
             }
 
-            // 4. Yield the local, on-stack location of the object reference.
             return Arg {
-                .n = static_cast<int16_t>(obj_dud_temp_id),
+                .n = static_cast<int16_t>(obj_result_slot),
                 .tag = Location::temp
             };
         }
 
         [[nodiscard]] auto emit_unary(const Unary& expr, const std::string& source) -> std::optional<Arg> {
-            m_handle_props_as_rvals = true;
+            const auto& [inner_expr, expr_op] = expr;
 
-            if (const auto& [unary_expr, unary_op] = expr; unary_op == AstOp::ast_op_bang) {
-                if (!emit_expr(*unary_expr, source)) {
-                    return {};
-                }
-
-                encode_instruction(Opcode::djs_test_falsy);
-                update_temp_id(1);
-
+            if (auto unary_result_loc = emit_expr(*inner_expr, source); unary_result_loc) {
                 return Arg {
-                    .n = static_cast<int16_t>(current_temp_id()),
+                    .n = static_cast<int16_t>(encode_instruction(Opcode::djs_test_falsy, {})),
                     .tag = Location::temp
                 };
             }
@@ -475,339 +350,192 @@ export namespace DerkJS {
             return {};
         }
 
-        [[nodiscard]] auto emit_logical_expr(AstOp logical_operator, const Expr& lhs, const Expr& rhs, const std::string& source) -> std::optional<Arg> {
-            /// NOTE: no matter the stack ops, the local should rest at the bottom of the stack-slice used by the LHS, RHS evals...
-            const auto logical_result_slot = m_next_temp_id;
+        [[nodiscard]] auto emit_logical_expr(AstOp logical_operator, const ExprPtr& lhs, const ExprPtr& rhs, const std::string& source) -> std::optional<Arg> {
+            /// NOTE: No matter the logical operator, only one temporary remains but by differing rules:
+            // 1. AND: IFF LHS is falsy, it's the result. RHS otherwise.
+            // 2. OR: IFF LHS is truthy, it's the result. RHS otherwise.
+            const auto result_eval_slot = m_local_maps.back().next_temp_id;
 
-            switch (logical_operator) {
-            case AstOp::ast_op_or: {
-                int lhs_jump_if_pos = -1000;
-                int post_rhs_jump_pos = -1000;
-
-                // 1. By the ES5 spec, the logical OR short-circuits: If LHS is truthy, it becomes the result and RHS is not evaluated! Relative jump offsets of -1 will be backpatched later.
-                if (auto lhs_locator = emit_expr(lhs, source); !lhs_locator) {
-                    return {};
-                } else {
-                    lhs_jump_if_pos = m_code.size();
-                    encode_instruction(
-                        Opcode::djs_jump_if,
-                        Arg {.n = -1, .tag = Location::immediate},
-                        Arg {.n = 1, .tag = Location::immediate}
-                    );
-                }
-
-                // 2. Emit the RHS evaluation & result since control flow reaching this point must have a falsy LHS. Relative jump offsets of -1 will be backpatched later.
-                if (auto rhs_locator = emit_expr(rhs, source); !rhs_locator) {
-                    return {};
-                } else {
-                    post_rhs_jump_pos = m_code.size();
-                    encode_instruction(Opcode::djs_nop);
-                }
-
-                m_code[lhs_jump_if_pos].args[0] = post_rhs_jump_pos - lhs_jump_if_pos;
-                m_next_temp_id = logical_result_slot + 1;
-
-                return Arg {
-                    .n = static_cast<int16_t>(logical_result_slot),
-                    .tag = Location::temp
-                };
+            // 1. Emit LHS evaluation
+            if (!emit_expr(*lhs, source)) {
+                return {};
             }
-            case AstOp::ast_op_and: {
-                int lhs_jump_else_pos = -1000;
-                int post_rhs_jump_pos = -1000;
 
-                // 1. By the ES5 spec, the logical AND short-circuits: If LHS is falsy, it becomes the result and RHS is not evaluated!
-                if (auto lhs_locator = emit_expr(lhs, source); !lhs_locator) {
-                    return {};
-                } else {
-                    lhs_jump_else_pos = m_code.size();
-                    encode_instruction(
-                        Opcode::djs_jump_else,
-                        // NOTE: this relative, filler jump will be backpatched later!
-                        Arg {.n = -1, .tag = Location::immediate},
-                        // NOTE: optionally pop of LHS temporary IFF LHS is truthy!
-                        Arg {.n = 1, .tag = Location::immediate}
-                    );
-                }
+            // 2. Emit dud conditional jump for the "OR" / "AND"
+            const int pre_logic_check_pos = m_code.size();
 
-                // 2. Emit the RHS evaluation & result since control flow reaching this point must have a truthy LHS.
-                if (auto rhs_locator = emit_expr(rhs, source); !rhs_locator) {
-                    return {};
-                } else {
-                    post_rhs_jump_pos = m_code.size();
-                    encode_instruction(Opcode::djs_nop);
-                }
-
-                m_code[lhs_jump_else_pos].args[0] = post_rhs_jump_pos - lhs_jump_else_pos;
-                m_next_temp_id = logical_result_slot + 1;
-
-                return Arg {
-                    .n = static_cast<int16_t>(logical_result_slot),
-                    .tag = Location::temp
-                };
+            if (logical_operator == AstOp::ast_op_and) {
+                encode_instruction(
+                    Opcode::djs_jump_else,
+                    /// NOTE: backpatch relative jump offset next
+                    Arg {.n = -1, .tag = Location::immediate},
+                    /// NOTE: lazy pop RSP by 1 to discard LHS if needed.
+                    Arg {.n = 1, .tag = Location::immediate},
+                    {}
+                );
+            } else if (logical_operator == AstOp::ast_op_or) {
+                encode_instruction(
+                    Opcode::djs_jump_if,
+                    Arg {.n = -1, .tag = Location::immediate},
+                    Arg {.n = 1, .tag = Location::immediate},
+                    {}
+                );
             }
-            default: return {};
+
+            // 3. Emit RHS evaluation
+            if (!emit_expr(*rhs, source)) {
+                return {};
             }
+
+            const int post_logic_check_pos = m_code.size();
+            const auto patch_jump_offset = post_logic_check_pos - pre_logic_check_pos;
+
+            encode_instruction(Opcode::djs_nop, {});
+
+            // 4. Patch conditional jump offset which is taken on short-circuited evaluation.
+            m_code.at(pre_logic_check_pos).args[0] = patch_jump_offset;
+
+            m_local_maps.back().next_temp_id = result_eval_slot + 1;
+
+            return Arg {
+                .n = static_cast<int16_t>(result_eval_slot),
+                .tag = Location::temp
+            };
         }
 
         [[nodiscard]] auto emit_member_access(const MemberAccess& member_access, const std::string& source) -> std::optional<Arg> {
             const auto& [target_expr, key_expr] = member_access;
+            int prop_value_slot = m_local_maps.back().next_temp_id;
 
-            // 1. Emit target (object)'s reference to ensure it's on the stack.
-            const auto pre_access_slot_id = current_temp_id();
-            auto target_ref_locator = emit_expr(*target_expr, source);
-
-            if (!target_ref_locator) {
-                std::println("NOTE: Could not resolve accessed object name for property access.");
+            // 1. Emit the target and then the key evaluations. The `djs_get_prop` opcode takes the target and the property key (PropertyHandle<Value>) on top... These two are "popped" and the property reference takes their place in the VM.
+            if (!emit_expr(*target_expr, source)) {
                 return {};
             }
-
-            // 2. Emit key value evaluation.
-            const auto access_key_slot_id = current_temp_id();
 
             if (!emit_expr(*key_expr, source)) {
-                std::println("NOTE: Could not resolve object's property name for access.");
                 return {};
             }
 
-            encode_instruction(Opcode::djs_get_prop);
+            encode_instruction(Opcode::djs_get_prop, {});
 
-            /// NOTE: If the property's access must be treated as a temporary value, just deref it in-place for now- This creates a temporary for computations e.g arithmetic.
-            if (m_handle_props_as_rvals) {
-                encode_instruction(Opcode::djs_deref);
+            // NOTE: IF !m_access_as_lval, the member access dereferences the property reference for a usable temporary: `foo.a (ref Value(1)) + foo.b (ref Value(2))` -> `1 + 2 == 3`
+            if (!m_access_as_lval) {
+                encode_instruction(Opcode::djs_deref, {});
             }
 
-            m_next_temp_id = pre_access_slot_id;
-
             return Arg {
-                .n = static_cast<int16_t>(pre_access_slot_id),
+                .n = static_cast<int16_t>(prop_value_slot),
                 .tag = Location::temp
             };
         }
 
         [[nodiscard]] auto emit_binary(const Binary& expr, const std::string& source) -> std::optional<Arg> {
-            struct OpcodeAssocPair {
-                Opcode op;
-                bool lhs_first;
-                bool logical_eval; // indicates special cases: && OR ||
-            };
+            const auto& [expr_lhs, expr_rhs, expr_op] = expr;
 
-            const auto& [lhs, rhs, bin_op] = expr;
+            // Case 1: emit logical operator expressions if applicable since these have special short-circuiting vs. arithmetic ones...
+            if (expr_op == AstOp::ast_op_and || expr_op == AstOp::ast_op_or) {
+                return emit_logical_expr(expr_op, expr_lhs, expr_rhs, source);
+            }
 
-            const auto opcode_associated_pair = ([](AstOp ast_op) noexcept -> std::optional<OpcodeAssocPair> {
-                switch (ast_op) {
-                    case AstOp::ast_op_percent: return OpcodeAssocPair {
-                        Opcode::djs_mod,
-                        true,
-                        false
-                    };
-                    case AstOp::ast_op_times: return OpcodeAssocPair {
-                        Opcode::djs_mul,
-                        true,
-                        false
-                    };
-                    case AstOp::ast_op_slash: return OpcodeAssocPair {
-                        Opcode::djs_div,
-                        true,
-                        false
-                    };
-                    case AstOp::ast_op_plus: return OpcodeAssocPair {
-                        Opcode::djs_add,
-                        true,
-                        false
-                    };
-                    case AstOp::ast_op_minus: return OpcodeAssocPair {
-                        Opcode::djs_sub,
-                        true,
-                        false
-                    };
-                    case AstOp::ast_op_equal:
-                    case AstOp::ast_op_strict_equal: return OpcodeAssocPair {
-                        Opcode::djs_test_strict_eq,
-                        true,
-                        false
-                    };
-                    case AstOp::ast_op_bang_equal:
-                    case AstOp::ast_op_strict_bang_equal: return OpcodeAssocPair {
-                        Opcode::djs_test_strict_ne,
-                        true,
-                        false
-                    };
-                    case AstOp::ast_op_less: return OpcodeAssocPair {
-                        Opcode::djs_test_lt,
-                        true,
-                        false
-                    };
-                    case AstOp::ast_op_less_equal: return OpcodeAssocPair {
-                        Opcode::djs_test_lte,
-                        true,
-                        false
-                    };
-                    case AstOp::ast_op_greater: return OpcodeAssocPair {
-                        Opcode::djs_test_gt,
-                        true,
-                        false
-                    };
-                    case AstOp::ast_op_greater_equal: return OpcodeAssocPair {
-                        Opcode::djs_test_gte,
-                        true,
-                        false
-                    };
-                    case AstOp::ast_op_and:
-                    case AstOp::ast_op_or: return OpcodeAssocPair {
-                        Opcode::djs_nop,
-                        true,
-                        true,
-                    };
+            const int arithmetic_result_slot = m_local_maps.back().next_temp_id;
+            // Case 2 (General): arithmtic operators MUST evaluate RHS before LHS in case one operator is right-associative. The only other left-associative ones supported now are commutative: ADD, MUL, MOD...
+            if (!emit_expr(*expr_rhs, source)) {
+                return {};
+            }
+
+            if (!emit_expr(*expr_lhs, source)) {
+                return {};
+            }
+
+            const auto deduced_opcode = ([](AstOp op) noexcept -> std::optional<Opcode> {
+                switch (op) {
+                    case AstOp::ast_op_percent: return Opcode::djs_mod;
+                    case AstOp::ast_op_times: return Opcode::djs_mul;
+                    case AstOp::ast_op_slash: return Opcode::djs_div;
+                    case AstOp::ast_op_plus: return Opcode::djs_add;
+                    case AstOp::ast_op_minus: return Opcode::djs_sub;
+                    case AstOp::ast_op_equal: case AstOp::ast_op_strict_equal: return Opcode::djs_test_strict_eq;
+                    case AstOp::ast_op_bang_equal: case AstOp::ast_op_strict_bang_equal: return Opcode::djs_test_strict_ne;
+                    case AstOp::ast_op_less: return Opcode::djs_test_lt;
+                    case AstOp::ast_op_less_equal: return Opcode::djs_test_lte;
+                    case AstOp::ast_op_greater: return Opcode::djs_test_gt;
+                    case AstOp::ast_op_greater_equal: return Opcode::djs_test_gte;
                     default: return {};
                 }
-            })(bin_op);
+            })(expr_op);
 
-            if (!opcode_associated_pair) {
+            if (!deduced_opcode) {
                 return {};
             }
 
-            const auto [opcode, is_opcode_lefty, has_logical_eval] = *opcode_associated_pair;
+            encode_instruction(*deduced_opcode, {});
 
-            if (has_logical_eval) {
-                m_handle_props_as_rvals = true;
-                return emit_logical_expr(bin_op, *lhs, *rhs, source);
-            }
-
-            std::optional<Arg> lhs_locator;
-            std::optional<Arg> rhs_locator;
-            std::optional<Arg> result_locator;
-
-            if (is_opcode_lefty) {
-                m_handle_props_as_rvals = true;
-                rhs_locator = emit_expr(*rhs, source);
-                lhs_locator = emit_expr(*lhs, source);
-                result_locator = rhs_locator;
-            } else {
-                m_handle_props_as_rvals = true;
-                lhs_locator = emit_expr(*lhs, source);
-                rhs_locator = emit_expr(*rhs, source);
-                result_locator = lhs_locator;
-            }
-
-            if (!lhs_locator || !rhs_locator) {
-                return {};
-            }
-
-            encode_instruction(opcode);
-            update_temp_id(-1);
-
-            return result_locator;
+            return Arg {
+                .n = static_cast<int16_t>(arithmetic_result_slot),
+                .tag = Location::temp
+            };
         }
 
         [[nodiscard]] auto emit_assign(const Assign& expr, const std::string& source) -> std::optional<Arg> {
-            const auto& [assign_lhs, assign_rhs] = expr;
+            /// NOTE: JS "lvalues" are assignable, so set this flag accordingly for codegen.
+            const auto& [lhs_expr, rhs_expr] = expr;
 
-            if (auto primitive_p = std::get_if<Primitive>(&assign_lhs->data); primitive_p) {
-                /// NOTE: the name-to-Arg mapping of some variable will be updated to this new assignment's RHS's slot. This eliminates the kludge of 'emplacing' values under the stack top which would require some hacky indexing.
-                auto assign_rhs_locator = emit_expr(*assign_rhs, source);
+            m_access_as_lval = true;
 
-                if (!assign_rhs_locator) {
-                    return {};
-                }
+            auto assignment_temp_locator = emit_expr(*lhs_expr, source);
 
-                std::string local_var_name = primitive_p->token.as_string(source);
-                auto local_var_locator = lookup_item(local_var_name);
+            m_access_as_lval = false;
 
-                if (!local_var_locator) {
-                    return {};
-                }
-
-                encode_instruction(Opcode::djs_emplace, *local_var_locator);
-                update_temp_id(-1);
-
-                return local_var_locator;
-            } else if (auto access_p = std::get_if<MemberAccess>(&assign_lhs->data); access_p) {
-                m_handle_props_as_rvals = false;
-
-                const auto pre_lhs_load_slot = m_next_temp_id;
-                auto prop_locator = emit_member_access(*access_p, source);
-
-                m_handle_props_as_rvals = true;
-
-                if (!prop_locator) {
-                    return {};
-                }
-
-                auto assign_rhs_locator = emit_expr(*assign_rhs, source);
-
-                if (!assign_rhs_locator) {
-                    return {};
-                }
-
-                const auto post_put_prop_adjustment = m_next_temp_id - pre_lhs_load_slot;
-
-                encode_instruction(
-                    Opcode::djs_put_prop,
-                    *prop_locator,
-                    Arg {
-                        .n = static_cast<int16_t>(post_put_prop_adjustment),
-                        .tag = Location::immediate
-                    }
-                );
-                update_temp_id(-post_put_prop_adjustment);
-
-                return prop_locator;
-            }
-
-            return {};
-        }
-
-        [[nodiscard]] auto emit_call(const Call& expr, const std::string& source) -> std::optional<Arg> {
-            /// TODO: handle call: call function by chunk ID AFTER emitting argument evaluations... The stack 'base' of each call will be the result destination.
-            const auto& [call_args, callee_expr] = expr;
-            int arg_count = 0;
-
-            
-            for (const auto& arg_box : call_args) {
-                if (auto arg_locator = emit_expr(*arg_box, source); !arg_locator) {
-                    return {};
-                }
-                
-                ++arg_count;
-            }
-            
-            m_handle_props_as_rvals = false;
-
-            auto callee_locator = emit_expr(*callee_expr, source);
-
-            m_handle_props_as_rvals = true;
-
-            if (!callee_locator) {
+            if (!assignment_temp_locator) {
                 return {};
             }
 
-            if (!m_handle_native_obj_call) {
+            if (!emit_expr(*rhs_expr, source)) {
+                return {};
+            }
+
+            encode_instruction(Opcode::djs_emplace, *assignment_temp_locator, {});
+
+            return assignment_temp_locator;
+        }
+
+        [[nodiscard]] auto emit_call(const Call& expr, const std::string& source) -> std::optional<Arg> {
+            const auto& [expr_args, expr_callee] = expr;
+            const int call_result_slot = m_local_maps.back().next_temp_id;
+            auto call_argc = 0;
+
+            for (const auto& arg_p : expr_args) {
+                if (!emit_expr(*arg_p, source)) {
+                    return {};
+                }
+
+                ++call_argc;
+            }
+
+            m_access_as_lval = true;
+
+            if (auto callee_locator = emit_expr(*expr_callee, source); !callee_locator) {
+                return {};
+            } else if (const auto callee_locator_tag = callee_locator->tag; callee_locator_tag == Location::code_chunk) {
                 encode_instruction(
                     Opcode::djs_call,
                     *callee_locator,
-                    Arg {
-                        .n = static_cast<int16_t>(arg_count),
-                        .tag = Location::immediate
-                    }
+                    Arg {.n = static_cast<int16_t>(call_argc), .tag = Location::immediate},
+                    {}
                 );
             } else {
                 encode_instruction(
                     Opcode::djs_call,
                     Arg {.n = -1, .tag = Location::immediate},
-                    Arg {
-                        .n = static_cast<int16_t>(arg_count),
-                        .tag = Location::immediate
-                    }
+                    Arg {.n = static_cast<int16_t>(call_argc), .tag = Location::immediate},
+                    {}
                 );
             }
 
-            const auto pre_return_temp_id = update_temp_id(-arg_count);
-
-            m_handle_native_obj_call = false;
+            m_access_as_lval = false;
 
             return Arg {
-                .n = static_cast<int16_t>(pre_return_temp_id - arg_count),
+                .n = static_cast<int16_t>(call_result_slot),
                 .tag = Location::temp
             };
         }
@@ -834,40 +562,33 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto emit_expr_stmt(const ExprStmt& stmt, const std::string& source) -> bool {
-            /// NOTE: evaluate and discard expr stmt result if a temporary is actually placed... I could just make functions return `undefined` by default as per JS and then pop after.
-            const auto pre_eval_temp_id = current_temp_id();
+            const auto& [wrapped_expr] = stmt;
 
-            if (!emit_expr(*stmt.expr, source)) {
-                return false;
-            }
-
-            /// TODO: Conditionally pop off all temporary values generated the expr-stmt despite side effects- They may not be used if they're a discarded call result or non-assigned, temporary value.
-            // const auto post_eval_temp_id = current_temp_id();
-            // encode_instruction(Opcode::djs_pop, Arg {
-            //     .n = static_cast<int16_t>(post_eval_temp_id - pre_eval_temp_id),
-            //     .tag = Location::immediate
-            // });
-            // update_temp_id(pre_eval_temp_id - post_eval_temp_id);
-
-            return true;
+            return emit_expr(*wrapped_expr, source).has_value(); // TODO: pop temp when necessary?
         }
 
         [[nodiscard]] auto emit_var_decl(const VarDecl& stmt, const std::string& source) -> bool {
             const auto& [var_name_token, var_init_expr] = stmt;
-            
-            if (auto var_init_locator = emit_expr(*var_init_expr, source); !var_init_locator) {
-                return false;
-            } else {
-                const auto var_local_slot = m_next_temp_id - 1;
-                std::string var_name = var_name_token.as_string(source);
+            std::string var_name = var_name_token.as_string(source);
 
-                record_item(var_name, Arg {
-                    .n = static_cast<int16_t>(var_local_slot),
-                    .tag = Location::temp
-                });
+            Arg var_local_slot {
+                .n = static_cast<int16_t>(m_local_maps.back().next_temp_id),
+                .tag = Location::temp
+            };
+
+            if (!emit_expr(*var_init_expr, source)) {
+                return false;
             }
 
-            return true;
+            if (m_local_maps.size() < 2) {
+                m_globals_map[var_name] = var_local_slot;
+                return true;
+            } else if (!m_local_maps.back().locals.contains(var_name)) {
+                m_local_maps.back().locals[var_name] = var_local_slot;
+                return true;
+            } else {
+                return false;
+            }
         }
 
         [[nodiscard]] auto emit_variables(const Variables& stmt, const std::string& source) -> bool {
@@ -881,102 +602,83 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto emit_if(const If& stmt_if, const std::string& source) -> bool {
-            if (!emit_expr(*stmt_if.check, source)) {
+            const auto& [check, truthy_body, falsy_body] = stmt_if;
+            
+            if (!emit_expr(*check, source)) {
+                return false;
+            }
+            
+            const int pre_if_jump_pos = m_code.size();
+            encode_instruction(
+                Opcode::djs_jump_else,
+                /// NOTE: backpatch this jump afterward.
+                Arg {.n = -1, .tag = Location::immediate},
+                /// NOTE: pop off that one collapsed slot with the condition's temporary
+                Arg {.n = 1, .tag = Location::immediate},
+                {}
+            );
+
+            if (!emit_stmt(*truthy_body, source)) {
                 return false;
             }
 
-            const int pre_if_body_jump_ip = m_code.size();
+            if (!falsy_body) {
+                int post_lone_if_jump_pos = m_code.size();
+                encode_instruction(Opcode::djs_nop, {});
 
-            encode_instruction(Opcode::djs_jump_else, Arg {
-                .n = -1,
-                .tag = Location::immediate
-            });
+                m_code[pre_if_jump_pos].args[0] = post_lone_if_jump_pos - pre_if_jump_pos;
 
-            /// NOTE: the check (even as truthy) is a temporary boolean, so pop it to avoid stack waste!
-            encode_instruction(Opcode::djs_pop);
-            update_temp_id(-1);
+                return true;
+            }
 
-            if (!emit_stmt(*stmt_if.body_true, source)) {
+            int skip_else_jump_pos = m_code.size();
+            encode_instruction(Opcode::djs_jump, Arg {.n = -1, .tag = Location::immediate}, {});
+
+            int to_else_jump_pos = m_code.size();
+            m_code[pre_if_jump_pos].args[0] = to_else_jump_pos - pre_if_jump_pos;
+
+            if (!emit_stmt(*falsy_body, source)) {
                 return false;
             }
 
-            const int skip_else_body_jump_ip = m_code.size();
-
-            if (stmt_if.body_false) {
-                encode_instruction(Opcode::djs_jump, Arg {.n = -1000, .tag = Location::immediate});
-            }
-
-            const int post_truthy_part_jump_ip = m_code.size();
-
-            encode_instruction(Opcode::djs_nop);
-
-            /// NOTE: the check (even if falsy) is a temporary boolean, so pop it to avoid stack waste!
-            encode_instruction(Opcode::djs_pop);
-
-            const int falsy_jump_offset = post_truthy_part_jump_ip - pre_if_body_jump_ip;
-
-            if (falsy_jump_offset < min_bc_jump_offset || falsy_jump_offset > max_bc_jump_offset) {
-                return false;
-            }
-
-            m_code.at(pre_if_body_jump_ip).args[0] = falsy_jump_offset;
-
-            if (const auto falsy_if_part_p = stmt_if.body_false.get(); falsy_if_part_p) {
-                if (!emit_stmt(*falsy_if_part_p, source)) {
-                    return false;
-                } else {
-                    const int post_if_else_ip = m_code.size();
-                    encode_instruction(Opcode::djs_nop);
-
-                    m_code[skip_else_body_jump_ip].args[0] = post_if_else_ip - skip_else_body_jump_ip;
-                }
-            }
+            const int post_else_jump_pos = m_code.size();
+            m_code[skip_else_jump_pos].args[0] = post_else_jump_pos - skip_else_jump_pos;
 
             return true;
         }
 
         [[nodiscard]] auto emit_return(const Return& stmt, const std::string& source) -> bool {
-            if (!emit_expr(*stmt.result, source)) {
+            const auto& [result_expr] = stmt;
+
+            if (!emit_expr(*result_expr, source)) {
                 return false;
             }
 
-            encode_instruction(Opcode::djs_ret);
+            encode_instruction(Opcode::djs_ret, {});
 
             return true;
         }
 
         [[nodiscard]] auto emit_while(const While& loop_by_while, const std::string& source) -> bool {
-            const auto& [loop_expr, loop_body] = loop_by_while;
+            const auto& [loop_check, loop_body] = loop_by_while;
+            const int loop_begin_pos = m_code.size();
 
-            /// NOTE: 1. Before the loop begins each iteration, the backwards IP jump must repeat the condition. Therefore, the DJS_JUMP after the body's bytecode must return here if truthy.
-            const int pre_loop_pos = m_code.size();
-            encode_instruction(Opcode::djs_nop);
-
-            if (!emit_expr(*loop_expr, source)) {
+            if (!emit_expr(*loop_check, source)) {
                 return false;
             }
 
-            // 2. Emit a stub DJS_JUMP_ELSE that'll exit the loop when the preceeding check fails. JUMP_ELSE optionally removes the LHS / tested temporary IFF it's truthy!
-            const int loop_checked_jump_pos = m_code.size();
-            encode_instruction(Opcode::djs_jump_else, Arg {.n = -1, .tag = Location::immediate}, Arg {.n = 1, .tag = Location::immediate});
+            const int loop_exit_jump_pos = m_code.size();
+            encode_instruction(Opcode::djs_jump_else, Arg {.n = -1, .tag = Location::immediate}, Arg {.n = 1, .tag = Location::immediate}, {});
 
-            // 2b. Ensure that the temporary loop-check's boolean is popped just after evaluation
             if (!emit_stmt(*loop_body, source)) {
                 return false;
             }
 
-            // 3. Emit the back-jump to repeat the loop, especially the check 1st.
-            const int repeat_loop_jump_pos = m_code.size();
-            encode_instruction(Opcode::djs_jump, Arg {
-                .n = static_cast<int16_t>(pre_loop_pos - repeat_loop_jump_pos),
-                .tag = Location::immediate
-            });
+            const int loop_repeat_jump_pos = m_code.size();
+            encode_instruction(Opcode::djs_jump, Arg {.n = -1, .tag = Location::immediate}, {});
 
-            const int end_loop_pos = m_code.size();
-            encode_instruction(Opcode::djs_nop);
-
-            // 4. Patch loop-exit DJS_JUMP_ELSE here as per Step 2
-            m_code[loop_checked_jump_pos].args[0] = end_loop_pos - loop_checked_jump_pos;
+            m_code.at(loop_exit_jump_pos).args[0] = 1 + loop_repeat_jump_pos - loop_exit_jump_pos;
+            m_code.at(loop_repeat_jump_pos).args[0] = loop_begin_pos - loop_repeat_jump_pos;
 
             return true;
         }
@@ -992,27 +694,31 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto emit_function_decl(const FunctionDecl& stmt, const std::string& source) -> bool {
-            const auto& [func_params, func_name_token, func_body] = stmt;
-            std::string func_name = func_name_token.as_string(source);
+            const auto& [fn_params, fn_name, fn_body] = stmt;
 
-            record_item(func_name, record_this_func());
-            enter_simulated_frame();
+            m_local_maps.emplace_back(CodeGenScope {
+                .locals = {},
+                .next_temp_id = 0
+            });
 
-            for (const auto& param : func_params) {
-                std::string param_name = param.as_string(source);
-
-                record_item(param_name, Arg {
-                    .n = static_cast<int16_t>(update_temp_id(1)),
-                    .tag = Location::temp,
-                });
+            if (record_function_begin(fn_name.as_string(source)) == -1) {
+                return false;
             }
 
-            if (!emit_stmt(*func_body, source)) {
-                leave_simulated_frame();
-                return {};
+            for (const auto& param_token : fn_params) {
+                std::string param_name = param_token.as_string(source);
+
+                if (!record_valued_symbol(param_name, RecordLocalTempOpt {})) {
+                    return false;
+                }
             }
 
-            leave_simulated_frame();
+            if (!emit_stmt(*fn_body, source)) {
+                return false;
+            }
+
+            m_local_maps.pop_back();
+
             return true;
         }
 
@@ -1037,14 +743,28 @@ export namespace DerkJS {
         }
 
     public:
-        BytecodeGenPass(PolyPool<ObjectBase<Value>> heap_items_, std::flat_map<std::string, int> native_obj_index_, std::flat_map<std::string, int> pooled_string_index, std::vector<PreloadConst> pre_consts)
-        : m_mappings {}, m_heap_items (std::move(heap_items_)), m_native_obj_index (std::move(native_obj_index_)), m_poolable_str_ids (std::move(pooled_string_index)), m_consts {}, m_code {}, m_func_offsets {}, m_next_temp_id {0}, m_handle_props_as_rvals {true}, m_handle_native_obj_call {false} {
-            // 1. Consider global scope 1st for global variables / stmts...
-            enter_simulated_frame();
+        BytecodeGenPass(std::vector<PreloadItem> preloadables, int heap_object_capacity)
+        : m_global_consts_map {}, m_globals_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code {}, m_chunk_offsets {}, m_access_as_lval {false} {
+            m_local_maps.emplace_back(CodeGenScope {
+                .locals = {},
+                .next_temp_id = 0
+            });
 
-            // 2. Preload any constants resulting from adding native objects.
-            for (auto& [constant_lexeme, constant_value] : pre_consts) {
-                record_constants(constant_lexeme, std::move(constant_value));
+            for (auto& [pre_name, pre_entity, pre_location] : preloadables) {
+                switch (pre_location) {
+                case Location::constant: {
+                    record_valued_symbol(pre_name, std::move(std::get<Value>(pre_entity)));
+                } break;
+                case Location::heap_obj: {
+                    auto& js_object_p = std::get<std::unique_ptr<ObjectBase<Value>>>(pre_entity);
+                    if (pre_name.empty()) {
+                        m_heap.add_item(m_heap.get_next_id(), std::move(js_object_p));
+                    } else {
+                        record_valued_symbol(pre_name, std::move(js_object_p));
+                    }
+                } break;
+                default: break;
+                }
             }
         }
 
@@ -1059,9 +779,9 @@ export namespace DerkJS {
                 }
             }
 
-            auto global_func_chunk = record_this_func();
-
             /// TODO: 2. emit all top-level non-function statements as an implicit function that's called right away.
+            auto global_func_id = record_function_begin("__js_global__");
+
             for (const auto& [src_filename, decl, src_id] : tu) {
                 if (!std::holds_alternative<FunctionDecl>(decl->data)) {
                     if (!emit_stmt(*decl, source_map.at(src_id))) {
@@ -1071,15 +791,15 @@ export namespace DerkJS {
                 }
             }
 
-            /// NOTE: Place dud offset marker for bytecode dumping to stop properly.
-            m_func_offsets.emplace_back(-1);
+            /// NOTE: Place dud offset marker for bytecode dumping to properly end.
+            m_chunk_offsets.emplace_back(-1);
 
             return Program {
-                .heap_items = std::move(m_heap_items),
-                .consts = std::move(m_consts),
-                .code = std::move(m_code),
-                .offsets = std::move(m_func_offsets),
-                .entry_func_id = global_func_chunk.n,
+                .heap_items = std::move(m_heap), // PolyPool<ObjectBase<Value>>
+                .consts = std::move(m_consts), // std::vector<Value>
+                .code = std::move(m_code), // std::vector<Instruction>
+                .offsets = std::move(m_chunk_offsets), // std::vector<int>
+                .entry_func_id = static_cast<int16_t>(global_func_id), // int
             };
         }
     };

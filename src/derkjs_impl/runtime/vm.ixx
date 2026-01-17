@@ -681,7 +681,7 @@ export namespace DerkJS {
             return false;
         }
 
-        ctx.rsp -= a1;
+        ctx.rsp -= 2;
         ++ctx.rip_p;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
@@ -838,8 +838,8 @@ export namespace DerkJS {
         } else if (auto callable_obj_ref_p = callable_value_ref_p->to_object(); !callable_obj_ref_p) {
             return false;
         } else {
-            const int16_t caller_rsbp = ctx.rsbp;
             const int16_t callee_rsbp = ctx.rsp - a1;
+            const int16_t caller_rsbp = ctx.rsbp;
             ctx.rsbp = callee_rsbp;
             
             ctx.has_err = !callable_obj_ref_p->call(&ctx, a1);

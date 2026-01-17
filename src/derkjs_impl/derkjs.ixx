@@ -6,6 +6,7 @@ export import frontend.parse;
 export import frontend.semantics;
 export import runtime.objects;
 export import runtime.value;
+export import runtime.strings;
 export import runtime.callables;
 export import runtime.bytecode;
 export import runtime.vm;

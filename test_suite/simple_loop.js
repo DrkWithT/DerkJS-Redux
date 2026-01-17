@@ -1,7 +1,7 @@
 /* test while loops with gaussian sum */
 
 function consecutive_sum(n) {
-    var count = n || 0;
+    var count = n;
     var sum = 0;
 
     while (count > 0) {

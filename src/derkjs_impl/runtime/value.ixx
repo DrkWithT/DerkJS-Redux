@@ -14,7 +14,6 @@ import runtime.objects;
 /// TODO: make Boolean, Number, Object, and Function as built-in objects registered to the interpreter before running.
 export namespace DerkJS {
     struct Value;
-    class StaticString;
     class Object;
 
     struct JSNullOpt {};
@@ -124,7 +123,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] constexpr auto operator==(const Value& other) const noexcept -> bool {
-            if (const auto lhs_tag = get_tag(), rhs_tag = other.get_tag(); lhs_tag != rhs_tag) {
+            if (const auto lhs_tag = get_tag(), rhs_tag = other.get_tag(); lhs_tag != rhs_tag && lhs_tag != ValueTag::val_ref && rhs_tag != ValueTag::val_ref) {
                 return false;
             } else if (lhs_tag == ValueTag::undefined || lhs_tag == ValueTag::null) {
                 return true;
@@ -137,8 +136,8 @@ export namespace DerkJS {
                 return (m_data.b ^ other.m_data.b) == 0;
             } else if (lhs_tag == ValueTag::object) {
                 return m_data.obj_p == other.m_data.obj_p;
-            } else if (m_tag == ValueTag::val_ref) {
-                return (m_data.ref_p) ? m_data.ref_p->operator==(other) : false;
+            } else if (lhs_tag == ValueTag::val_ref) {
+                return (m_data.ref_p) ? m_data.ref_p->operator==(other.deep_clone()) : false;
             } else {
                 return false;
             }
@@ -444,7 +443,7 @@ export namespace DerkJS {
             case ValueTag::num_nan: default: return "NaN";
             case ValueTag::num_i32: return std::to_string(m_data.i);
             case ValueTag::num_f64: return std::to_string(m_data.d);
-            case ValueTag::object: return "[Object object]";
+            case ValueTag::object: return m_data.obj_p->as_string();
             case ValueTag::val_ref: return m_data.ref_p->to_string();
             }
         }
@@ -469,170 +468,10 @@ export namespace DerkJS {
             case ValueTag::num_nan: 
             case ValueTag::num_i32:
             case ValueTag::num_f64: return *this;
-            /// TODO: This `ObjectBase<Value>*` can easily point to a temporary owning pointer to some cloned object, so there needs to be a special way to distinguish this for quickly owning that Object in the VM heap...
-            case ValueTag::object: return m_data.obj_p->clone();
+            // copy object reference for avoiding ownership problems
+            case ValueTag::object: return m_data.obj_p;
             case ValueTag::val_ref: return m_data.ref_p->deep_clone();
             }
-        }
-    };
-
-    /// TODO: implement dynamic strings later!
-    class StaticString : public ObjectBase<Value>, public StringBase {
-    public:
-        static constexpr auto max_length_v = 8;
-        static constexpr auto flag_extensible_v = 0b00000001;
-        static constexpr auto flag_frozen_v = 0b00000010;
-        static constexpr auto flag_prototype_v = 0b10000000;
-
-    private:
-        PropPool<PropertyHandle<Value>, Value> m_own_props;
-        ObjectBase<Value>* m_proto;
-        char m_data[max_length_v];
-        uint8_t m_length;
-        uint8_t m_flags;
-
-        [[nodiscard]] constexpr auto is_full() const noexcept -> bool {
-            return m_length >= max_length_v;
-        }
-
-    public:
-        constexpr StaticString(ObjectBase<Value>* proto_ref, const char* cstr, int length) noexcept
-        : m_data {}, m_length (std::min(length, max_length_v)), m_flags {0x00} {
-            std::copy_n(cstr, length, m_data);
-        }
-
-        //// BEGIN ObjectBase overrides
-
-        [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
-            return this;
-        }
-
-        [[nodiscard]] auto get_class_name() const noexcept -> std::string override {
-            return "string";
-        }
-
-        [[nodiscard]] auto is_extensible() const noexcept -> bool override {
-            return m_flags & flag_extensible_v;
-        }
-
-        [[nodiscard]] auto is_frozen() const noexcept -> bool override {
-            return (m_flags & flag_frozen_v) >> 1;
-        }
-
-        [[nodiscard]] auto is_prototype() const noexcept -> bool override {
-            return (m_flags & flag_prototype_v) >> 7;
-        }
-
-        [[nodiscard]] auto get_prototype() noexcept -> ObjectBase<Value>* override {
-            return m_proto;
-        }
-
-        auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<Value>, Value>& override {
-            return m_own_props;
-        }
-
-        [[nodiscard]] auto get_property_value(const PropertyHandle<Value>& handle) -> Value* override {
-            if (auto property_entry_it = m_own_props.find(handle); property_entry_it != m_own_props.end()) {
-                return &property_entry_it->second;
-            }
-
-            return nullptr;
-        }
-
-        [[maybe_unused]] auto set_property_value(const PropertyHandle<Value>& handle, const Value& value) -> Value* override {
-            m_own_props[handle] = value;
-            return &m_own_props[handle];
-        }
-
-        [[maybe_unused]] auto del_property_value(const PropertyHandle<Value>& handle) -> bool override {
-            return m_own_props.erase(m_own_props.find(handle)) != m_own_props.end();
-        }
-
-        [[nodiscard]] auto call([[maybe_unused]] void* opaque_ctx_p, [[maybe_unused]] int argc) -> bool override {
-            return false;
-        }
-
-        [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
-            // Due to the Value repr needing an ObjectBase<Value>* ptr, the Value clone method returns a Value vs. `std::unique_ptr<Value>`, and the VM only stores Value-s on its stack, having a raw pointer is unavoidable. This may not be so bad since the PolyPool<ObjectBase<Value>> in the VM can quickly own it via `add_item()`.
-            auto self_clone = new StaticString {m_proto, m_data, m_length};
-
-            /// TODO: Add properties like .length as needed.
-
-            return self_clone;
-        }
-
-        [[nodiscard]] auto as_string() const -> std::string override {
-            std::string_view data_slice {m_data, m_data + m_length};
-
-            return std::format("{}", data_slice);
-        }
-
-        [[nodiscard]] auto operator==(const ObjectBase& other) const noexcept -> bool override {
-            if (get_class_name() != other.get_class_name()) {
-                return false;
-            }
-
-            return as_string() == other.as_string();
-        }
-
-        [[nodiscard]] auto operator<(const ObjectBase& other) const noexcept -> bool override {
-            if (get_class_name() != other.get_class_name()) {
-                return false;
-            }
-
-            return as_string() < other.as_string();
-        }
-
-        [[nodiscard]] auto operator>(const ObjectBase& other) const noexcept -> bool override {
-            if (get_class_name() != other.get_class_name()) {
-                return false;
-            }
-
-            return as_string() > other.as_string();
-        }
-
-
-        //// BEGIN StringBase overrides
-
-        auto is_empty() const noexcept -> bool override {
-            return m_length < 1;
-        }
-
-        auto get_slice([[maybe_unused]] int start, [[maybe_unused]] int length) -> std::unique_ptr<StringBase> override {
-            return {}; // todo
-        }
-
-        auto get_length() const noexcept -> int override {
-            return m_length;
-        }
-
-        void append_front([[maybe_unused]] const StringBase* other_view) override {
-            ; // todo
-        }
-
-        void append_back([[maybe_unused]] const StringBase* other_view) override {
-            ; // todo
-        }
-
-        /// NOTE: This is for String.prototype.indexOf()
-        auto find_substr_pos([[maybe_unused]] const StringBase* other_view) const noexcept -> int override {
-            return -1; // todo
-        }
-
-        [[nodiscard]] auto operator==(const StringBase& other) const noexcept -> bool override {
-            return as_str_view() == other.as_str_view();
-        }
-
-        [[nodiscard]] auto operator<(const StringBase& other) const noexcept -> bool  override {
-            return as_str_view() < other.as_str_view();
-        }
-
-        [[nodiscard]] auto operator>(const StringBase& other) const noexcept -> bool override {
-            return as_str_view() > other.as_str_view();
-        }
-
-        [[nodiscard]] auto as_str_view() const noexcept -> std::string_view override {
-            return std::string_view {m_data, static_cast<std::size_t>(m_length)};
         }
     };
 
@@ -681,7 +520,9 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_property_value(const PropertyHandle<Value>& handle) -> Value* override {
-            if (auto property_entry_it = m_own_props.find(handle); property_entry_it != m_own_props.end()) {
+            if (auto property_entry_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&handle](const auto& prop_pair) -> bool {
+                return prop_pair.first == handle;
+            }); property_entry_it != m_own_props.end()) {
                 return &property_entry_it->second;
             }
 
@@ -689,12 +530,18 @@ export namespace DerkJS {
         }
 
         [[maybe_unused]] auto set_property_value(const PropertyHandle<Value>& handle, const Value& value) -> Value* override {
-            m_own_props[handle] = value;
-            return &m_own_props[handle];
+            if (auto old_prop_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&handle](const auto& prop_pair) -> bool {
+                return prop_pair.first == handle;
+            }); old_prop_it == m_own_props.end()) {
+                m_own_props.emplace_back(handle, value);
+                return &m_own_props.back().second;
+            } else {
+                return &old_prop_it->second;
+            }
         }
 
         [[maybe_unused]] auto del_property_value(const PropertyHandle<Value>& handle) -> bool override {
-            return m_own_props.erase(m_own_props.find(handle)) != m_own_props.end();
+            return false; // TODO
         }
 
         [[nodiscard]] auto call([[maybe_unused]] void* opaque_ctx_p, [[maybe_unused]] int argc) -> bool override {
@@ -717,8 +564,12 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto operator==(const ObjectBase& other) const noexcept -> bool override {
-            if (get_class_name() != other.get_class_name()) {
-                return false;
+            if (this == &other) {
+                return true;
+            }
+
+            if (get_class_name() == other.get_class_name()) {
+                return true;
             }
 
             const auto& self_props = get_own_prop_pool();
@@ -728,17 +579,7 @@ export namespace DerkJS {
                 return false;
             }
 
-            auto self_prop_it = self_props.begin();
-
-            while (self_prop_it != self_props.end()) {
-                if (auto prop_pair = other_props.find(self_prop_it->first); prop_pair == other_props.end()) {
-                    return false;
-                } else if (const auto& [prop_key, prop_value] = *prop_pair; prop_key != self_prop_it->first || prop_value != self_prop_it->second) {
-                    return false;
-                }
-
-                ++self_prop_it;
-            }
+            // TODO
 
             return true;
         }
@@ -755,17 +596,7 @@ export namespace DerkJS {
                 return false;
             }
 
-            auto self_prop_it = self_props.cbegin();
-
-            while (self_prop_it != self_props.cend()) {
-                if (auto prop_pair = other_props.find(self_prop_it->first); prop_pair == other_props.cend()) {
-                    return false;
-                } else if (const auto& [prop_key, prop_value] = *prop_pair; prop_key < self_prop_it->first || prop_value < self_prop_it->second) {
-                    return false;
-                }
-
-                ++self_prop_it;
-            }
+            // TODO
 
             return true;
         }
@@ -782,17 +613,7 @@ export namespace DerkJS {
                 return false;
             }
 
-            auto self_prop_it = self_props.cbegin();
-
-            while (self_prop_it != self_props.cend()) {
-                if (auto prop_pair = other_props.find(self_prop_it->first); prop_pair == other_props.cend()) {
-                    return false;
-                } else if (const auto& [prop_key, prop_value] = *prop_pair; prop_key > self_prop_it->first || prop_value > self_prop_it->second) {
-                    return false;
-                }
-
-                ++self_prop_it;
-            }
+            // TODO
 
             return true;
         }
