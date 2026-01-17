@@ -30,6 +30,8 @@ export namespace DerkJS {
         djs_get_prop, // djs_get_prop gets a property value's ref based on an object's ref below a pooled string ref on the stack... the result is placed where the targeted ref was. --> Stack placement: <OBJ-REF-LOCAL> <PROP-KEY-HANDLE> --> <PROP-VALUE-REF>
         djs_put_prop, // djs_put_prop <obj-ref-slot-id> --> Stack placement: <PROP-KEY-HANDLE-VALUE> <NEW-VALUE> --> ...
         djs_del_prop, // TODO!
+        djs_numify, // converts the VM stack's top value to a number
+        djs_strcat, // concatenates 2 string copies since the ref-wrapping `Value` is decoupled from VM state --> Stack placement: <STRING-1> <STRING-2> --> <NEW-STRING>
         djs_mod,
         djs_mul,
         djs_div,
@@ -93,6 +95,8 @@ export namespace DerkJS {
             "djs_get_prop", // gets a property value based on RSP: <OBJ-REF>, RSP - 1: <POOLED-STR-REF> 
             "djs_put_prop", // SEE: djs_get_prop for stack args passing...
             "djs_del_prop", // SEE: djs_get_prop for stack args passing...
+            "djs_numify",
+            "djs_strcat",
             "djs_mod",
             "djs_mul",
             "djs_div",

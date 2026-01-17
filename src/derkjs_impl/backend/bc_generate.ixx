@@ -57,6 +57,8 @@ export namespace DerkJS {
             OpcodeDelta { .offset = -1, .implicit = true }, // GET_PROP
             OpcodeDelta { .offset = -2, .implicit = true }, // PUT_PROP
             OpcodeDelta { .offset = -2, .implicit = true }, // DEL_PROP
+            OpcodeDelta { .offset = 0, .implicit = true}, // NUMIFY
+            OpcodeDelta { .offset = -1, .implicit = true}, // STRCAT
             OpcodeDelta { .offset = -1, .implicit = true }, // MOD
             OpcodeDelta { .offset = -1, .implicit = true }, // MUL
             OpcodeDelta { .offset = -1, .implicit = true }, // DIV
@@ -105,6 +107,9 @@ export namespace DerkJS {
 
         // filled with global function IDs -> absolute offsets into the bytecode blob
         std::vector<int> m_chunk_offsets;
+
+        // Whether an addition has any string operands or not.
+        bool m_has_string_ops;
 
         // Whether an object member access is assignable or read-from
         bool m_access_as_lval;
@@ -270,6 +275,8 @@ export namespace DerkJS {
                 case TokenTag::literal_real:
                     return record_valued_symbol(atom_lexeme, Value {std::stod(atom_lexeme)});
                 case TokenTag::literal_string: {
+                    m_has_string_ops = true;
+
                     if (const int atom_text_length = atom_lexeme.length(); atom_text_length <= StaticString::max_length_v) {
                         return record_valued_symbol(atom_lexeme, StaticString {nullptr, atom_lexeme.c_str(), atom_text_length});
                     } else {
@@ -338,14 +345,21 @@ export namespace DerkJS {
         [[nodiscard]] auto emit_unary(const Unary& expr, const std::string& source) -> std::optional<Arg> {
             const auto& [inner_expr, expr_op] = expr;
 
-            if (auto unary_result_loc = emit_expr(*inner_expr, source); unary_result_loc) {
-                return Arg {
-                    .n = static_cast<int16_t>(encode_instruction(Opcode::djs_test_falsy, {})),
-                    .tag = Location::temp
-                };
+            if (!emit_expr(*inner_expr, source)) {
+                return {};
             }
 
-            return {};
+            switch (expr_op) {
+            case AstOp::ast_op_bang: return Arg {
+                .n = static_cast<int16_t>(encode_instruction(Opcode::djs_test_falsy, {})),
+                .tag = Location::temp
+            };
+            case AstOp::ast_op_plus: return Arg {
+                .n = static_cast<int16_t>(encode_instruction(Opcode::djs_numify, {})),
+                .tag = Location::temp
+            };
+            default: return {};
+            }
         }
 
         [[nodiscard]] auto emit_logical_expr(AstOp logical_operator, const ExprPtr& lhs, const ExprPtr& rhs, const std::string& source) -> std::optional<Arg> {
@@ -466,7 +480,12 @@ export namespace DerkJS {
                 return {};
             }
 
-            encode_instruction(*deduced_opcode, {});
+            if (m_has_string_ops && *deduced_opcode == AstOp::ast_op_plus) {
+                encode_instruction(Opcode::djs_strcat, {});
+                m_has_string_ops = false;
+            } else {
+                encode_instruction(*deduced_opcode, {});
+            }
 
             return Arg {
                 .n = static_cast<int16_t>(arithmetic_result_slot),
@@ -741,7 +760,7 @@ export namespace DerkJS {
 
     public:
         BytecodeGenPass(std::vector<PreloadItem> preloadables, int heap_object_capacity)
-        : m_global_consts_map {}, m_globals_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code {}, m_chunk_offsets {}, m_access_as_lval {false} {
+        : m_global_consts_map {}, m_globals_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code {}, m_chunk_offsets {}, m_has_string_ops {false}, m_access_as_lval {false} {
             m_local_maps.emplace_back(CodeGenScope {
                 .locals = {},
                 .next_temp_id = 0
