@@ -347,6 +347,7 @@ export namespace DerkJS {
             const auto unary_op = ([](TokenTag tag) -> AstOp {
                 switch (tag) {
                 case TokenTag::symbol_bang: return AstOp::ast_op_bang;
+                case TokenTag::symbol_plus: return AstOp::ast_op_plus;
                 default: return AstOp::ast_op_noop;
                 }
             })(m_current.tag);
