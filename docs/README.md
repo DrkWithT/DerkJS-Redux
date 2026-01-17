@@ -38,9 +38,7 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
  9. ~~Add simple data objects.~~
  10. Add custom natives: Console, Date objects!
     - Implement native objects and function wrappers for bytecode / native callables!
-      - Bytecode objects just hold an `Instruction` buffer, and `call()` takes an `ExternVMCtx*, PropPool<PropertyHandle<Value>, Value>`.
     - Implement:
-      - `console.log('Hello World');`
       - `Date.nano();` -> Gives a whole number of nanoseconds since the Epoch.
  11. ~~Add larger strings under `ObjectBase<Value>, StringBase` for string literals.~~
   - ~~Add `console.readline(msg: string);`~~

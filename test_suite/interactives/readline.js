@@ -2,4 +2,6 @@
 
 var s = console.readln("Enter some words: ");
 
-return s;
+console.log(s);
+
+return 0;

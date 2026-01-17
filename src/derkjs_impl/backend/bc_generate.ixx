@@ -50,8 +50,6 @@ export namespace DerkJS {
             OpcodeDelta { .offset = 0, .implicit = true }, // NOP
             OpcodeDelta { .offset = 1, .implicit = true }, // DUP
             OpcodeDelta { .offset = 1, .implicit = true }, // PUT_CONST
-            OpcodeDelta { .offset = 1, .implicit = true }, // PUT_VAL_REF
-            OpcodeDelta { .offset = 1, .implicit = true }, // PUT_OBJ_REF
             OpcodeDelta { .offset = 0, .implicit = true }, // DEREF
             OpcodeDelta { .offset = 0, .implicit = false }, // POP-N
             OpcodeDelta { .offset = -1, .implicit = true }, // EMPLACE
@@ -525,8 +523,7 @@ export namespace DerkJS {
                 );
             } else {
                 encode_instruction(
-                    Opcode::djs_call,
-                    Arg {.n = -1, .tag = Location::immediate},
+                    Opcode::djs_native_call,
                     Arg {.n = static_cast<int16_t>(call_argc), .tag = Location::immediate},
                     {}
                 );
