@@ -359,7 +359,7 @@ export namespace DerkJS {
                 m_data.i += other.to_num_i32().value();
             } else if (lhs_tag == ValueTag::num_f64) {
                 m_data.d += other.to_num_f64().value();
-            } else if (m_tag == ValueTag::val_ref) {
+            } else if (lhs_tag == ValueTag::val_ref) {
                 m_data.ref_p->operator+=(other);
             } else {
                 m_data.dud = dud_nan_char_v;
@@ -429,7 +429,13 @@ export namespace DerkJS {
             case ValueTag::boolean: return m_data.b ? 1.0 : 0.0 ;
             case ValueTag::num_i32: return static_cast<double>(m_data.i);
             case ValueTag::num_f64: return m_data.d;
-            case ValueTag::object: return {};
+            case ValueTag::object: {
+                try {
+                    return std::stod(m_data.obj_p->as_string());
+                } catch (const std::exception& e) {
+                    return {};
+                }
+            };
             case ValueTag::val_ref: return m_data.ref_p->to_num_f64();
             default: return {};
             }

@@ -66,8 +66,8 @@ export namespace DerkJS {
         virtual auto is_empty() const noexcept -> bool = 0;
         virtual auto get_slice(int start, int length) -> std::unique_ptr<StringBase> = 0;
         virtual auto get_length() const noexcept -> int = 0;
-        virtual void append_front(const StringBase* other_view) = 0;
-        virtual void append_back(const StringBase* other_view) = 0;
+        virtual void append_front(const std::string& s) = 0;
+        virtual void append_back(const std::string& s) = 0;
 
         /// NOTE: This is for String.prototype.indexOf()
         virtual auto find_substr_pos(const StringBase* other_view) const noexcept -> int = 0;

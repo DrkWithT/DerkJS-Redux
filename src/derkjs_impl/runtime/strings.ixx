@@ -135,11 +135,11 @@ export namespace DerkJS {
             return m_length;
         }
 
-        void append_front([[maybe_unused]] const StringBase* other_view) override {
+        void append_front(const std::string& s) override {
             ; // todo
         }
 
-        void append_back([[maybe_unused]] const StringBase* other_view) override {
+        void append_back(const std::string& s) override {
             ; // todo
         }
 
@@ -255,12 +255,14 @@ export namespace DerkJS {
             return m_data.size();
         }
 
-        void append_front(const StringBase* other_view) override {
-            m_data = std::format("{}{}", other_view->as_str_view(), std::move(m_data));
+        void append_front(const std::string& s) override {
+            std::string old_data = std::move(m_data);
+            m_data = s;
+            m_data.append_range(old_data);
         }
 
-        void append_back(const StringBase* other_view) override {
-            m_data.append_range(other_view->as_str_view());
+        void append_back(const std::string& s) override {
+            m_data.append_range(s);
         }
 
         /// NOTE: This is for String.prototype.indexOf()
