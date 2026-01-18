@@ -21,6 +21,7 @@ target_sources(
     src/derkjs_impl/runtime/bytecode.ixx
     src/derkjs_impl/backend/bc_generate.ixx
     src/derkjs_impl/runtime/vm.ixx
+    src/derkjs_impl/runtime/builtins.ixx
     src/derkjs_impl/core/driver.ixx
 )
 
