@@ -45,12 +45,12 @@ export namespace DerkJS {
 
     //// BEGIN time impls:
 
+    /// TODO: probably add support for passing an argument which specifies precision: seconds, ms, ns
     [[nodiscard]] auto clock_time_now(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
-        /// TODO: probably add support for passing an argument which specifies precision: seconds, ms, ns
-        const auto current_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        const std::chrono::duration<double, std::milli> current_time_ms = std::chrono::steady_clock::now().time_since_epoch();
 
         /// NOTE: the VM's `djs_native_call` opcode will restore RSP -> callee RBP automtically, so the result would have to be placed there for other code.
-        ctx->stack[ctx->rsbp] = Value {current_time_ms};
+        ctx->stack[ctx->rsbp] = Value {current_time_ms.count()};
 
         return true;
     }

@@ -4,11 +4,11 @@ function fizzbuzz(n) {
     var count = 1;
 
     while (count <= n) {
-        if (count % 3 && count % 5) {
+        if (count % 3 == 0 && count % 5 == 0) {
             console.log("FizzBuzz");
-        } else if (count % 5) {
+        } else if (count % 5 == 0) {
             console.log("Buzz");
-        } else if (count % 3) {
+        } else if (count % 3 == 0) {
             console.log("Fizz");
         } else {
             console.log(count);
@@ -21,9 +21,9 @@ function fizzbuzz(n) {
 }
 
 var fizz_start_ms = clock.now();
-var discard = fizzbuzz(100);
+var discard = fizzbuzz(30);
 var fizz_end_ms = clock.now();
 
-console.log("FizzBuzz 100 (ms): ", fizz_end_ms - fizz_start_ms);
+console.log("FizzBuzz 30 (ms): ", fizz_end_ms - fizz_start_ms);
 
 return 0;
