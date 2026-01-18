@@ -36,16 +36,18 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
  7. ~~Add support for undefined variable declarations.~~
  8. ~~Add static-size & heap strings with interning.~~
  9. ~~Add simple data objects.~~
- 10. Add custom natives: Console, Date objects!
-    - Implement native objects and function wrappers for bytecode / native callables!
-    - Implement:
-      - `Date.nano();` -> Gives a whole number of nanoseconds since the Epoch.
+ 10. ~~Add custom natives: `console`, `clock` objects!~~
  11. ~~Add larger strings under `ObjectBase<Value>, StringBase` for string literals.~~
-    - ~~Add `console.readline(msg: string);`~~
- 12. Make `banana.js` work.
-     - ~~Add `djs_numify` opcode.~~
-    - ~~Add `djs_strcat` opcode.~~
- 13. Add support for `this` in functions
-  - Add closure opcode support... Make / modify an implicit JS object locally. It may be returned.
- 14. Implement usage of `this` in constructor functions with `new` & object "methods".
- 15. Add mark and sweep GC.
+   - ~~Add `console.readline(msg: string);`~~
+ 12. ~~Make `banana.js` work.~~
+   - ~~Add `djs_numify` & `dja_strcat` opcodes.~~
+ 13. Add anonymous functions as expressions.
+   - Add parsing support.
+   - Add `FunctionObject` internals for bytecode-callables.
+   - Possibly, modify the `djs_call` codegen to handle callable objects.
+ 14. Add support for `this` in functions.
+   - Add closure opcode support: Makes / modifies an implicit JS object locally. It may be returned.
+      - `djs_put_this_obj` & generate `djs_put_prop` invocations for certain assignment: `this.x = 123`.
+   - Implement usage of `this` in constructor functions with `new` & object "methods".
+      - Add `prototype` support??
+ 16. Add mark and sweep GC.
