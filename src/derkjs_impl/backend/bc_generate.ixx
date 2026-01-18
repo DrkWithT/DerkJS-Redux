@@ -265,14 +265,19 @@ export namespace DerkJS {
             auto primitive_locator = ([&, this] () -> std::optional<Arg> {
                 switch (expr_token_tag) {
                 case TokenTag::keyword_undefined:
+                    m_has_string_ops = false;
                     return record_valued_symbol(atom_lexeme, Value {});
                 case TokenTag::keyword_null:
+                    m_has_string_ops = false;
                     return record_valued_symbol(atom_lexeme, Value {JSNullOpt {}});
                 case TokenTag::keyword_true: case TokenTag::keyword_false:
+                    m_has_string_ops = false;
                     return record_valued_symbol(atom_lexeme, Value {atom_lexeme == "true"});
                 case TokenTag::literal_int:
+                    m_has_string_ops = false;
                     return record_valued_symbol(atom_lexeme, Value {std::stoi(atom_lexeme)});
                 case TokenTag::literal_real:
+                    m_has_string_ops = false;
                     return record_valued_symbol(atom_lexeme, Value {std::stod(atom_lexeme)});
                 case TokenTag::literal_string: {
                     m_has_string_ops = true;
@@ -284,6 +289,7 @@ export namespace DerkJS {
                     }
                 }
                 case TokenTag::identifier:
+                    m_has_string_ops = false;
                     return lookup_symbol(atom_lexeme);
                 default: return {};
                 }
@@ -480,9 +486,8 @@ export namespace DerkJS {
                 return {};
             }
 
-            if (m_has_string_ops && *deduced_opcode == AstOp::ast_op_plus) {
+            if (m_has_string_ops && expr_op == AstOp::ast_op_plus) {
                 encode_instruction(Opcode::djs_strcat, {});
-                m_has_string_ops = false;
             } else {
                 encode_instruction(*deduced_opcode, {});
             }

@@ -262,7 +262,7 @@ export namespace DerkJS {
         }
 
         void append_back(const std::string& s) override {
-            m_data.append_range(other_view->as_str_view());
+            m_data.append_range(s);
         }
 
         /// NOTE: This is for String.prototype.indexOf()
