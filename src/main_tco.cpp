@@ -6,34 +6,6 @@
 
 import derkjs_impl;
 
-[[nodiscard]] auto native_console_log(DerkJS::ExternVMCtx* ctx, [[maybe_unused]] DerkJS::PropPool<DerkJS::PropertyHandle<DerkJS::Value>, DerkJS::Value>* props, int argc) -> bool {
-    const int vm_rsbp = ctx->rsbp;
-
-    for (auto passed_arg_local_offset = 0; passed_arg_local_offset < argc; ++passed_arg_local_offset) {
-        std::print("{} ", ctx->stack[vm_rsbp + passed_arg_local_offset].to_string().value());
-    }
-
-    std::println();
-
-    return true;
-}
-
-[[nodiscard]] auto native_console_read_line(DerkJS::ExternVMCtx* ctx, [[maybe_unused]] DerkJS::PropPool<DerkJS::PropertyHandle<DerkJS::Value>, DerkJS::Value>* props, int argc) -> bool {    
-    /// NOTE: Show user the passed-in prompt string: It MUST be the 1st argument on the stack.
-    const auto passed_rbsp = ctx->rsbp;
-    std::print("{}", ctx->stack[passed_rbsp].to_string().value());
-
-    std::string temp_line;
-    std::getline(std::cin, temp_line);
-
-    if (auto line_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), DerkJS::DynamicString {std::move(temp_line)}); !line_str_p) {
-        return false;
-    } else {
-        ctx->stack[passed_rbsp] = DerkJS::Value {line_str_p};
-        return true;
-    }
-}
-
 int main(int argc, char* argv[]) {
     using namespace DerkJS;
 
@@ -73,13 +45,20 @@ int main(int argc, char* argv[]) {
     Core::NativePropertyStub console_obj_props[] {
         Core::NativePropertyStub {
             .name_str = "log",
-            .item = std::make_unique<NativeFunction>(native_console_log)
+            .item = std::make_unique<NativeFunction>(DerkJS::native_console_log)
         },
         Core::NativePropertyStub {
             .name_str = "readln",
-            .item = std::make_unique<NativeFunction>(native_console_read_line)
+            .item = std::make_unique<NativeFunction>(DerkJS::native_console_read_line)
         }
-    }; 
+    };
+
+    Core::NativePropertyStub clock_obj_props[] {
+        Core::NativePropertyStub {
+            .name_str = "now",
+            .item = std::make_unique<NativeFunction>(DerkJS::clock_time_now)
+        }
+    };
 
     driver.add_js_lexical("var", TokenTag::keyword_var);
     driver.add_js_lexical("if", TokenTag::keyword_if);
@@ -120,6 +99,11 @@ int main(int argc, char* argv[]) {
     driver.add_native_object(
         "console",
         std::to_array(std::move(console_obj_props))
+    );
+
+    driver.add_native_object(
+        "clock",
+        std::to_array(std::move(clock_obj_props))
     );
 
     return driver.run<DispatchPolicy::tco>(source_path) ? 0 : 1;
