@@ -546,6 +546,7 @@ export namespace DerkJS {
         op_nop,
         op_dup, op_put_const, op_deref, op_pop, op_emplace,
         op_put_obj_dud, op_get_prop, op_put_prop, op_del_prop,
+        op_numify, op_strcat,
         op_mod, op_mul, op_div, op_add, op_sub,
         op_test_falsy, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte,
         op_jump_else, op_jump_if, op_jump,
@@ -655,6 +656,33 @@ export namespace DerkJS {
 
     [[nodiscard]] inline auto op_del_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         return false; // TODO!
+    }
+
+    [[nodiscard]] inline auto op_numify(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        if (auto num_temp = ctx.stack[ctx.rsp].to_num_f64(); num_temp) {
+            ctx.stack[ctx.rsp] = Value {*num_temp};
+        } else {
+            ctx.stack[ctx.rsp] = Value {JSNaNOpt {}};
+        }
+
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_strcat(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        DynamicString result {ctx.stack[ctx.rsp].to_string().value()};
+        result.append_back(ctx.stack[ctx.rsp - 1].to_string().value());
+
+        if (auto temp_str_p = ctx.heap.add_item(ctx.heap.get_next_id(), std::move(result)); !temp_str_p) {
+            return false;
+        } else {
+            ctx.stack[ctx.rsp - 1] = Value {temp_str_p};
+            --ctx.rsp;
+            ++ctx.rip_p;
+        }
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_mod(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
