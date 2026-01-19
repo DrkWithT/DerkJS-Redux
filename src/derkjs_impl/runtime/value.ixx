@@ -430,8 +430,14 @@ export namespace DerkJS {
             case ValueTag::num_i32: return static_cast<double>(m_data.i);
             case ValueTag::num_f64: return m_data.d;
             case ValueTag::object: {
+                std::string text = m_data.obj_p->as_string();
+
+                if (text.empty()) {
+                    return 0.0;
+                }
+
                 try {
-                    return std::stod(m_data.obj_p->as_string());
+                    return std::stod(text);
                 } catch (const std::exception& e) {
                     return {};
                 }
