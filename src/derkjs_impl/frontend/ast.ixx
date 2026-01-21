@@ -37,6 +37,28 @@ export namespace DerkJS {
         ast_op_minus_assign,
     };
 
+    /// BEGIN FORWARD DECLS ///
+
+    template <typename ... StmtKind>
+    struct StmtNode {
+        std::variant<StmtKind...> data;
+        int src_id;
+        int text_begin;
+        int text_length;
+    };
+
+    struct ExprStmt;
+    struct VarDecl;
+    struct Variables;
+    struct If;
+    struct Return;
+    struct While;
+    struct Block;
+    struct FunctionDecl;
+
+    using Stmt = StmtNode<ExprStmt, Variables, If, Return, While, Block, FunctionDecl>;
+    using StmtPtr = std::unique_ptr<Stmt>;
+
     template <typename ... ExprKind>
     struct ExprNode {
         std::variant<ExprKind...> data;
@@ -47,14 +69,17 @@ export namespace DerkJS {
 
     struct Primitive;
     struct ObjectLiteral;
+    struct LambdaLiteral;
     struct MemberAccess;
     struct Unary;
     struct Binary;
     struct Assign;
     struct Call;
 
-    using Expr = ExprNode<Primitive, ObjectLiteral, MemberAccess, Unary, Binary, Assign, Call>;
+    using Expr = ExprNode<Primitive, ObjectLiteral, LambdaLiteral, MemberAccess, Unary, Binary, Assign, Call>;
     using ExprPtr = std::unique_ptr<Expr>;
+
+    /// BEGIN NODE DEFINITIONS ///
 
     struct Primitive {
         Token token;
@@ -67,6 +92,11 @@ export namespace DerkJS {
 
     struct ObjectLiteral {
         std::vector<ObjectField> fields;
+    };
+
+    struct LambdaLiteral {
+        std::vector<Token> params;
+        StmtPtr body;
     };
 
     struct MemberAccess {
@@ -95,25 +125,6 @@ export namespace DerkJS {
         ExprPtr callee;
     };
 
-    template <typename ... StmtKind>
-    struct StmtNode {
-        std::variant<StmtKind...> data;
-        int src_id;
-        int text_begin;
-        int text_length;
-    };
-
-    struct ExprStmt;
-    struct VarDecl;
-    struct Variables;
-    struct If;
-    struct Return;
-    struct While;
-    struct Block;
-    struct FunctionDecl;
-
-    using Stmt = StmtNode<ExprStmt, Variables, If, Return, While, Block, FunctionDecl>;
-    using StmtPtr = std::unique_ptr<Stmt>;
 
     struct ExprStmt {
         ExprPtr expr;
@@ -153,7 +164,7 @@ export namespace DerkJS {
         StmtPtr body;
     };
 
-
+    /// BEGIN AST WRAPPER ///
 
     struct SourcedAst {
         std::string source_filename;

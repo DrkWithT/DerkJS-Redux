@@ -19,6 +19,7 @@ export namespace DerkJS {
     enum class SyntaxTag: uint8_t {
         expr_primary,
         expr_object,
+        expr_lambda,
         expr_member,
         expr_new,
         expr_call,
@@ -39,7 +40,8 @@ export namespace DerkJS {
 
     constexpr std::array<std::string_view, static_cast<std::size_t>(SyntaxTag::last)> syntax_names = {
         "expr-primary",
-        "expr-object", 
+        "expr-object",
+        "expr-lambda", 
         "expr-member",
         "expr-new",
         "expr-call",
@@ -150,6 +152,8 @@ export namespace DerkJS {
                 );
             case TokenTag::left_brace:
                 return parse_object(lexer, source);
+            case TokenTag::keyword_function:
+                return parse_lambda(lexer, source);
             case TokenTag::left_paren:
                 {
                     consume_any(lexer, source);
@@ -217,6 +221,44 @@ export namespace DerkJS {
                 0,
                 object_lexeme_begin,
                 m_current.start - object_lexeme_begin + 1
+            );
+        }
+
+        [[nodiscard]] auto parse_lambda(Lexer& lexer, const std::string& source) -> ExprPtr {
+            m_syntax = SyntaxTag::expr_lambda;
+
+            const auto snippet_begin = m_current.start;
+            std::vector<Token> param_tokens;
+
+            consume_any(lexer, source); // skip pre-checked 'function'
+            consume(lexer, source, TokenTag::left_paren);
+
+            if (!m_current.match_tag_to(TokenTag::right_paren)) {
+                consume(lexer, source, TokenTag::identifier);
+                param_tokens.emplace_back(m_previous);
+            }
+
+            while (!at_eof()) {
+                if (!m_current.match_tag_to(TokenTag::comma)) {
+                    break;
+                }
+
+                consume_any(lexer, source);
+                consume(lexer, source, TokenTag::identifier);
+
+                param_tokens.emplace_back(m_previous);
+            }
+
+            consume(lexer, source, TokenTag::right_paren);
+
+            return std::make_unique<Expr>(
+                Lambda {
+                    .params = std::move(param_tokens),
+                    .body = parse_block(lexer, source)
+                },
+                0,
+                snippet_begin,
+                m_current.start - snippet_begin + 1
             );
         }
 

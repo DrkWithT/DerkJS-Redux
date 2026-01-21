@@ -8,6 +8,7 @@ module;
 #include <algorithm>
 #include <iostream>
 #include <print>
+#include <format>
 
 export module frontend.semantics;
 
@@ -137,6 +138,38 @@ namespace DerkJS {
 
             leave_scope();
 
+            return SemanticInfo {
+                .value_kind = ValueCategory::js_temporary
+            };
+        }
+
+        [[nodiscard]] auto check_lambda(const LambdaLiteral& lambda, std::string_view source_name, const std::string& current_source, int area_start, int area_length) -> std::optional<SemanticInfo> {
+            const auto& [fn_params, fn_body] = lambda;
+
+            enter_scope("anonymous-function");
+
+            for (const auto& param_token : fn_params) {
+                std::string param_name = current_source.substr(param_token.start, param_token.length);
+
+                m_line = param_token.line;
+
+                if (lookup_info(param_name, 0)) {
+                    report_error(source_name, m_line, current_source, area_start, area_length, param_token.start, param_token.length, std::format("Invalid redeclaration of lambda parameter '{}'.", param_name));
+                    leave_scope();
+                    return {};
+                }
+
+                record_info_of(param_name, SemanticInfo {
+                    .value_kind = ValueCategory::js_locator
+                });
+            }
+
+            if (!check_stmt(*fn_body, source_name, current_source, fn_body->text_begin, fn_body->text_length)) {
+                leave_scope();
+                return {};
+            }
+
+            leave_scope();
             return SemanticInfo {
                 .value_kind = ValueCategory::js_temporary
             };
@@ -274,6 +307,8 @@ namespace DerkJS {
                 return check_primitive(*primitive_p, current_source, expr_text_begin, expr_text_length);
             } else if (auto object_p = std::get_if<ObjectLiteral>(&expr.data); object_p) {
                 return check_object(*object_p, source_name, current_source, area_start, area_length);
+            } else if (auto lambda_p = std::get_if<LambdaLiteral>(&expr.data); lambda_p) {
+                return check_lambda(*lambda_p, source_name, current_source, area_start, area_length);
             } else if (auto member_access_p = std::get_if<MemberAccess>(&expr.data); member_access_p) {
                 return check_member_access(*member_access_p, source_name, current_source, area_start, area_length);
             } else if (auto unary_p = std::get_if<Unary>(&expr.data); unary_p) {
