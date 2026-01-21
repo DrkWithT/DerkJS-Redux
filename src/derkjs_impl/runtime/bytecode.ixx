@@ -48,7 +48,7 @@ export namespace DerkJS {
         djs_jump_if,
         djs_jump,
         djs_call, // Args: <optional-bytecode-offset> <arg-count>: IF the `optional-bytecode-offset` is `-1`, the call tries invoking the stack's top `Value`. There, the Value must have an `ObjectBase<Value>*` pointing to an object implementing `call()`.
-        djs_native_call, // Args: <arg-count>: Assumes the top stack value references a `FunctionObject` to invoke on the <arg-count> temporaries below.
+        djs_object_call, // Args: <arg-count>: Assumes the top stack value references a `ObjectBase<Value>` to invoke on <arg-count> temporaries below. NativeFunction objects don't need to affect `RSBP` and `RSP` for restoring caller stack state.
         djs_ret,
         djs_halt,
         last,
@@ -113,7 +113,7 @@ export namespace DerkJS {
             "djs_jump_if",
             "djs_jump",
             "djs_call",
-            "djs_native_call",
+            "djs_object_call",
             "djs_ret",
             "djs_halt",
         };
