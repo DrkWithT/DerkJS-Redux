@@ -182,17 +182,17 @@ export namespace DerkJS {
         [[maybe_unused]] auto call(void* opaque_ctx_p, int argc) -> bool override {
             auto vm_ctx_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
 
-            const int16_t new_callee_sbp = vm_ctx_p->rsp - argc + 1;
+            const auto caller_ret_ip = vm_ctx_p->rip_p + 1;
+            const int16_t new_callee_sbp = vm_ctx_p->rsp - argc;
             const int16_t old_caller_sbp = vm_ctx_p->rsbp;
-            const int16_t old_caller_ret_bc_off = vm_ctx_p->rip_p - vm_ctx_p->code_bp + 1;
 
             vm_ctx_p->rip_p = m_code.data();
             vm_ctx_p->rsbp = new_callee_sbp;
 
             vm_ctx_p->frames.emplace_back(tco_call_frame_type {
+                caller_ret_ip,
                 new_callee_sbp,
-                old_caller_sbp,
-                old_caller_ret_bc_off,
+                old_caller_sbp
             });
 
             return true;

@@ -49,9 +49,9 @@ export namespace DerkJS {
 
     template <>
     struct CallFrame<DispatchPolicy::tco> {
+        const Instruction* m_caller_ret_ip;
         int m_callee_sbp;
         int m_caller_sbp;
-        int m_caller_ret_bc_off;
     };
 
     #ifdef __clang__
@@ -106,9 +106,9 @@ export namespace DerkJS {
             frames.reserve(call_frame_limit);
 
             frames.emplace_back(call_frame_type {
+                .m_caller_ret_ip = nullptr,
                 .m_callee_sbp = 0,
                 .m_caller_sbp = 0,
-                .m_caller_ret_bc_off = -1,
             });
         }
     };
@@ -818,29 +818,32 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         const int16_t new_callee_sbp = ctx.rsp - a1 + 1;
         const int16_t old_caller_sbp = ctx.rsbp;
-        const int16_t old_caller_ret_bc_off = ctx.rip_p - ctx.code_bp + 1;
+        const auto caller_ret_ip = ctx.rip_p + 1;
 
         ctx.rip_p = ctx.code_bp + ctx.fn_table_bp[a0];
         ctx.rsbp = new_callee_sbp;
 
         ctx.frames.emplace_back(tco_call_frame_type {
+            caller_ret_ip,
             new_callee_sbp,
             old_caller_sbp,
-            old_caller_ret_bc_off,
         });
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_object_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        if (auto callable_value_ref_p = ctx.stack[ctx.rsp].get_value_ref(); !callable_value_ref_p) {
-            return false;
-        } else if (auto callable_obj_ref_p = callable_value_ref_p->to_object(); !callable_obj_ref_p) {
-            return false;
+        auto& callable_value = ctx.stack[ctx.rsp];
+
+        if (const auto val_tag = callable_value.get_tag(); val_tag == ValueTag::val_ref && callable_value.get_value_ref()->get_tag() == ValueTag::object) {
+            ctx.has_err = !callable_value.get_value_ref()->to_object()->call(&ctx, a0);
+        } else if (val_tag == ValueTag::object) {
+            ctx.has_err = !callable_value.to_object()->call(&ctx, a0);
         } else {
-            ctx.has_err = !callable_obj_ref_p->call(&ctx, a0);
-            return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+            return false;
         }
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     //// TODO: implement this after the JS `Lambda` is implemented.
@@ -856,13 +859,13 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        const auto& [callee_sbp, caller_sbp, caller_ret_bc_off] = ctx.frames.back();
+        const auto& [caller_ret_ip, callee_sbp, caller_sbp] = ctx.frames.back();
 
         ctx.stack[callee_sbp] = ctx.stack[ctx.rsp];
 
         ctx.rsp = callee_sbp;
         ctx.rsbp = caller_sbp;
-        ctx.rip_p = ctx.code_bp + caller_ret_bc_off;
+        ctx.rip_p = caller_ret_ip;
 
         ctx.frames.pop_back();
 

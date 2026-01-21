@@ -383,6 +383,7 @@ export namespace DerkJS {
 
             Lambda temp_callable {std::move(m_code_blobs.front())};
             m_code_blobs.pop_front();
+            m_local_maps.pop_back();
 
             if (auto lambda_object_ptr = m_heap.add_item(m_heap.get_next_id(), std::move(temp_callable)); lambda_object_ptr) {
                 // As per any DerkJS object, the real thing is owned by the VM heap but is referenced by many non-owning raw pointers to its base: `ObjectBase<Value>*`.
