@@ -1,8 +1,9 @@
 ### Grammar (Expressions)
 
 ```
-<primary> = "undefined" | "null" | "this" | <identifier> | <boolean> | <number> | <object> | "(" <expr> ")"
+<primary> = "undefined" | "null" | "this" | <identifier> | <boolean> | <number> | <object> | <lambda> | "(" <expr> ")"
 <object> = "{" (<property> ",")* "}"
+<lambda> = "function" "(" <identifier> ( "," <identifier> )* ")" <block>
 <property> = <identifier> : <expr>
 <member> = <primary> ( "." <member> | "[" <expr> "]" )?
     ; TODO: Update member grammar rule to support longer accesses.

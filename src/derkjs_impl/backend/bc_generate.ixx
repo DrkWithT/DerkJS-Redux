@@ -7,6 +7,7 @@ module;
 #include <optional>
 #include <string>
 #include <array>
+#include <forward_list>
 #include <vector>
 #include <variant>
 #include <flat_map>
@@ -20,6 +21,7 @@ import frontend.ast;
 import runtime.objects;
 import runtime.value;
 import runtime.strings;
+import runtime.callables;
 import runtime.bytecode;
 
 export namespace DerkJS {
@@ -75,8 +77,9 @@ export namespace DerkJS {
             OpcodeDelta { .offset = 0, .implicit = false }, // JUMP_IF
             OpcodeDelta { .offset = 0, .implicit = true }, // JUMP
             OpcodeDelta { .offset = 0, .implicit = false }, // CALL
-            OpcodeDelta { .offset = 0, .implicit = false }, // RET
-            OpcodeDelta { .offset = 0, .implicit = true }, // CALL
+            OpcodeDelta { .offset = 0, .implicit = false }, // OBJECT_CALL
+            OpcodeDelta { .offset = 0, .implicit = true }, // RET
+            OpcodeDelta { .offset = 0, .implicit = true } // HALT
         };
 
         static constexpr int min_bc_jump_offset = std::numeric_limits<int16_t>::min();
@@ -102,8 +105,9 @@ export namespace DerkJS {
         // filled with primitive literals & interned string refs
         std::vector<Value> m_consts;
 
-        // single buffer for all bytecode
-        std::vector<Instruction> m_code;
+        // stack of bytecode buffers, accounting for arbitrary nesting of lambdas- NOTE: this MUST have the global buffer pushed before emitting anything!
+        // Use: front(), empty(), emplace_front(), pop_front()...
+        std::forward_list<std::vector<Instruction>> m_code_blobs;
 
         // filled with global function IDs -> absolute offsets into the bytecode blob
         std::vector<int> m_chunk_offsets;
@@ -201,7 +205,7 @@ export namespace DerkJS {
     
         [[nodiscard]] auto record_function_begin(const std::string& func_name) -> int {
             const int next_fn_id = m_chunk_offsets.size();
-            int abs_code_offset = m_code.size();
+            int abs_code_offset = m_code_blobs.front().size();
 
             if (m_globals_map.contains(func_name)) {
                 return -1;
@@ -230,7 +234,7 @@ export namespace DerkJS {
 
         /// NOTE: This overload is for no-argument opcodes
         [[maybe_unused]] auto encode_instruction(Opcode op, std::optional<int> manual_delta) -> int {
-            m_code.emplace_back(Instruction {
+            m_code_blobs.front().emplace_back(Instruction {
                 .args = { 0, 0 },
                 .op = op
             });
@@ -240,7 +244,7 @@ export namespace DerkJS {
 
         /// NOTE: this overload is for single-argument opcodes
         [[maybe_unused]] auto encode_instruction(Opcode op, Arg a0, std::optional<int> manual_delta) -> int {
-            m_code.emplace_back(Instruction {
+            m_code_blobs.front().emplace_back(Instruction {
                 .args = { a0.n, 0 },
                 .op = op
             });
@@ -250,7 +254,7 @@ export namespace DerkJS {
 
         /// NOTE: this overload is for double-argument opcodes
         [[maybe_unused]] auto encode_instruction(Opcode op, Arg a0, Arg a1, std::optional<int> manual_delta) -> int {
-            m_code.emplace_back(Instruction {
+            m_code_blobs.front().emplace_back(Instruction {
                 .args = { a0.n, a1.n},
                 .op = op
             });
@@ -348,6 +352,55 @@ export namespace DerkJS {
             };
         }
 
+        [[nodiscard]] auto emit_lambda(const LambdaLiteral& lambda, const std::string& source) -> std::optional<Arg> {
+            const auto& [lambda_params, lambda_body] = lambda;
+
+            // 1. Begin lambda code emission, but let's note that this nested "code scope" place a new buffer as the currently filling one before it's done & craps out a Lambda object... Which gets moved into the bytecode `Program` later.
+            m_local_maps.emplace_back(CodeGenScope {
+                .locals = {},
+                .next_temp_id = 0
+            });
+            m_code_blobs.emplace_front();
+
+            for (const auto& param_token : lambda_params) {
+                std::string param_name = param_token.as_string(source);
+
+                if (!record_valued_symbol(param_name, RecordLocalTempOpt {})) {
+                    return {};
+                }
+            }
+
+            if (!emit_stmt(*lambda_body, source)) {
+                return {};
+            }
+
+            // 2. Record the Lambda's code as a wrapper object into the VM heap, preloaded.
+            const int16_t next_global_ref_const_id = m_consts.size();
+            Arg next_global_ref_loc {
+                .n = next_global_ref_const_id,
+                .tag = Location::constant
+            };
+
+            Lambda temp_callable {std::move(m_code_blobs.front())};
+            m_code_blobs.pop_front();
+            m_local_maps.pop_back();
+
+            if (auto lambda_object_ptr = m_heap.add_item(m_heap.get_next_id(), std::move(temp_callable)); lambda_object_ptr) {
+                // As per any DerkJS object, the real thing is owned by the VM heap but is referenced by many non-owning raw pointers to its base: `ObjectBase<Value>*`.
+                m_consts.emplace_back(Value {lambda_object_ptr});
+            } else {
+                return {};
+            }
+
+            encode_instruction(
+                Opcode::djs_put_const,
+                next_global_ref_loc,
+                {}
+            );
+
+            return next_global_ref_loc;
+        }
+
         [[nodiscard]] auto emit_unary(const Unary& expr, const std::string& source) -> std::optional<Arg> {
             const auto& [inner_expr, expr_op] = expr;
 
@@ -380,7 +433,7 @@ export namespace DerkJS {
             }
 
             // 2. Emit dud conditional jump for the "OR" / "AND"
-            const int pre_logic_check_pos = m_code.size();
+            const int pre_logic_check_pos = m_code_blobs.front().size();
 
             if (logical_operator == AstOp::ast_op_and) {
                 encode_instruction(
@@ -405,13 +458,13 @@ export namespace DerkJS {
                 return {};
             }
 
-            const int post_logic_check_pos = m_code.size();
+            const int post_logic_check_pos = m_code_blobs.front().size();
             const auto patch_jump_offset = post_logic_check_pos - pre_logic_check_pos;
 
             encode_instruction(Opcode::djs_nop, {});
 
             // 4. Patch conditional jump offset which is taken on short-circuited evaluation.
-            m_code.at(pre_logic_check_pos).args[0] = patch_jump_offset;
+            m_code_blobs.front().at(pre_logic_check_pos).args[0] = patch_jump_offset;
 
             m_local_maps.back().next_temp_id = result_eval_slot + 1;
 
@@ -547,7 +600,7 @@ export namespace DerkJS {
                 );
             } else {
                 encode_instruction(
-                    Opcode::djs_native_call,
+                    Opcode::djs_object_call,
                     Arg {.n = static_cast<int16_t>(call_argc), .tag = Location::immediate},
                     {}
                 );
@@ -567,6 +620,8 @@ export namespace DerkJS {
             } else if (auto object_p = std::get_if<ObjectLiteral>(&expr.data); object_p) {
                 /// TODO: maybe add opcode support for object cloning... could be good for instances of prototypes.
                 return emit_object_literal(*object_p, source);
+            } else if (auto lambda_p = std::get_if<LambdaLiteral>(&expr.data); lambda_p) {
+                return emit_lambda(*lambda_p, source);
             } else if (auto member_access_p = std::get_if<MemberAccess>(&expr.data); member_access_p) {
                 return emit_member_access(*member_access_p, source);
             } else if (auto unary_p = std::get_if<Unary>(&expr.data); unary_p) {
@@ -629,7 +684,7 @@ export namespace DerkJS {
                 return false;
             }
             
-            const int pre_if_jump_pos = m_code.size();
+            const int pre_if_jump_pos = m_code_blobs.front().size();
             encode_instruction(
                 Opcode::djs_jump_else,
                 /// NOTE: backpatch this jump afterward.
@@ -644,26 +699,26 @@ export namespace DerkJS {
             }
 
             if (!falsy_body) {
-                int post_lone_if_jump_pos = m_code.size();
+                int post_lone_if_jump_pos = m_code_blobs.front().size();
                 encode_instruction(Opcode::djs_nop, {});
 
-                m_code[pre_if_jump_pos].args[0] = post_lone_if_jump_pos - pre_if_jump_pos;
+                m_code_blobs.front().at(pre_if_jump_pos).args[0] = post_lone_if_jump_pos - pre_if_jump_pos;
 
                 return true;
             }
 
-            int skip_else_jump_pos = m_code.size();
+            int skip_else_jump_pos = m_code_blobs.front().size();
             encode_instruction(Opcode::djs_jump, Arg {.n = -1, .tag = Location::immediate}, {});
 
-            int to_else_jump_pos = m_code.size();
-            m_code[pre_if_jump_pos].args[0] = to_else_jump_pos - pre_if_jump_pos;
+            int to_else_jump_pos = m_code_blobs.front().size();
+            m_code_blobs.front().at(pre_if_jump_pos).args[0] = to_else_jump_pos - pre_if_jump_pos;
 
             if (!emit_stmt(*falsy_body, source)) {
                 return false;
             }
 
-            const int post_else_jump_pos = m_code.size();
-            m_code[skip_else_jump_pos].args[0] = post_else_jump_pos - skip_else_jump_pos;
+            const int post_else_jump_pos = m_code_blobs.front().size();
+            m_code_blobs.front().at(skip_else_jump_pos).args[0] = post_else_jump_pos - skip_else_jump_pos;
 
             return true;
         }
@@ -682,24 +737,24 @@ export namespace DerkJS {
 
         [[nodiscard]] auto emit_while(const While& loop_by_while, const std::string& source) -> bool {
             const auto& [loop_check, loop_body] = loop_by_while;
-            const int loop_begin_pos = m_code.size();
+            const int loop_begin_pos = m_code_blobs.front().size();
 
             if (!emit_expr(*loop_check, source)) {
                 return false;
             }
 
-            const int loop_exit_jump_pos = m_code.size();
+            const int loop_exit_jump_pos = m_code_blobs.front().size();
             encode_instruction(Opcode::djs_jump_else, Arg {.n = -1, .tag = Location::immediate}, Arg {.n = 1, .tag = Location::immediate}, {});
 
             if (!emit_stmt(*loop_body, source)) {
                 return false;
             }
 
-            const int loop_repeat_jump_pos = m_code.size();
+            const int loop_repeat_jump_pos = m_code_blobs.front().size();
             encode_instruction(Opcode::djs_jump, Arg {.n = -1, .tag = Location::immediate}, {});
 
-            m_code.at(loop_exit_jump_pos).args[0] = 1 + loop_repeat_jump_pos - loop_exit_jump_pos;
-            m_code.at(loop_repeat_jump_pos).args[0] = loop_begin_pos - loop_repeat_jump_pos;
+            m_code_blobs.front().at(loop_exit_jump_pos).args[0] = 1 + loop_repeat_jump_pos - loop_exit_jump_pos;
+            m_code_blobs.front().at(loop_repeat_jump_pos).args[0] = loop_begin_pos - loop_repeat_jump_pos;
 
             return true;
         }
@@ -765,11 +820,12 @@ export namespace DerkJS {
 
     public:
         BytecodeGenPass(std::vector<PreloadItem> preloadables, int heap_object_capacity)
-        : m_global_consts_map {}, m_globals_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code {}, m_chunk_offsets {}, m_has_string_ops {false}, m_access_as_lval {false} {
+        : m_global_consts_map {}, m_globals_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code_blobs {}, m_chunk_offsets {}, m_has_string_ops {false}, m_access_as_lval {false} {
             m_local_maps.emplace_back(CodeGenScope {
                 .locals = {},
                 .next_temp_id = 0
             });
+            m_code_blobs.emplace_front();
 
             for (auto& [pre_name, pre_entity, pre_location] : preloadables) {
                 switch (pre_location) {
@@ -794,7 +850,7 @@ export namespace DerkJS {
             for (const auto& [src_filename, decl, src_id] : tu) {
                 if (std::holds_alternative<FunctionDecl>(decl->data)) {
                     if (!emit_stmt(*decl, source_map.at(src_id))) {
-                        std::println(std::cerr, "Compile Error at source '{}' around '{}': unsupported JS construct :(\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length / 2));
+                        std::println(std::cerr, "Compile Error at source '{}' around '{}': unsupported JS construct :(\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length));
                         return {};
                     }
                 }
@@ -806,7 +862,7 @@ export namespace DerkJS {
             for (const auto& [src_filename, decl, src_id] : tu) {
                 if (!std::holds_alternative<FunctionDecl>(decl->data)) {
                     if (!emit_stmt(*decl, source_map.at(src_id))) {
-                        std::println(std::cerr, "Compile Error at source '{}' around '{}': unsupported JS construct :(\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length / 2));
+                        std::println(std::cerr, "Compile Error at source '{}' around '{}': unsupported JS construct :(\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length));
                         return {};
                     }
                 }
@@ -815,10 +871,13 @@ export namespace DerkJS {
             /// NOTE: Place dud offset marker for bytecode dumping to properly end.
             m_chunk_offsets.emplace_back(-1);
 
+            std::vector<Instruction> global_code_buffer {std::move(m_code_blobs.front())};
+            m_code_blobs.pop_front();
+
             return Program {
                 .heap_items = std::move(m_heap), // PolyPool<ObjectBase<Value>>
                 .consts = std::move(m_consts), // std::vector<Value>
-                .code = std::move(m_code), // std::vector<Instruction>
+                .code = std::move(global_code_buffer), // std::vector<Instruction>
                 .offsets = std::move(m_chunk_offsets), // std::vector<int>
                 .entry_func_id = static_cast<int16_t>(global_func_id), // int
             };
