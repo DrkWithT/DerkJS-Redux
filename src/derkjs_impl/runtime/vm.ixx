@@ -538,7 +538,7 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_jump_if(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_jump(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_native_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_object_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
@@ -553,7 +553,7 @@ export namespace DerkJS {
         op_mod, op_mul, op_div, op_add, op_sub,
         op_test_falsy, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte,
         op_jump_else, op_jump_if, op_jump,
-        op_call, op_native_call, op_ret,
+        op_call, op_object_call, op_ret,
         op_halt
     };
 
@@ -832,22 +832,25 @@ export namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_native_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    [[nodiscard]] inline auto op_object_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         if (auto callable_value_ref_p = ctx.stack[ctx.rsp].get_value_ref(); !callable_value_ref_p) {
             return false;
         } else if (auto callable_obj_ref_p = callable_value_ref_p->to_object(); !callable_obj_ref_p) {
             return false;
         } else {
-            const int16_t callee_rsbp = ctx.rsp - a0;
-            const int16_t caller_rsbp = ctx.rsbp;
-
-            ctx.rsbp = callee_rsbp;
             ctx.has_err = !callable_obj_ref_p->call(&ctx, a0);
+            return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        }
+    }
 
-            ctx.rsp = callee_rsbp;
-            ctx.rsbp = caller_rsbp;
-            ++ctx.rip_p;
-   
+    //// TODO: implement this after the JS `Lambda` is implemented.
+    [[nodiscard]] inline auto op_lambda_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        if (auto callable_value_ref_p = ctx.stack[ctx.rsp].get_value_ref(); !callable_value_ref_p) {
+            return false;
+        } else if (auto callable_obj_ref_p = callable_value_ref_p->to_object(); !callable_obj_ref_p) {
+            return false;
+        } else {
+            ctx.has_err = !callable_obj_ref_p->call(&ctx, a0);
             return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
         }
     }
@@ -883,30 +886,13 @@ export namespace DerkJS {
     template <>
     class VM<DispatchPolicy::tco> {
     public:
-        static_assert(is_tco_enabled_v, "TCO is not enabled for this compiler (version) :(");
+        static_assert(is_tco_enabled_v, "TCO is not enabled for this compiler toolchain (version).");
 
-        /// NOTE: do not modify directly!
+        /// NOTE: This SHOULD NOT be modified directly!
         ExternVMCtx m_ctx;
 
         explicit VM(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit)
         : m_ctx {prgm, stack_length_limit, call_frame_limit} {}
-
-        [[nodiscard]] auto get_value(Arg op_arg) noexcept -> Value* {
-            const auto [arg_n, arg_tag] = op_arg;
-            
-            switch (arg_tag) {
-                case Location::constant: return m_ctx.consts_view + arg_n;
-                case Location::heap_obj: {
-                    m_ctx.has_err = true;
-                    return nullptr;
-                }
-                case Location::temp: return m_ctx.stack.data() + m_ctx.rsbp + arg_n;
-                default: {
-                    m_ctx.has_err = true;
-                    return nullptr;
-                }
-            }
-        }
 
         [[nodiscard]] auto peek_final_result() const noexcept -> const Value& {
             return m_ctx.stack[0];

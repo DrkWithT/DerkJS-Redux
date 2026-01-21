@@ -252,7 +252,7 @@ export namespace DerkJS {
             consume(lexer, source, TokenTag::right_paren);
 
             return std::make_unique<Expr>(
-                Lambda {
+                LambdaLiteral {
                     .params = std::move(param_tokens),
                     .body = parse_block(lexer, source)
                 },

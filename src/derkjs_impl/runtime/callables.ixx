@@ -159,37 +159,37 @@ export namespace DerkJS {
             return false;
         }
 
-        [[nodiscard]] auto get_prototype() noexcept -> ObjectBase<V>* override {
+        [[nodiscard]] auto get_prototype() noexcept -> ObjectBase<Value>* override {
             return nullptr;
         }
 
-        [[nodiscard]] auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<V>, V>& override {
+        [[nodiscard]] auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<Value>, Value>& override {
             return m_own_properties;
         }
 
-        [[nodiscard]] auto get_property_value(const PropertyHandle<V>& handle) -> V* override {
+        [[nodiscard]] auto get_property_value(const PropertyHandle<Value>& handle) -> Value* override {
             return nullptr;
         }
 
-        [[nodiscard]] auto set_property_value(const PropertyHandle<V>& handle, const V& value) -> V* override {
+        [[nodiscard]] auto set_property_value(const PropertyHandle<Value>& handle, const Value& value) -> Value* override {
             return nullptr;
         }
 
-        [[nodiscard]] auto del_property_value(const PropertyHandle<V>& handle) -> bool override {
+        [[nodiscard]] auto del_property_value(const PropertyHandle<Value>& handle) -> bool override {
             return false;
         }
 
         [[maybe_unused]] auto call(void* opaque_ctx_p, int argc) -> bool override {
             auto vm_ctx_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
 
-            const int16_t new_callee_sbp = vm_ctx_p->rsp - a1 + 1;
+            const int16_t new_callee_sbp = vm_ctx_p->rsp - argc + 1;
             const int16_t old_caller_sbp = vm_ctx_p->rsbp;
             const int16_t old_caller_ret_bc_off = vm_ctx_p->rip_p - vm_ctx_p->code_bp + 1;
 
             vm_ctx_p->rip_p = m_code.data();
             vm_ctx_p->rsbp = new_callee_sbp;
 
-            ctx.frames.emplace_back(tco_call_frame_type {
+            vm_ctx_p->frames.emplace_back(tco_call_frame_type {
                 new_callee_sbp,
                 old_caller_sbp,
                 old_caller_ret_bc_off,
@@ -199,25 +199,25 @@ export namespace DerkJS {
         }
 
         /// For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!
-        [[nodiscard]] auto clone() const -> ObjectBase<V>* override {
+        [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
             return new Lambda {m_code};
         }
 
         /// NOTE: For default printing of objects, etc. to the console (stdout). 
         [[nodiscard]] auto as_string() const -> std::string override {
-            return std::format("[Lambda bytecode-ptr({})]", reinterpret_cast<void*>(m_code.data()));
+            return std::format("[Lambda bytecode-ptr({})]", reinterpret_cast<const void*>(m_code.data()));
         }
 
         [[nodiscard]] auto operator==(const ObjectBase& other) const noexcept -> bool override {
-            ;
+            return this == &other;
         }
 
         [[nodiscard]] auto operator<(const ObjectBase& other) const noexcept -> bool override {
-            ;
+            return false;
         }
 
         [[nodiscard]] auto operator>(const ObjectBase& other) const noexcept -> bool override {
-            ;
+            return false;
         }
 
     };
