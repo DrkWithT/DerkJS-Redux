@@ -12,8 +12,8 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
  - `use strict` is the locked default.
  - No automatic semicolon insertion.
 
-### Simple Demo
-<img src="imgs/DerkJS_console_log.png" size="25%">
+### Simple Print
+<img src="imgs/DerkJS_lambda_test.png" size="25%">
 
 ### Usage
  1. Give `./utility.sh` run permissions.
