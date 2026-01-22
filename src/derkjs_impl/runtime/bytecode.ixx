@@ -144,7 +144,7 @@ export namespace DerkJS {
 
         for (int constant_id = 0; const auto& temp_constant : prgm_consts) {
             std::println(
-                "\tconst:{} -> {}",
+                "const:{} -> {}",
                 constant_id,
                 temp_constant.to_string().value()
             );
