@@ -392,13 +392,17 @@ export namespace DerkJS {
                 return {};
             }
 
+            const int16_t temp_lambda_slot_id = m_local_maps.back().next_temp_id;
             encode_instruction(
                 Opcode::djs_put_const,
                 next_global_ref_loc,
                 {}
             );
 
-            return next_global_ref_loc;
+            return Arg {
+                .n = temp_lambda_slot_id,
+                .tag = Location::temp
+            };
         }
 
         [[nodiscard]] auto emit_unary(const Unary& expr, const std::string& source) -> std::optional<Arg> {
@@ -576,7 +580,7 @@ export namespace DerkJS {
 
         [[nodiscard]] auto emit_call(const Call& expr, const std::string& source) -> std::optional<Arg> {
             const auto& [expr_args, expr_callee] = expr;
-            const int call_result_slot = m_local_maps.back().next_temp_id;
+            int16_t call_result_slot = m_local_maps.back().next_temp_id;
             auto call_argc = 0;
 
             for (const auto& arg_p : expr_args) {
@@ -598,10 +602,20 @@ export namespace DerkJS {
                     Arg {.n = static_cast<int16_t>(call_argc), .tag = Location::immediate},
                     {}
                 );
-            } else {
+            } else if (call_argc > 0) {
                 encode_instruction(
                     Opcode::djs_object_call,
                     Arg {.n = static_cast<int16_t>(call_argc), .tag = Location::immediate},
+                    {}
+                );
+            } else {
+                /// NOTE: IF 0 arguments are passed, the result must be ON TOP (RSP + 1) of previous values within the caller's frame.
+                ++m_local_maps.back().next_temp_id;
+                ++call_result_slot;
+
+                encode_instruction(
+                    Opcode::djs_object_call,
+                    Arg {.n = 0, .tag = Location::immediate},
                     {}
                 );
             }
@@ -609,7 +623,7 @@ export namespace DerkJS {
             m_access_as_lval = false;
 
             return Arg {
-                .n = static_cast<int16_t>(call_result_slot),
+                .n = call_result_slot,
                 .tag = Location::temp
             };
         }
@@ -647,20 +661,17 @@ export namespace DerkJS {
             const auto& [var_name_token, var_init_expr] = stmt;
             std::string var_name = var_name_token.as_string(source);
 
-            Arg var_local_slot {
-                .n = static_cast<int16_t>(m_local_maps.back().next_temp_id),
-                .tag = Location::temp
-            };
+            auto local_var_initializer_slot = emit_expr(*var_init_expr, source);
 
-            if (!emit_expr(*var_init_expr, source)) {
+            if (!local_var_initializer_slot) {
                 return false;
             }
 
             if (m_local_maps.size() < 2) {
-                m_globals_map[var_name] = var_local_slot;
+                m_globals_map[var_name] = *local_var_initializer_slot;
                 return true;
             } else if (!m_local_maps.back().locals.contains(var_name)) {
-                m_local_maps.back().locals[var_name] = var_local_slot;
+                m_local_maps.back().locals[var_name] = *local_var_initializer_slot;
                 return true;
             } else {
                 return false;

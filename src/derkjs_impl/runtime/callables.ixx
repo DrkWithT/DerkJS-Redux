@@ -4,6 +4,7 @@ module;
 #include <utility>
 #include <format>
 #include <string>
+#include <sstream>
 
 export module runtime.callables;
 
@@ -131,6 +132,40 @@ export namespace DerkJS {
      */
     class Lambda : public ObjectBase<Value> {
     private:
+        static constexpr std::array<std::string_view, static_cast<std::size_t>(Opcode::last)> opcode_names = {
+            "djs_nop",
+            "djs_dup",
+            "djs_put_const",
+            "djs_deref",
+            "djs_pop",
+            "djs_emplace",
+            "djs_put_obj_dud",
+            "djs_get_prop", // gets a property value based on RSP: <OBJ-REF>, RSP - 1: <POOLED-STR-REF> 
+            "djs_put_prop", // SEE: djs_get_prop for stack args passing...
+            "djs_del_prop", // SEE: djs_get_prop for stack args passing...
+            "djs_numify",
+            "djs_strcat",
+            "djs_mod",
+            "djs_mul",
+            "djs_div",
+            "djs_add",
+            "djs_sub",
+            "djs_test_falsy",
+            "djs_test_strict_eq",
+            "djs_test_strict_ne",
+            "djs_test_lt",
+            "djs_test_lte",
+            "djs_test_gt",
+            "djs_test_gte",
+            "djs_jump_else",
+            "djs_jump_if",
+            "djs_jump",
+            "djs_call",
+            "djs_object_call",
+            "djs_ret",
+            "djs_halt",
+        };
+
         PropPool<PropertyHandle<Value>, Value> m_own_properties;
         std::vector<Instruction> m_code;
         // std::unique_ptr<ObjectBase<Value>> m_prototype;
@@ -183,7 +218,7 @@ export namespace DerkJS {
             auto vm_ctx_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
 
             const auto caller_ret_ip = vm_ctx_p->rip_p + 1;
-            const int16_t new_callee_sbp = vm_ctx_p->rsp - argc;
+            const int16_t new_callee_sbp = vm_ctx_p->rsp - static_cast<int16_t>((argc > 0) ? argc : -1);
             const int16_t old_caller_sbp = vm_ctx_p->rsbp;
 
             vm_ctx_p->rip_p = m_code.data();
@@ -203,9 +238,27 @@ export namespace DerkJS {
             return new Lambda {m_code};
         }
 
-        /// NOTE: For default printing of objects, etc. to the console (stdout). 
+        /// NOTE: For disassembling lambda bytecode for debugging.
         [[nodiscard]] auto as_string() const -> std::string override {
-            return std::format("[Lambda bytecode-ptr({})]", reinterpret_cast<const void*>(m_code.data()));
+            std::ostringstream sout;
+
+            sout << std::format("[Lambda bytecode-ptr({})] [\n", reinterpret_cast<const void*>(m_code.data()));
+
+            for (auto lambda_bc_pos = 0; const auto& [instr_argv, instr_op] : m_code) {
+                sout << std::format(
+                    "\t{}: {} {} {}\n",
+                    lambda_bc_pos,
+                    opcode_names.at(static_cast<std::size_t>(instr_op)),
+                    instr_argv[0],
+                    instr_argv[1]
+                );
+
+                ++lambda_bc_pos;
+            }
+
+            sout << "]\n";
+
+            return sout.str();
         }
 
         [[nodiscard]] auto operator==(const ObjectBase& other) const noexcept -> bool override {
