@@ -854,9 +854,9 @@ export namespace DerkJS {
         auto& callable_value = ctx.stack[ctx.rsp];
 
         if (const auto val_tag = callable_value.get_tag(); val_tag == ValueTag::val_ref && callable_value.get_value_ref()->get_tag() == ValueTag::object) {
-            ctx.has_err = !callable_value.get_value_ref()->to_object()->call(&ctx, a0);
+            ctx.has_err = !callable_value.get_value_ref()->to_object()->call(&ctx, a0, a1);
         } else if (val_tag == ValueTag::object) {
-            ctx.has_err = !callable_value.to_object()->call(&ctx, a0);
+            ctx.has_err = !callable_value.to_object()->call(&ctx, a0, a1);
         } else {
             return false;
         }
