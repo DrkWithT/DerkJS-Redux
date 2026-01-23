@@ -26,6 +26,7 @@ export namespace DerkJS {
         djs_deref, // Args: Value reference from RSP to overwrite with the fully-dereferenced Value.
         djs_pop,
         djs_emplace, // Args: target Value slot, but treatment varies. 1: stack temp gets replaced entirely, 2: value ref is followed through and then the original replaced, 3: object
+        djs_put_this, // Pushes a reference to the current `this` object.
         djs_put_obj_dud,
         djs_get_prop, // djs_get_prop gets a property value's ref based on an object's ref below a pooled string ref on the stack... the result is placed where the targeted ref was. --> Stack placement: <OBJ-REF-LOCAL> <PROP-KEY-HANDLE> --> <PROP-VALUE-REF>
         djs_put_prop, // djs_put_prop <obj-ref-slot-id> --> Stack placement: <PROP-KEY-HANDLE-VALUE> <NEW-VALUE> --> ...
@@ -48,7 +49,8 @@ export namespace DerkJS {
         djs_jump_if,
         djs_jump,
         djs_call, // Args: <optional-bytecode-offset> <arg-count>: IF the `optional-bytecode-offset` is `-1`, the call tries invoking the stack's top `Value`. There, the Value must have an `ObjectBase<Value>*` pointing to an object implementing `call()`.
-        djs_object_call, // Args: <arg-count>: Assumes the top stack value references a `ObjectBase<Value>` to invoke on <arg-count> temporaries below. NativeFunction objects don't need to affect `RSBP` and `RSP` for restoring caller stack state.
+        djs_object_call, // Args: <arg-count>: Assumes the top stack value references a `ObjectBase<Value>` to invoke on <arg-count> temporaries below. NativeFunction objects don't need to affect `RSBP` and `RSP` for restoring caller stack state. The call() virtual method per function object can now take 'this': the caller object is the this, laying on top of all other arguments as the last argument.
+        djs_ctor_call, // Args: <arg-count>; creates a this object to initialize and return via `var foo = new Foo()` where the function has `return this;`. Invokes the object's `call_as_ctor()` virtual method. If `opt-chunk-id >= 0`: invokes the bytecode function as a constructor. ONLY WORKS WITH FUNCTION OBJECTS!!
         djs_ret,
         djs_halt,
         last,
@@ -58,7 +60,7 @@ export namespace DerkJS {
         code_chunk,
         immediate,
         constant,
-        heap_obj,
+        heap_obj, // `-2` means a 'this' reference...
         temp,
         end,
     };
@@ -91,6 +93,7 @@ export namespace DerkJS {
             "djs_deref",
             "djs_pop",
             "djs_emplace",
+            "djs_put_this",
             "djs_put_obj_dud",
             "djs_get_prop", // gets a property value based on RSP: <OBJ-REF>, RSP - 1: <POOLED-STR-REF> 
             "djs_put_prop", // SEE: djs_get_prop for stack args passing...
@@ -114,6 +117,7 @@ export namespace DerkJS {
             "djs_jump",
             "djs_call",
             "djs_object_call",
+            "djs_ctor_call",
             "djs_ret",
             "djs_halt",
         };

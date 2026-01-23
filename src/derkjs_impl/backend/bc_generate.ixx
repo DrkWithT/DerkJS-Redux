@@ -35,6 +35,7 @@ export namespace DerkJS {
     struct FindGlobalNamesOpt {};
     struct FindLocalsOpt {};
     struct RecordLocalTempOpt {};
+    struct RecordSpecialThisOpt {};
 
     struct OpcodeDelta {
         int offset;      // opcode's magnitude of RSP increment or decrement
@@ -56,6 +57,7 @@ export namespace DerkJS {
             OpcodeDelta { .offset = 0, .implicit = false }, // POP-N
             OpcodeDelta { .offset = -1, .implicit = true }, // EMPLACE
             OpcodeDelta { .offset = 1, .implicit = true }, // PUT_OBJ_DUD
+            OpcodeDelta { .offset = 1, .implicit = true }, // PUT_THIS
             OpcodeDelta { .offset = -1, .implicit = true }, // GET_PROP
             OpcodeDelta { .offset = -2, .implicit = true }, // PUT_PROP
             OpcodeDelta { .offset = -2, .implicit = true }, // DEL_PROP
@@ -78,6 +80,7 @@ export namespace DerkJS {
             OpcodeDelta { .offset = 0, .implicit = true }, // JUMP
             OpcodeDelta { .offset = 0, .implicit = false }, // CALL
             OpcodeDelta { .offset = 0, .implicit = false }, // OBJECT_CALL
+            OpcodeDelta { .offset = 0, .implicit = false }, // CTOR_CALL
             OpcodeDelta { .offset = 0, .implicit = true }, // RET
             OpcodeDelta { .offset = 0, .implicit = true } // HALT
         };
@@ -115,8 +118,16 @@ export namespace DerkJS {
         // Whether an addition has any string operands or not.
         bool m_has_string_ops;
 
-        // Whether an object member access is assignable or read-from
+        // Whether the parent expression is something like `new Foo(...)`.
+        bool m_has_new_applied;
+
+        // Whether an object member access is assignable or read-from.
         bool m_access_as_lval;
+
+        // Whether an object's property is being accessed from the parent.
+        bool m_accessing_property;
+
+        bool m_has_call;
 
         // Overload for universal lookup via priorities 1, 2, 3
         [[nodiscard]] auto lookup_symbol(const std::string& symbol) -> std::optional<Arg> {
@@ -198,6 +209,15 @@ export namespace DerkJS {
                 ++m_local_maps.back().next_temp_id;
 
                 return next_local_loc;
+            } else if constexpr (std::is_same_v<plain_item_type, RecordSpecialThisOpt>) {
+                Arg temp_this_special_loc {
+                    .n = -2,
+                    .tag = Location::heap_obj
+                };
+
+                m_global_consts_map[symbol] = temp_this_special_loc;
+
+                return temp_this_special_loc;
             }
 
             return {};
@@ -268,23 +288,33 @@ export namespace DerkJS {
 
             auto primitive_locator = ([&, this] () -> std::optional<Arg> {
                 switch (expr_token_tag) {
+                case Token::keyword_this:
+                    m_has_string_ops = false;
+                    m_accessing_property = false;
+                    return record_valued_symbol(atom_lexeme, RecordSpecialThisOpt {});
                 case TokenTag::keyword_undefined:
                     m_has_string_ops = false;
+                    m_accessing_property = false;
                     return record_valued_symbol(atom_lexeme, Value {});
                 case TokenTag::keyword_null:
                     m_has_string_ops = false;
+                    m_accessing_property = false;
                     return record_valued_symbol(atom_lexeme, Value {JSNullOpt {}});
                 case TokenTag::keyword_true: case TokenTag::keyword_false:
                     m_has_string_ops = false;
+                    m_accessing_property = false;
                     return record_valued_symbol(atom_lexeme, Value {atom_lexeme == "true"});
                 case TokenTag::literal_int:
                     m_has_string_ops = false;
+                    m_accessing_property = false;
                     return record_valued_symbol(atom_lexeme, Value {std::stoi(atom_lexeme)});
                 case TokenTag::literal_real:
                     m_has_string_ops = false;
+                    m_accessing_property = false;
                     return record_valued_symbol(atom_lexeme, Value {std::stod(atom_lexeme)});
                 case TokenTag::literal_string: {
                     m_has_string_ops = true;
+                    m_accessing_property = false;
 
                     if (const int atom_text_length = atom_lexeme.length(); atom_text_length <= StaticString::max_length_v) {
                         return record_valued_symbol(atom_lexeme, StaticString {nullptr, atom_lexeme.c_str(), atom_text_length});
@@ -305,6 +335,8 @@ export namespace DerkJS {
                 encode_instruction(Opcode::djs_put_const, *primitive_locator, {});
             } else if (primitive_locate_type == Location::temp) {
                 encode_instruction(Opcode::djs_dup, *primitive_locator, {});
+            } else if (primitive_locate_type == Location::heap_obj && primitive_locator->n == -2) {
+                encode_instruction(Opcode::djs_put_this, {});
             } else {
                 // Handle `code_chunk` locations AKA globally user-defined functions
             }
@@ -314,6 +346,7 @@ export namespace DerkJS {
 
         [[nodiscard]] auto emit_object_literal(const ObjectLiteral& object, const std::string& source) -> std::optional<Arg> {
             const auto obj_result_slot = encode_instruction(Opcode::djs_put_obj_dud, {});
+            m_accessing_property = false;
 
             for (const auto& [prop_name_token, prop_init_expr] : object.fields) {
                 std::string prop_name = prop_name_token.as_string(source);
@@ -354,6 +387,7 @@ export namespace DerkJS {
 
         [[nodiscard]] auto emit_lambda(const LambdaLiteral& lambda, const std::string& source) -> std::optional<Arg> {
             const auto& [lambda_params, lambda_body] = lambda;
+            m_accessing_property = false;
 
             // 1. Begin lambda code emission, but let's note that this nested "code scope" place a new buffer as the currently filling one before it's done & craps out a Lambda object... Which gets moved into the bytecode `Program` later.
             m_local_maps.emplace_back(CodeGenScope {
@@ -407,21 +441,46 @@ export namespace DerkJS {
 
         [[nodiscard]] auto emit_unary(const Unary& expr, const std::string& source) -> std::optional<Arg> {
             const auto& [inner_expr, expr_op] = expr;
-
-            if (!emit_expr(*inner_expr, source)) {
-                return {};
-            }
+            m_accessing_property = false;
 
             switch (expr_op) {
-            case AstOp::ast_op_bang: return Arg {
-                .n = static_cast<int16_t>(encode_instruction(Opcode::djs_test_falsy, {})),
-                .tag = Location::temp
-            };
-            case AstOp::ast_op_plus: return Arg {
-                .n = static_cast<int16_t>(encode_instruction(Opcode::djs_numify, {})),
-                .tag = Location::temp
-            };
-            default: return {};
+                case AstOp::ast_op_bang: {
+                    if (!emit_expr(*inner_expr, source)) {
+                        return {};
+                    }
+
+                    return Arg {
+                        .n = static_cast<int16_t>(encode_instruction(Opcode::djs_test_falsy, {})),
+                        .tag = Location::temp
+                    };
+                }
+                case AstOp::ast_op_plus: {
+                    if (!emit_expr(*inner_expr, source)) {
+                        return {};
+                    }
+
+                    return Arg {
+                        .n = static_cast<int16_t>(encode_instruction(Opcode::djs_numify, {})),
+                        .tag = Location::temp
+                    };
+                }
+                case AstOp::ast_op_new: {
+                    m_has_new_applied = true;
+
+                    const int16_t obj_temp_slot_id = m_local_maps.back().next_temp_id;
+
+                    if (!emit_expr(*inner_expr, source)) {
+                        return {};
+                    }
+
+                    m_has_new_applied = false;
+
+                    return Arg {
+                        .n = obj_temp_slot_id,
+                        .tag = Location::temp
+                    };
+                }
+                default: return {};
             }
         }
 
@@ -430,6 +489,7 @@ export namespace DerkJS {
             // 1. AND: IFF LHS is falsy, it's the result. RHS otherwise.
             // 2. OR: IFF LHS is truthy, it's the result. RHS otherwise.
             const auto result_eval_slot = m_local_maps.back().next_temp_id;
+            m_accessing_property = false;
 
             // 1. Emit LHS evaluation
             if (!emit_expr(*lhs, source)) {
@@ -482,7 +542,18 @@ export namespace DerkJS {
             const auto& [target_expr, key_expr] = member_access;
             int prop_value_slot = m_local_maps.back().next_temp_id;
 
-            // 1. Emit the target and then the key evaluations. The `djs_get_prop` opcode takes the target and the property key (PropertyHandle<Value>) on top... These two are "popped" and the property reference takes their place in the VM.
+            // 1. Emit the target and then the key evaluations. The `djs_get_prop` opcode takes the target and the property key (PropertyHandle<Value>) on top... These two are "popped" and the property reference takes their place in the VM. If the object has calling property, the target object is emitted twice in case of passing 'THIS'.
+
+            m_accessing_property = true;
+
+            // For possible this object...
+            if (m_has_call) {
+                if (!emit_expr(*target_expr, source)) {
+                    return {};
+                }
+            }
+
+            // For callee's parent object...
             if (!emit_expr(*target_expr, source)) {
                 return {};
             }
@@ -506,6 +577,7 @@ export namespace DerkJS {
 
         [[nodiscard]] auto emit_binary(const Binary& expr, const std::string& source) -> std::optional<Arg> {
             const auto& [expr_lhs, expr_rhs, expr_op] = expr;
+            m_accessing_property = false;
 
             // Case 1: emit logical operator expressions if applicable since these have special short-circuiting vs. arithmetic ones...
             if (expr_op == AstOp::ast_op_and || expr_op == AstOp::ast_op_or) {
@@ -558,6 +630,7 @@ export namespace DerkJS {
         [[nodiscard]] auto emit_assign(const Assign& expr, const std::string& source) -> std::optional<Arg> {
             /// NOTE: JS "lvalues" are assignable, so set this flag accordingly for codegen.
             const auto& [lhs_expr, rhs_expr] = expr;
+            m_accessing_property = false;
 
             m_access_as_lval = true;
 
@@ -583,6 +656,8 @@ export namespace DerkJS {
             int16_t call_result_slot = m_local_maps.back().next_temp_id;
             auto call_argc = 0;
 
+            m_has_call = true;
+
             for (const auto& arg_p : expr_args) {
                 if (!emit_expr(*arg_p, source)) {
                     return {};
@@ -593,7 +668,17 @@ export namespace DerkJS {
 
             m_access_as_lval = true;
 
-            if (auto callee_locator = emit_expr(*expr_callee, source); !callee_locator) {
+            auto callee_locator = emit_expr(*expr_callee, source);
+
+            if (m_has_call && m_accessing_property) {
+                /// NOTE: count the duplicated object reference as `this` argument, allowing method calls.
+                ++call_argc;
+                m_accessing_property = false;
+            }
+
+            m_access_as_lval = false;
+
+            if (!callee_locator) {
                 return {};
             } else if (const auto callee_locator_tag = callee_locator->tag; callee_locator_tag == Location::code_chunk) {
                 encode_instruction(
@@ -602,13 +687,13 @@ export namespace DerkJS {
                     Arg {.n = static_cast<int16_t>(call_argc), .tag = Location::immediate},
                     {}
                 );
-            } else if (call_argc > 0) {
+            } else if (!m_has_new_applied && call_argc > 0) {
                 encode_instruction(
                     Opcode::djs_object_call,
                     Arg {.n = static_cast<int16_t>(call_argc), .tag = Location::immediate},
                     {}
                 );
-            } else {
+            } else if (!m_has_new_applied && call_argc <= 0) {
                 /// NOTE: IF 0 arguments are passed, the result must be ON TOP (RSP + 1) of previous values within the caller's frame.
                 ++m_local_maps.back().next_temp_id;
                 ++call_result_slot;
@@ -618,9 +703,18 @@ export namespace DerkJS {
                     Arg {.n = 0, .tag = Location::immediate},
                     {}
                 );
+            } else {
+                ++m_local_maps.back().next_temp_id;
+                ++call_result_slot;
+
+                encode_instruction(
+                    Opcode::djs_ctor_call,
+                    Arg {.n = static_cast<int16_t>(call_argc), .tag = Location::immediate},
+                    {}
+                );
             }
 
-            m_access_as_lval = false;
+            m_has_call = false;
 
             return Arg {
                 .n = call_result_slot,
@@ -831,7 +925,7 @@ export namespace DerkJS {
 
     public:
         BytecodeGenPass(std::vector<PreloadItem> preloadables, int heap_object_capacity)
-        : m_global_consts_map {}, m_globals_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code_blobs {}, m_chunk_offsets {}, m_has_string_ops {false}, m_access_as_lval {false} {
+        : m_global_consts_map {}, m_globals_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code_blobs {}, m_chunk_offsets {}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_has_call {false} {
             m_local_maps.emplace_back(CodeGenScope {
                 .locals = {},
                 .next_temp_id = 0
