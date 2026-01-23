@@ -3,18 +3,14 @@
 var countdown = {
     x: 10,
     next: function() {
-        var temp = this.x;
+        var temp = this["x"];
 
-        this.x = temp - 1;
+        this["x"] = temp + 1;
 
         return temp;
     }
 };
 
-console.log(countdown.next());
-console.log(countdown.next());
-console.log(countdown.next());
-console.log(countdown.next());
-console.log(countdown.next());
+var a = countdown.next();
 
-return 0;
+return a;

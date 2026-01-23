@@ -879,7 +879,7 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        const auto& [caller_ret_ip, callee_sbp, caller_sbp] = ctx.frames.back();
+        const auto& [caller_ret_ip, caller_this_p, callee_sbp, caller_sbp] = ctx.frames.back();
 
         ctx.stack[callee_sbp] = ctx.stack[ctx.rsp];
 

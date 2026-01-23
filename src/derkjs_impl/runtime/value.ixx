@@ -536,9 +536,11 @@ export namespace DerkJS {
                 return prop_pair.first == handle;
             }); property_entry_it != m_own_props.end()) {
                 return &property_entry_it->second;
+            } else if (m_proto) {       
+                return m_proto->get_property_value(handle);
+            } else {
+                return &m_own_props.emplace_back(std::pair {handle, Value {}}).second;
             }
-
-            return m_proto->get_property_value(handle);
         }
 
         [[maybe_unused]] auto set_property_value(const PropertyHandle<Value>& handle, const Value& value) -> Value* override {
@@ -557,6 +559,10 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto call([[maybe_unused]] void* opaque_ctx_p, [[maybe_unused]] int argc) -> bool override {
+            return false;
+        }
+
+        [[nodiscard]] auto call_as_ctor([[maybe_unused]] void* opaque_ctx_p, [[maybe_unused]] int argc) -> bool override {
             return false;
         }
 

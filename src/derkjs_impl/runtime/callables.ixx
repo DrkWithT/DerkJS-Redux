@@ -231,12 +231,12 @@ export namespace DerkJS {
 
             vm_ctx_p->frames.emplace_back(tco_call_frame_type {
                 caller_ret_ip,
-                vm_ctx_last_this_p,
+                vm_last_this_p,
                 new_callee_sbp,
                 old_caller_sbp
             });
 
-            return vm_ctx_last_this_p != nullptr;
+            return vm_last_this_p != nullptr;
         }
 
         [[nodiscard]] auto call_as_ctor(void* opaque_ctx_p, int argc) -> bool override {

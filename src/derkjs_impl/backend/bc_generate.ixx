@@ -288,7 +288,7 @@ export namespace DerkJS {
 
             auto primitive_locator = ([&, this] () -> std::optional<Arg> {
                 switch (expr_token_tag) {
-                case Token::keyword_this:
+                case TokenTag::keyword_this:
                     m_has_string_ops = false;
                     m_accessing_property = false;
                     return record_valued_symbol(atom_lexeme, RecordSpecialThisOpt {});
