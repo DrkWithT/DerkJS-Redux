@@ -103,6 +103,7 @@ namespace DerkJS {
             case TokenTag::literal_int:
             case TokenTag::literal_real:
             case TokenTag::literal_string:
+            case TokenTag::keyword_this:
                 return SemanticInfo {ValueCategory::js_temporary};
             case TokenTag::identifier:
                 return lookup_info(current_source.substr(token_start, token_length), 0);
