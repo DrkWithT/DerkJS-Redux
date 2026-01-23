@@ -77,12 +77,16 @@ export namespace DerkJS {
             return false;
         }
 
-        [[nodiscard]] auto call(void* opaque_ctx_p, int argc) -> bool override {
+        [[nodiscard]] auto call(void* opaque_ctx_p, int argc, [[maybe_unused]] bool has_this_arg) -> bool override {
             /// NOTE: On usage, the `opaque_ctx_p` argument MUST point to an `ExternVMCtx` and MUST NOT own the context.
             auto vm_context_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
 
+            if (has_this_arg) {
+                --vm_context_p->rsp;
+            }
+
             // 1. Prepare native callee stack pointer
-            const int16_t callee_rsbp = vm_context_p->rsp - argc;
+            const int16_t callee_rsbp = vm_context_p->rsp - static_cast<int16_t>(argc);
             const int16_t caller_rsbp = vm_context_p->rsbp;
             vm_context_p->rsbp = callee_rsbp;
 
@@ -143,6 +147,7 @@ export namespace DerkJS {
             "djs_deref",
             "djs_pop",
             "djs_emplace",
+            "djs_put_this",
             "djs_put_obj_dud",
             "djs_get_prop", // gets a property value based on RSP: <OBJ-REF>, RSP - 1: <POOLED-STR-REF> 
             "djs_put_prop", // SEE: djs_get_prop for stack args passing...
@@ -166,6 +171,7 @@ export namespace DerkJS {
             "djs_jump",
             "djs_call",
             "djs_object_call",
+            "djs_ctor_call",
             "djs_ret",
             "djs_halt",
         };
@@ -218,12 +224,20 @@ export namespace DerkJS {
             return false;
         }
 
-        [[maybe_unused]] auto call(void* opaque_ctx_p, int argc) -> bool override {
+        [[maybe_unused]] auto call(void* opaque_ctx_p, int argc, bool has_this_arg) -> bool override {
             auto vm_ctx_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
-            auto vm_last_this_p = vm_ctx_p->frames.back().m_this_p;
+
+            /// NOTE: consume `this` argument (if needed) before the call to avoid garbage results.
+            ObjectBase<Value>* vm_passed_this_p = nullptr;
+
+            if (has_this_arg) {
+                --vm_ctx_p->rsp;
+                vm_passed_this_p = vm_ctx_p->stack[vm_ctx_p->rsp].to_object();
+                --vm_ctx_p->rsp;
+            }
 
             const auto caller_ret_ip = vm_ctx_p->rip_p + 1;
-            const int16_t new_callee_sbp = vm_ctx_p->rsp - static_cast<int16_t>((argc > 0) ? argc : -1);
+            const int16_t new_callee_sbp = vm_ctx_p->rsp - argc + static_cast<int16_t>(argc <= 0 || has_this_arg);
             const int16_t old_caller_sbp = vm_ctx_p->rsbp;
 
             vm_ctx_p->rip_p = m_code.data();
@@ -231,12 +245,12 @@ export namespace DerkJS {
 
             vm_ctx_p->frames.emplace_back(tco_call_frame_type {
                 caller_ret_ip,
-                vm_last_this_p,
+                vm_passed_this_p,
                 new_callee_sbp,
                 old_caller_sbp
             });
 
-            return vm_last_this_p != nullptr;
+            return vm_passed_this_p != nullptr;
         }
 
         [[nodiscard]] auto call_as_ctor(void* opaque_ctx_p, int argc) -> bool override {
@@ -244,7 +258,7 @@ export namespace DerkJS {
             auto vm_next_this_p = vm_ctx_p->heap.add_item(vm_ctx_p->heap.get_next_id(), std::make_unique<Object>(nullptr));
 
             const auto caller_ret_ip = vm_ctx_p->rip_p + 1;
-            const int16_t new_callee_sbp = vm_ctx_p->rsp - static_cast<int16_t>((argc > 0) ? argc : -1);
+            const int16_t new_callee_sbp = vm_ctx_p->rsp - argc + static_cast<int16_t>((argc <= 0) ? 1 : 0);
             const int16_t old_caller_sbp = vm_ctx_p->rsbp;
 
             vm_ctx_p->rip_p = m_code.data();

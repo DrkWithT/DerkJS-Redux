@@ -290,7 +290,6 @@ export namespace DerkJS {
                 switch (expr_token_tag) {
                 case TokenTag::keyword_this:
                     m_has_string_ops = false;
-                    m_accessing_property = false;
                     return record_valued_symbol(atom_lexeme, RecordSpecialThisOpt {});
                 case TokenTag::keyword_undefined:
                     m_has_string_ops = false;
@@ -322,9 +321,19 @@ export namespace DerkJS {
                         return record_valued_symbol(atom_lexeme, DynamicString {std::move(atom_lexeme)});
                     }
                 }
-                case TokenTag::identifier:
+                case TokenTag::identifier: {
                     m_has_string_ops = false;
-                    return lookup_symbol(atom_lexeme);
+
+                    if (m_accessing_property) {
+                        if (const int atom_text_length = atom_lexeme.length(); atom_text_length <= StaticString::max_length_v) {
+                            return record_valued_symbol(atom_lexeme, StaticString {nullptr, atom_lexeme.c_str(), atom_text_length});
+                        } else {
+                            return record_valued_symbol(atom_lexeme, DynamicString {std::move(atom_lexeme)});
+                        }
+                    } else {
+                        return lookup_symbol(atom_lexeme);
+                    }
+                }
                 default: return {};
                 }
             })();
@@ -546,16 +555,15 @@ export namespace DerkJS {
 
             m_accessing_property = true;
 
-            // For possible this object...
-            if (m_has_call) {
-                if (!emit_expr(*target_expr, source)) {
-                    return {};
-                }
-            }
-
-            // For callee's parent object...
+            // For possible this object on member calls OR the parent object reference itself...
+            const int16_t maybe_this_arg_slot = m_local_maps.back().next_temp_id;
             if (!emit_expr(*target_expr, source)) {
                 return {};
+            }
+            
+            // If a property call is enclosing the member access: The callee's parent object is over the copied reference for `this`...
+            if (m_has_call) {
+                encode_instruction(Opcode::djs_dup, Arg {.n = maybe_this_arg_slot, .tag = Location::temp}, {});
             }
 
             if (!emit_expr(*key_expr, source)) {
@@ -669,12 +677,7 @@ export namespace DerkJS {
             m_access_as_lval = true;
 
             auto callee_locator = emit_expr(*expr_callee, source);
-
-            if (m_has_call && m_accessing_property) {
-                /// NOTE: count the duplicated object reference as `this` argument, allowing method calls.
-                ++call_argc;
-                m_accessing_property = false;
-            }
+            auto has_extra_this_arg = m_has_call && std::holds_alternative<MemberAccess>(expr_callee->data);
 
             m_access_as_lval = false;
 
@@ -687,25 +690,18 @@ export namespace DerkJS {
                     Arg {.n = static_cast<int16_t>(call_argc), .tag = Location::immediate},
                     {}
                 );
-            } else if (!m_has_new_applied && call_argc > 0) {
+            } else if (!m_has_new_applied) {
                 encode_instruction(
                     Opcode::djs_object_call,
                     Arg {.n = static_cast<int16_t>(call_argc), .tag = Location::immediate},
-                    {}
-                );
-            } else if (!m_has_new_applied && call_argc <= 0) {
-                /// NOTE: IF 0 arguments are passed, the result must be ON TOP (RSP + 1) of previous values within the caller's frame.
-                ++m_local_maps.back().next_temp_id;
-                ++call_result_slot;
-
-                encode_instruction(
-                    Opcode::djs_object_call,
-                    Arg {.n = 0, .tag = Location::immediate},
+                    Arg {.n = static_cast<int16_t>(has_extra_this_arg), .tag = Location::immediate},
                     {}
                 );
             } else {
-                ++m_local_maps.back().next_temp_id;
-                ++call_result_slot;
+                if (call_argc <= 0) {
+                    ++m_local_maps.back().next_temp_id;
+                    ++call_result_slot;
+                }
 
                 encode_instruction(
                     Opcode::djs_ctor_call,
@@ -755,17 +751,25 @@ export namespace DerkJS {
             const auto& [var_name_token, var_init_expr] = stmt;
             std::string var_name = var_name_token.as_string(source);
 
-            auto local_var_initializer_slot = emit_expr(*var_init_expr, source);
+            const int16_t maybe_var_initializer_slot = m_local_maps.back().next_temp_id;
+            auto local_var_initializer_loc = emit_expr(*var_init_expr, source);
 
-            if (!local_var_initializer_slot) {
+            if (!local_var_initializer_loc) {
                 return false;
             }
 
+            if (local_var_initializer_loc->tag == Location::constant) {
+                *local_var_initializer_loc = Arg {
+                    .n = maybe_var_initializer_slot,
+                    .tag = Location::temp
+                };
+            }
+
             if (m_local_maps.size() < 2) {
-                m_globals_map[var_name] = *local_var_initializer_slot;
+                m_globals_map[var_name] = *local_var_initializer_loc;
                 return true;
             } else if (!m_local_maps.back().locals.contains(var_name)) {
-                m_local_maps.back().locals[var_name] = *local_var_initializer_slot;
+                m_local_maps.back().locals[var_name] = *local_var_initializer_loc;
                 return true;
             } else {
                 return false;
