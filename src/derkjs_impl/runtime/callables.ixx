@@ -99,6 +99,10 @@ export namespace DerkJS {
             return native_call_ok;
         }
 
+        [[nodiscard]] auto call_as_ctor([[maybe_unused]] void* opaque_ctx_p, [[maybe_unused]] int argc) -> bool override {
+            return false;
+        }
+
         /// NOTE: this only makes another wrapper around the C++ function ptr, but the raw pointer must be quickly owned by the VM heap (`PolyPool<ObjectBase<Value>>`)!
         [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
             auto copied_native_fn_p = new NativeFunction {m_native_ptr};
@@ -216,6 +220,7 @@ export namespace DerkJS {
 
         [[maybe_unused]] auto call(void* opaque_ctx_p, int argc) -> bool override {
             auto vm_ctx_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
+            auto vm_last_this_p = vm_ctx_p->frames.back().m_this_p;
 
             const auto caller_ret_ip = vm_ctx_p->rip_p + 1;
             const int16_t new_callee_sbp = vm_ctx_p->rsp - static_cast<int16_t>((argc > 0) ? argc : -1);
@@ -226,11 +231,33 @@ export namespace DerkJS {
 
             vm_ctx_p->frames.emplace_back(tco_call_frame_type {
                 caller_ret_ip,
+                vm_ctx_last_this_p,
                 new_callee_sbp,
                 old_caller_sbp
             });
 
-            return true;
+            return vm_ctx_last_this_p != nullptr;
+        }
+
+        [[nodiscard]] auto call_as_ctor(void* opaque_ctx_p, int argc) -> bool override {
+            auto vm_ctx_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
+            auto vm_next_this_p = vm_ctx_p->heap.add_item(vm_ctx_p->heap.get_next_id(), std::make_unique<Object>(nullptr));
+
+            const auto caller_ret_ip = vm_ctx_p->rip_p + 1;
+            const int16_t new_callee_sbp = vm_ctx_p->rsp - static_cast<int16_t>((argc > 0) ? argc : -1);
+            const int16_t old_caller_sbp = vm_ctx_p->rsbp;
+
+            vm_ctx_p->rip_p = m_code.data();
+            vm_ctx_p->rsbp = new_callee_sbp;
+
+            vm_ctx_p->frames.emplace_back(tco_call_frame_type {
+                caller_ret_ip,
+                vm_next_this_p,
+                new_callee_sbp,
+                old_caller_sbp
+            });
+
+            return vm_next_this_p != nullptr;
         }
 
         /// For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!

@@ -85,6 +85,10 @@ export namespace DerkJS {
             return false;
         }
 
+        [[nodiscard]] auto call_as_ctor([[maybe_unused]] void* opaque_ctx_p, [[maybe_unused]] int argc) -> bool override {
+            return false;
+        }
+
         [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
             // Due to the Value repr needing an ObjectBase<Value>* ptr, the Value clone method returns a Value vs. `std::unique_ptr<Value>`, and the VM only stores Value-s on its stack, having a raw pointer is unavoidable. This may not be so bad since the PolyPool<ObjectBase<Value>> in the VM can quickly own it via `add_item()`.
             auto self_clone = new StaticString {m_proto, m_data, m_length};
@@ -214,6 +218,10 @@ export namespace DerkJS {
         }
 
         [[maybe_unused]] auto call([[maybe_unused]] void* opaque_ctx_p, [[maybe_unused]] int argc) -> bool override {
+            return false;
+        }
+
+        [[nodiscard]] auto call_as_ctor([[maybe_unused]] void* opaque_ctx_p, [[maybe_unused]] int argc) -> bool override {
             return false;
         }
 

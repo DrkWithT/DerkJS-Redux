@@ -44,6 +44,7 @@ export namespace DerkJS {
         virtual auto del_property_value(const PropertyHandle<V>& handle) -> bool = 0;
 
         virtual auto call(void* opaque_ctx_p, int argc) -> bool = 0;
+        virtual auto call_as_ctor(void* opaque_ctx_p, int argc) -> bool = 0;
 
         /// For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!
         virtual auto clone() const -> ObjectBase<V>* = 0;
