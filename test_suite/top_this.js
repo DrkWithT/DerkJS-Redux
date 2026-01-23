@@ -1,9 +1,5 @@
-this["Foo"] = 21;
+this.x = 10;
 
-var twiceOfFoo = function() {
-    return this["Foo"] * 2;
-};
-
-console.log(twiceOfFoo());
+console.log(this.x);
 
 return 0;
