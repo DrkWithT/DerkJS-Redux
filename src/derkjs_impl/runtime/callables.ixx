@@ -82,6 +82,8 @@ export namespace DerkJS {
             auto vm_context_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
 
             if (has_this_arg) {
+                /// NOTE: On this present: Mem-Swap the 2 important Values of the object to call soon: the callee swaps down with the duplicated parent object for `this`. Then discard the object-referencing pointer from the top (`this` argument).
+                std::swap_ranges(reinterpret_cast<std::byte*>(vm_context_p->stack.data() + vm_context_p->rsp), reinterpret_cast<std::byte*>(vm_context_p->stack.data() + vm_context_p->rsp) + sizeof(Value), reinterpret_cast<std::byte*>(vm_context_p->stack.data() + vm_context_p->rsp - 1));
                 --vm_context_p->rsp;
             }
 
@@ -93,7 +95,7 @@ export namespace DerkJS {
             // 2. Make native call
             auto native_call_ok = m_native_ptr(vm_context_p, &m_own_properties, argc);
 
-            // 3. Restore caller stack state after native call 
+            // 3. Restore caller stack state after native call
             vm_context_p->rsp = callee_rsbp;
             vm_context_p->rsbp = caller_rsbp;
 
@@ -143,6 +145,8 @@ export namespace DerkJS {
         static constexpr std::array<std::string_view, static_cast<std::size_t>(Opcode::last)> opcode_names = {
             "djs_nop",
             "djs_dup",
+            "djs_dup_local",
+            "djs_ref_local",
             "djs_put_const",
             "djs_deref",
             "djs_pop",
@@ -225,40 +229,44 @@ export namespace DerkJS {
         }
 
         [[maybe_unused]] auto call(void* opaque_ctx_p, int argc, bool has_this_arg) -> bool override {
-            auto vm_ctx_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
+            auto vm_context_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
 
             /// NOTE: consume `this` argument (if needed) before the call to avoid garbage results.
-            ObjectBase<Value>* vm_passed_this_p = nullptr;
+            ObjectBase<Value>* this_arg_p = nullptr;
 
             if (has_this_arg) {
-                --vm_ctx_p->rsp;
-                vm_passed_this_p = vm_ctx_p->stack[vm_ctx_p->rsp].to_object();
-                --vm_ctx_p->rsp;
+                /// NOTE: On this present: Mem-Swap the 2 important Values of the object to call soon: the callee swaps down with the duplicated parent object for `this`. Then consume the object-referencing pointer from the top (`this` argument).
+                std::swap_ranges(reinterpret_cast<std::byte*>(vm_context_p->stack.data() + vm_context_p->rsp), reinterpret_cast<std::byte*>(vm_context_p->stack.data() + vm_context_p->rsp) + sizeof(Value), reinterpret_cast<std::byte*>(vm_context_p->stack.data() + vm_context_p->rsp - 1));
+                this_arg_p = vm_context_p->stack[vm_context_p->rsp].to_object();
             }
 
-            const auto caller_ret_ip = vm_ctx_p->rip_p + 1;
-            const int16_t new_callee_sbp = vm_ctx_p->rsp - argc + static_cast<int16_t>(argc <= 0 || has_this_arg);
-            const int16_t old_caller_sbp = vm_ctx_p->rsbp;
+            --vm_context_p->rsp;
 
-            vm_ctx_p->rip_p = m_code.data();
-            vm_ctx_p->rsbp = new_callee_sbp;
+            const auto caller_ret_ip = vm_context_p->rip_p + 1;
+            const int16_t old_caller_sbp = vm_context_p->rsbp;
+            const int16_t new_callee_sbp = vm_context_p->rsp - static_cast<int16_t>(argc) + 1;
 
-            vm_ctx_p->frames.emplace_back(tco_call_frame_type {
+            vm_context_p->rip_p = m_code.data();
+            vm_context_p->rsbp = new_callee_sbp;
+            vm_context_p->rsp -= static_cast<int16_t>(argc < 1);
+
+            vm_context_p->frames.emplace_back(tco_call_frame_type {
                 caller_ret_ip,
-                vm_passed_this_p,
+                this_arg_p,
                 new_callee_sbp,
                 old_caller_sbp
             });
 
-            return vm_passed_this_p != nullptr;
+            return true;
         }
 
+        /// TODO: support passing of `this` arguments to ctors which may be methods of an object!
         [[nodiscard]] auto call_as_ctor(void* opaque_ctx_p, int argc) -> bool override {
             auto vm_ctx_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
-            auto vm_next_this_p = vm_ctx_p->heap.add_item(vm_ctx_p->heap.get_next_id(), std::make_unique<Object>(nullptr));
+            auto this_arg_p = vm_ctx_p->heap.add_item(vm_ctx_p->heap.get_next_id(), std::make_unique<Object>(nullptr));
 
             const auto caller_ret_ip = vm_ctx_p->rip_p + 1;
-            const int16_t new_callee_sbp = vm_ctx_p->rsp - argc + static_cast<int16_t>((argc <= 0) ? 1 : 0);
+            const int16_t new_callee_sbp = vm_ctx_p->rsp - argc;
             const int16_t old_caller_sbp = vm_ctx_p->rsbp;
 
             vm_ctx_p->rip_p = m_code.data();
@@ -266,12 +274,12 @@ export namespace DerkJS {
 
             vm_ctx_p->frames.emplace_back(tco_call_frame_type {
                 caller_ret_ip,
-                vm_next_this_p,
+                this_arg_p,
                 new_callee_sbp,
                 old_caller_sbp
             });
 
-            return vm_next_this_p != nullptr;
+            return this_arg_p != nullptr;
         }
 
         /// For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!
