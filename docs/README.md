@@ -41,20 +41,16 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
    - ~~Add `console.readline(msg: string);`~~
  12. ~~Make `banana.js` work.~~
    - ~~Add `djs_numify` & `djs_strcat` opcodes.~~
- 13. Add anonymous functions as expressions.
+ 13. ~~Add anonymous functions as expressions.~~
    - ~~Add parsing support.~~
    - ~~Add semantic checker support.~~
    - ~~Add `Lambda` internals for bytecode-callables.~~
-   - Possibly, modify the codegen to handle callable objects:
-      - Keep a 'stack' of bytecode buffers for handling arbitrary nesting.
-      - These buffers get flattened into one buffer... Each FunctionObject contains a pointer to its 1st bytecode instruction within said buffer.
-      - `emit_lambda_literal(...)` will:
-        - Try to emit like a normal function, but a new bytecode buffer for the nested scope / callable is pushed as the focused one to fill. Pre-record the incoming constant ID which _will_ hold the lambda object.
-        - Then, the buffer is put into a `Lambda` instance which is recorded on the heap and referenced via a reference constant- Use `djs_put_const`.
-        - Indirectly recurse as needed...
+   - ~~Modify the codegen to handle callable objects.~~
  14. Add support for `this` in functions.
    - Add closure opcode support: Makes / modifies an implicit JS object locally. It may be returned.
       - `djs_put_this_obj` & generate `djs_put_prop` invocations for certain assignment: `this.x = 123`.
-   - Implement usage of `this` in constructor functions with `new` & object "methods".
+   - Add support in VM call frames to reference an empty `this` object.
+   - Implement usage of `this` in object "methods".
+   - Implement `this` within constructor functions using `new`.
       - Add `prototype` support??
  16. Add mark and sweep GC.

@@ -40,6 +40,9 @@ int main(int argc, char* argv[]) {
         driver.enable_bc_dump(true);
     } else if (arg_1 == "-r") {
         source_path = argv[2];
+    } else {
+        std::println(std::cerr, "usage: ./derkjs [-h | -v | [-d | -r] <script name>]\n\t-h: show help\n\t-v: show version & author");
+        return 1;
     }
 
     Core::NativePropertyStub console_obj_props[] {

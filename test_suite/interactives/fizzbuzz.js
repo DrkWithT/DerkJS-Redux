@@ -20,10 +20,6 @@ function fizzbuzz(n) {
     return true;
 }
 
-var fizz_start_ms = clock.now();
 var discard = fizzbuzz(30);
-var fizz_end_ms = clock.now();
-
-console.log("FizzBuzz 30 (ms): ", fizz_end_ms - fizz_start_ms);
 
 return 0;

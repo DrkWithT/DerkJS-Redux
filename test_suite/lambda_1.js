@@ -1,9 +1,7 @@
-var ans = (function() {
+var ans = (function(a) {
     var foo = function(x) { return x * 2; };
 
-    console.log("answer: ", foo(21));
-
-    return 0;
-})();
+    return foo(a);
+})(10);
 
 return ans;
