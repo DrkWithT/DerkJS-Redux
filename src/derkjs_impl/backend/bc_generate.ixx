@@ -576,9 +576,7 @@ export namespace DerkJS {
         [[nodiscard]] auto emit_call(const Call& expr, const std::string& source) -> bool {
             const auto& [expr_args, expr_callee] = expr;
             auto call_argc = 0;
-
-            m_has_call = true;
-
+ 
             for (const auto& arg_p : expr_args) {
                 if (!emit_expr(*arg_p, source)) {
                     return false;
@@ -586,7 +584,8 @@ export namespace DerkJS {
 
                 ++call_argc;
             }
-
+            
+            m_has_call = true;
             m_access_as_lval = true;
 
             if (!emit_expr(*expr_callee, source)) {
