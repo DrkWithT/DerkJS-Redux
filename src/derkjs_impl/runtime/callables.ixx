@@ -244,7 +244,7 @@ export namespace DerkJS {
 
             const auto caller_ret_ip = vm_context_p->rip_p + 1;
             const int16_t old_caller_sbp = vm_context_p->rsbp;
-            const int16_t new_callee_sbp = vm_context_p->rsp - static_cast<int16_t>(argc) + 1;
+            const int16_t new_callee_sbp = vm_context_p->rsp - static_cast<int16_t>(argc) + 1 - static_cast<int16_t>(has_this_arg);
 
             vm_context_p->rip_p = m_code.data();
             vm_context_p->rsbp = new_callee_sbp;
