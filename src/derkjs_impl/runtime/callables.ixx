@@ -104,7 +104,7 @@ export namespace DerkJS {
         }
 
         /// NOTE: this only makes another wrapper around the C++ function ptr, but the raw pointer must be quickly owned by the VM heap (`PolyPool<ObjectBase<Value>>`)!
-        [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
+        [[nodiscard]] auto clone() -> ObjectBase<Value>* override {
             auto copied_native_fn_p = new NativeFunction {m_native_ptr};
 
             return copied_native_fn_p;
@@ -147,6 +147,7 @@ export namespace DerkJS {
             "djs_emplace",
             "djs_put_this",
             "djs_put_obj_dud",
+            "djs_put_proto_key",
             "djs_get_prop", // gets a property value based on RSP: <OBJ-REF>, RSP - 1: <POOLED-STR-REF> 
             "djs_put_prop", // SEE: djs_get_prop for stack args passing...
             "djs_del_prop", // SEE: djs_get_prop for stack args passing...
@@ -213,14 +214,14 @@ export namespace DerkJS {
         [[nodiscard]] auto get_property_value(const PropertyHandle<Value>& handle, bool allow_filler) -> Value* override {
             if (handle.is_proto_key()) {
                 return &m_prototype;
-            } else if (auto property_entry_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&handle](const auto& prop_pair) -> bool {
+            } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&handle](const auto& prop_pair) -> bool {
                 return prop_pair.first == handle;
-            }); property_entry_it != m_own_props.end()) {
+            }); property_entry_it != m_own_properties.end()) {
                 return &property_entry_it->second;
             } else if (allow_filler) {
-                return &m_own_props.emplace_back(std::pair {handle, Value {}}).second;
+                return &m_own_properties.emplace_back(std::pair {handle, Value {}}).second;
             } else if (m_prototype) {
-                return m_prototype->get_property_value(handle);
+                return m_prototype.to_object()->get_property_value(handle, allow_filler);
             }
 
             return nullptr;
@@ -230,11 +231,11 @@ export namespace DerkJS {
             if (handle.is_proto_key()) {
                 m_prototype = value;
                 return &m_prototype;
-            } else if (auto old_prop_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&handle](const auto& prop_pair) -> bool {
+            } else if (auto old_prop_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&handle](const auto& prop_pair) -> bool {
                 return prop_pair.first == handle;
-            }); old_prop_it == m_own_props.end()) {
-                m_own_props.emplace_back(handle, value);
-                return &m_own_props.back().second;
+            }); old_prop_it == m_own_properties.end()) {
+                m_own_properties.emplace_back(handle, value);
+                return &m_own_properties.back().second;
             } else {
                 old_prop_it->second = value;
                 return &old_prop_it->second;
@@ -304,8 +305,8 @@ export namespace DerkJS {
         }
 
         /// For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!
-        [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
-            return new Lambda {m_code};
+        [[nodiscard]] auto clone() -> ObjectBase<Value>* override {
+            return new Lambda {m_code, m_prototype.to_object()};
         }
 
         /// NOTE: For disassembling lambda bytecode for debugging.

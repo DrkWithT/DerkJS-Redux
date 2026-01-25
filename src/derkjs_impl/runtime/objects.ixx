@@ -47,7 +47,7 @@ export namespace DerkJS {
         virtual auto call_as_ctor(void* opaque_ctx_p, int argc) -> bool = 0;
 
         /// For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!
-        virtual auto clone() const -> ObjectBase<V>* = 0;
+        virtual auto clone() -> ObjectBase<V>* = 0;
 
         /// NOTE: For default printing of objects, etc. to the console (stdout). 
         virtual auto as_string() const -> std::string = 0;

@@ -541,7 +541,7 @@ export namespace DerkJS {
             } else if (allow_filler) {
                 return &m_own_props.emplace_back(std::pair {handle, Value {}}).second;
             } else if (auto prototype_p = m_proto.to_object(); prototype_p) {
-                return prototype_p->get_property_value(handle);
+                return prototype_p->get_property_value(handle, allow_filler);
             }
 
             return nullptr;
@@ -574,9 +574,9 @@ export namespace DerkJS {
             return false;
         }
 
-        [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
+        [[nodiscard]] auto clone() -> ObjectBase<Value>* override {
             // Due to the Value repr needing an ObjectBase<Value>* ptr, the Value clone method returns a Value vs. `std::unique_ptr<Value>`, and the VM only stores Value-s on its stack, having a raw pointer is unavoidable. This may not be so bad since the PolyPool<ObjectBase<Value>> in the VM can quickly own it via `add_item()`.
-            auto self_clone = new Object {m_proto};
+            auto self_clone = new Object {m_proto.to_object()};
 
             for (const auto& [prop_handle, prop_value] : m_own_props) {
                 self_clone->set_property_value(prop_handle, prop_value.deep_clone());
