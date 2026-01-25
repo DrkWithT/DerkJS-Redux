@@ -69,7 +69,7 @@ export namespace DerkJS {
             return m_own_props;
         }
 
-        [[nodiscard]] auto get_property_value([[maybe_unused]] const PropertyHandle<Value>& handle) -> Value* override {
+        [[nodiscard]] auto get_property_value([[maybe_unused]] const PropertyHandle<Value>& handle, [[maybe_unused]] bool allow_filler) -> Value* override {
             return nullptr;
         }
 
@@ -205,7 +205,7 @@ export namespace DerkJS {
             return m_own_props;
         }
 
-        [[nodiscard]] auto get_property_value([[maybe_unused]] const PropertyHandle<Value>& handle) -> Value* override {
+        [[nodiscard]] auto get_property_value([[maybe_unused]] const PropertyHandle<Value>& handle, [[maybe_unused]] bool allow_filler) -> Value* override {
             return nullptr;
         }
 

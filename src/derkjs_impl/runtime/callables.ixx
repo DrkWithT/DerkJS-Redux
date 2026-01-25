@@ -58,17 +58,11 @@ export namespace DerkJS {
             return m_own_properties;
         }
 
-        [[nodiscard]] auto get_property_value([[maybe_unused]] const PropertyHandle<Value>& handle) -> Value* override {
-            // if (auto property_entry_it = m_own_properties.find(handle); property_entry_it != m_own_properties.end()) {
-            //     return &property_entry_it->second;
-            // }
-            // return m_proto->get_property_value(handle);
+        [[nodiscard]] auto get_property_value([[maybe_unused]] const PropertyHandle<Value>& handle, [[maybe_unused]] bool allow_filler) -> Value* override {
             return nullptr;
         }
 
         [[nodiscard]] auto set_property_value([[maybe_unused]] const PropertyHandle<Value>& handle, [[maybe_unused]] const Value& value) -> Value* override {
-            // m_own_properties[handle] = value;
-            // return &m_own_properties[handle];
             return nullptr;
         }
 
@@ -182,11 +176,11 @@ export namespace DerkJS {
 
         PropPool<PropertyHandle<Value>, Value> m_own_properties;
         std::vector<Instruction> m_code;
-        // std::unique_ptr<ObjectBase<Value>> m_prototype;
+        Value m_prototype;
 
     public:
-        Lambda(std::vector<Instruction> code) noexcept
-        : m_own_properties {}, m_code (std::move(code)) {}
+        Lambda(std::vector<Instruction> code, ObjectBase<Value>* prototype_p) noexcept
+        : m_own_properties {}, m_code (std::move(code)), m_prototype {prototype_p} {}
 
         [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
             return this;
@@ -197,11 +191,11 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto is_extensible() const noexcept -> bool override {
-            return false;
+            return true;
         }
 
         [[nodiscard]] auto is_frozen() const noexcept -> bool override {
-            return true; // TODO: change this to depend on a member variable later since objects can be frozen (made immutable) at runtime.
+            return false; // TODO: change this to depend on a member variable later since objects can be frozen (made immutable) at runtime.
         }
 
         [[nodiscard]] auto is_prototype() const noexcept -> bool override {
@@ -209,19 +203,42 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_prototype() noexcept -> ObjectBase<Value>* override {
-            return nullptr;
+            return m_prototype.to_object();
         }
 
         [[nodiscard]] auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<Value>, Value>& override {
             return m_own_properties;
         }
 
-        [[nodiscard]] auto get_property_value(const PropertyHandle<Value>& handle) -> Value* override {
+        [[nodiscard]] auto get_property_value(const PropertyHandle<Value>& handle, bool allow_filler) -> Value* override {
+            if (handle.is_proto_key()) {
+                return &m_prototype;
+            } else if (auto property_entry_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&handle](const auto& prop_pair) -> bool {
+                return prop_pair.first == handle;
+            }); property_entry_it != m_own_props.end()) {
+                return &property_entry_it->second;
+            } else if (allow_filler) {
+                return &m_own_props.emplace_back(std::pair {handle, Value {}}).second;
+            } else if (m_prototype) {
+                return m_prototype->get_property_value(handle);
+            }
+
             return nullptr;
         }
 
         [[nodiscard]] auto set_property_value(const PropertyHandle<Value>& handle, const Value& value) -> Value* override {
-            return nullptr;
+            if (handle.is_proto_key()) {
+                m_prototype = value;
+                return &m_prototype;
+            } else if (auto old_prop_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&handle](const auto& prop_pair) -> bool {
+                return prop_pair.first == handle;
+            }); old_prop_it == m_own_props.end()) {
+                m_own_props.emplace_back(handle, value);
+                return &m_own_props.back().second;
+            } else {
+                old_prop_it->second = value;
+                return &old_prop_it->second;
+            }
         }
 
         [[nodiscard]] auto del_property_value(const PropertyHandle<Value>& handle) -> bool override {
@@ -263,7 +280,11 @@ export namespace DerkJS {
         /// TODO: support passing of `this` arguments to ctors which may be methods of an object!
         [[nodiscard]] auto call_as_ctor(void* opaque_ctx_p, int argc) -> bool override {
             auto vm_ctx_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
-            auto this_arg_p = vm_ctx_p->heap.add_item(vm_ctx_p->heap.get_next_id(), std::make_unique<Object>(nullptr));
+            // All constructor result objects have the function prototype.
+            auto this_arg_p = vm_ctx_p->heap.add_item(
+                vm_ctx_p->heap.get_next_id(),
+                std::make_unique<Object>(m_prototype.to_object())
+            );
 
             const auto caller_ret_ip = vm_ctx_p->rip_p + 1;
             const int16_t new_callee_sbp = vm_ctx_p->rsp - argc;
