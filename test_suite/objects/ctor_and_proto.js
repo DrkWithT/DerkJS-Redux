@@ -1,29 +1,28 @@
 /*
     ctor_and_proto.js
     Tests basic constructor functions and setting prototype properties.
- */
+*/
 
-var Sequence = function(start, step) {
+var Sequence = function(start) {
     this.item = start;
-    this.step = step;
 
     return this;
-}
+};
 
-Sequence.prototype.next = function () {
+Sequence.prototype.next = function() {
     var temp = this.item;
 
-    this.item = temp + this.step;
+    this.item = temp + 2;
 
     return temp;
 };
 
-var evens = new Sequence(0, 2);
+var odds = new Sequence(1);
+var term = 0;
 
-/* Should produce 0, 2, 4, 6 */
-console.log(evens.next());
-console.log(evens.next());
-console.log(evens.next());
-console.log(evens.next());
+while (term < 10) {
+    term = odds.next();
+    console.log(term);
+}
 
 return 0;
