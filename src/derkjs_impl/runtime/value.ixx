@@ -469,7 +469,11 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_value_ref() noexcept -> Value* {
-            return m_data.ref_p;
+            if (m_tag == ValueTag::val_ref) {
+                return m_data.ref_p;
+            }
+
+            return nullptr;
         }
 
         [[nodiscard]] auto deep_clone() const -> Value {
@@ -541,7 +545,7 @@ export namespace DerkJS {
             } else if (allow_filler) {
                 return &m_own_props.emplace_back(std::pair {handle, Value {}}).second;
             } else if (auto prototype_p = m_proto.to_object(); prototype_p) {
-                return prototype_p->get_property_value(handle, allow_filler);
+                return prototype_p->get_property_value(handle.as_parent_key(prototype_p), allow_filler);
             }
 
             return nullptr;

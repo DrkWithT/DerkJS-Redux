@@ -254,6 +254,11 @@ export namespace DerkJS {
             return self.parent_obj_p_ != nullptr && self.opaque_key_p != nullptr && self.tag != PropertyHandleTag::nil;
         }
 
+        /// NOTE: Use this for accessing data via an object's parent prototype.
+        [[nodiscard]] auto as_parent_key(void* next_parent_p) const noexcept -> PropertyHandle {
+            return PropertyHandle {next_parent_p, key_value, tag, flags};
+        }
+
         template <PropertyHandleFlag Phf>
         [[nodiscard]] constexpr auto get_flag_of() const noexcept {
             if constexpr (Phf == PropertyHandleFlag::configurable || Phf == PropertyHandleFlag::writable || Phf == PropertyHandleFlag::enumerable) {
