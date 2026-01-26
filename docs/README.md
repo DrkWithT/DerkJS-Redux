@@ -47,10 +47,16 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
    - ~~Add `Lambda` internals for bytecode-callables.~~
    - ~~Modify the codegen to handle callable objects.~~
  14. Add support for `this` in functions.
-   - Add closure opcode support: Makes / modifies an implicit JS object locally. It may be returned.
-      - `djs_put_this_obj` & generate `djs_put_prop` invocations for certain assignment: `this.x = 123`.
-   - Add support in VM call frames to reference an empty `this` object.
-   - Implement usage of `this` in object "methods".
    - Implement `this` within constructor functions using `new`.
-      - Add `prototype` support??
+      - ~~Fix `prototype` support.~~
+        - ~~Add prototypes to top-level constructor functions. These should be extensible and referenced in returned objects from those constructors.~~
+      - ~~Update `djs_ctor_call` to bind the constructor function's prototype reference into the result by return `this`.~~
+   - Steps:
+      - ~~Support dud-property-handle for prototype access in objects.~~
+      - Add a special `djs_put_proto_key` opcode: secretly passes a special dud property-handle for prototype...
+      - Add support for the dud handle in get_property overrides of `ObjectBases`.
+      - Add codegen support for `djs_put_proto_key`... Let the usual `get_prop <1>` get the defaulted undefined property's reference and `djs_emplace` do this job.
+      - Implement dud handle opcode & change get_prop as needed.
+   - Implement `Object.create(), Object.getPrototype()`.
+ 15. Add `+=, -=, *=, /=, %=` operators.
  16. Add mark and sweep GC.

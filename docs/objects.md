@@ -1,10 +1,10 @@
 ### JS Object Basics
  - Each object instance maps property descriptors to values.
-    - Prototype inheritance exists because of any object's prototype chain to the `[null Prototype]` prototype... Built-in prototypes such as `Object` exist just before `[null Prototype]`.
-    - Prototypes can be "template objects".
-    - Some properties are inherent duplicates from its prototype(s).
-    - Some properties are instance-specific properties a.k.a "own" props.
-    - Instances are _clones_ of prototypes!
+    - Prototype inheritance exists because of any object's prototype chain to the `[null Prototype]` prototype.
+      - Some properties are instance-specific properties a.k.a "own" props.
+      - Otherwise, some properties are found from their object's prototype.
+    - Prototypes are the "foundational" objects referenced by any plain object ("instance").
+    - Constructor functions will create a blank object for `this`, and it'll become a prototype of created objects from that constructor.
 
 ### Property Descriptors
  - These are "handles" to property values within an object. In the actual implementation, this avoids making multitudes of string allocations- Each property descriptors just contains a reference to the actual key value & another to the parent (uniquely allocated on the VM heap & native heap).

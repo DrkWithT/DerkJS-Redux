@@ -39,7 +39,7 @@ export namespace DerkJS {
 
         virtual auto get_prototype() noexcept -> ObjectBase<V>* = 0;
         virtual auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<V>, V>& = 0;
-        virtual auto get_property_value(const PropertyHandle<V>& handle) -> V* = 0;
+        virtual auto get_property_value(const PropertyHandle<V>& handle, bool allow_filler) -> V* = 0;
         virtual auto set_property_value(const PropertyHandle<V>& handle, const V& value) -> V* = 0;
         virtual auto del_property_value(const PropertyHandle<V>& handle) -> bool = 0;
 
@@ -47,7 +47,7 @@ export namespace DerkJS {
         virtual auto call_as_ctor(void* opaque_ctx_p, int argc) -> bool = 0;
 
         /// For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!
-        virtual auto clone() const -> ObjectBase<V>* = 0;
+        virtual auto clone() -> ObjectBase<V>* = 0;
 
         /// NOTE: For default printing of objects, etc. to the console (stdout). 
         virtual auto as_string() const -> std::string = 0;
@@ -222,6 +222,7 @@ export namespace DerkJS {
         nil, // dud handle
         key, // Value copy -> compare values by operator== overload?
         index, // number -> an Array's own properties -> int to Value
+        proto // special tag for prototype access
     };
 
     enum class PropertyHandleFlag : uint8_t {
@@ -229,6 +230,8 @@ export namespace DerkJS {
         writable = 0b00000010,
         enumerable = 0b00000100
     };
+
+    struct PrototypeAccessOpt {};
 
     template <typename KeyType>
     struct PropertyHandle {
@@ -240,11 +243,20 @@ export namespace DerkJS {
         constexpr PropertyHandle() noexcept
         : parent_obj_p {}, key_value {}, tag {PropertyHandleTag::nil}, flags {0x00} {}
 
+        /// NOTE: for special prototype key: no string key needed
+        constexpr PropertyHandle(void* parent_obj_p_, [[maybe_unused]] PrototypeAccessOpt opt) noexcept
+        : parent_obj_p {parent_obj_p_}, key_value {}, tag {PropertyHandleTag::proto}, flags {0x00} {}
+
         constexpr PropertyHandle(void* parent_obj_p_, KeyType key_value_, PropertyHandleTag tag_, uint8_t flags_) noexcept
         : parent_obj_p {parent_obj_p_}, key_value {key_value_}, tag {tag_}, flags {flags_} {}
 
         explicit constexpr operator bool(this auto&& self) noexcept {
             return self.parent_obj_p_ != nullptr && self.opaque_key_p != nullptr && self.tag != PropertyHandleTag::nil;
+        }
+
+        /// NOTE: Use this for accessing data via an object's parent prototype.
+        [[nodiscard]] auto as_parent_key(void* next_parent_p) const noexcept -> PropertyHandle {
+            return PropertyHandle {next_parent_p, key_value, tag, flags};
         }
 
         template <PropertyHandleFlag Phf>
@@ -254,6 +266,10 @@ export namespace DerkJS {
             }
 
             return false;
+        }
+
+        [[nodiscard]] constexpr auto is_proto_key() const noexcept -> bool {
+            return tag == PropertyHandleTag::proto;
         }
 
         [[nodiscard]] constexpr auto operator==(const PropertyHandle& other) const noexcept -> bool {

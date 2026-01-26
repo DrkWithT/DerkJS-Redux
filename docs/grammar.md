@@ -5,7 +5,7 @@
 <object> = "{" (<property> ",")* "}"
 <lambda> = "function" "(" <identifier> ( "," <identifier> )* ")" <block>
 <property> = <identifier> : <expr>
-<member> = <primary> ( "." <member> | "[" <expr> "]" )?
+<member> = <primary> ( "." <identifier> | "[" <expr> "]" )*
     ; TODO: Update member grammar rule to support longer accesses.
 <new> = "new"? <member>
 <call> = <new> ( "(" ( <expr> ( "," <expr> )* )? ")" )?

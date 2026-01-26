@@ -69,7 +69,7 @@ export namespace DerkJS {
             return m_own_props;
         }
 
-        [[nodiscard]] auto get_property_value([[maybe_unused]] const PropertyHandle<Value>& handle) -> Value* override {
+        [[nodiscard]] auto get_property_value([[maybe_unused]] const PropertyHandle<Value>& handle, [[maybe_unused]] bool allow_filler) -> Value* override {
             return nullptr;
         }
 
@@ -89,7 +89,7 @@ export namespace DerkJS {
             return false;
         }
 
-        [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
+        [[nodiscard]] auto clone() -> ObjectBase<Value>* override {
             // Due to the Value repr needing an ObjectBase<Value>* ptr, the Value clone method returns a Value vs. `std::unique_ptr<Value>`, and the VM only stores Value-s on its stack, having a raw pointer is unavoidable. This may not be so bad since the PolyPool<ObjectBase<Value>> in the VM can quickly own it via `add_item()`.
             auto self_clone = new StaticString {m_proto, m_data, m_length};
 
@@ -205,7 +205,7 @@ export namespace DerkJS {
             return m_own_props;
         }
 
-        [[nodiscard]] auto get_property_value([[maybe_unused]] const PropertyHandle<Value>& handle) -> Value* override {
+        [[nodiscard]] auto get_property_value([[maybe_unused]] const PropertyHandle<Value>& handle, [[maybe_unused]] bool allow_filler) -> Value* override {
             return nullptr;
         }
 
@@ -226,7 +226,7 @@ export namespace DerkJS {
         }
 
         /// For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!
-        [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
+        [[nodiscard]] auto clone() -> ObjectBase<Value>* override {
             auto cloned_self = new DynamicString {m_data};
 
             return cloned_self;

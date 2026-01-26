@@ -133,10 +133,11 @@ export namespace DerkJS {
             const auto primary_txt_length = current_token_copy.length;
 
             switch (current_token_tag) {
+            case TokenTag::identifier:
             case TokenTag::keyword_undefined:
             case TokenTag::keyword_null:
+            case TokenTag::keyword_prototype:
             case TokenTag::keyword_this:
-            case TokenTag::identifier:
             case TokenTag::keyword_true:
             case TokenTag::keyword_false:
             case TokenTag::literal_int:
@@ -268,34 +269,44 @@ export namespace DerkJS {
             const auto snippet_begin = m_current.start;
             auto lhs_primary = parse_primary(lexer, source);
 
-            if (const auto member_mark = m_current.tag; member_mark == TokenTag::dot) {
-                consume_any(lexer, source);
+            while (!at_eof()) {
+                if (const auto member_mark = m_current.tag; member_mark == TokenTag::dot) {
+                    consume_any(lexer, source);
+                    consume(lexer, source, TokenTag::identifier, TokenTag::keyword_prototype);
 
-                return std::make_unique<Expr>(
-                    MemberAccess {
-                        .target = std::move(lhs_primary),
-                        .key = parse_member(lexer, source),
-                    },
-                    0,
-                    snippet_begin,
-                    m_current.start - snippet_begin + 1
-                );
-            } else if (member_mark == TokenTag::left_bracket) {
-                consume_any(lexer, source);
+                    lhs_primary = std::make_unique<Expr>(
+                        MemberAccess {
+                            .target = std::move(lhs_primary),
+                            .key = std::make_unique<Expr>(
+                                Primitive { .token = m_previous },
+                                0,
+                                m_previous.start,
+                                m_previous.start + m_previous.length
+                            ),
+                        },
+                        0,
+                        snippet_begin,
+                        m_current.start - snippet_begin + 1
+                    );
+                } else if (member_mark == TokenTag::left_bracket) {
+                    consume_any(lexer, source);
 
-                auto enclosed_expr = parse_logical_or(lexer, source);
+                    auto enclosed_expr = parse_logical_or(lexer, source);
 
-                consume(lexer, source, TokenTag::right_bracket);
+                    consume(lexer, source, TokenTag::right_bracket);
 
-                return std::make_unique<Expr>(
-                    MemberAccess {
-                        .target = std::move(lhs_primary),
-                        .key = std::move(enclosed_expr),
-                    },
-                    0,
-                    snippet_begin,
-                    m_current.start - snippet_begin + 1              
-                );
+                    lhs_primary = std::make_unique<Expr>(
+                        MemberAccess {
+                            .target = std::move(lhs_primary),
+                            .key = std::move(enclosed_expr)
+                        },
+                        0,
+                        snippet_begin,
+                        m_current.start - snippet_begin + 1
+                    );
+                } else {
+                    break;
+                }
             }
 
             return lhs_primary;

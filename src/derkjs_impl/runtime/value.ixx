@@ -469,7 +469,11 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_value_ref() noexcept -> Value* {
-            return m_data.ref_p;
+            if (m_tag == ValueTag::val_ref) {
+                return m_data.ref_p;
+            }
+
+            return nullptr;
         }
 
         [[nodiscard]] auto deep_clone() const -> Value {
@@ -495,13 +499,13 @@ export namespace DerkJS {
 
     private:
         PropPool<PropertyHandle<Value>, Value> m_own_props;
-        ObjectBase<Value>* m_proto;
+        Value m_proto;
         uint8_t m_flags;
 
     public:
         /// NOTE: Creates mutable instances of anonymous objects. Pass the `flag_prototype_v | flag_extensible_v` if needed for Foo.prototype!
-        Object(ObjectBase<Value>* proto, uint8_t flags = flag_extensible_v)
-        : m_own_props {}, m_proto {proto}, m_flags {flags} {}
+        Object(ObjectBase<Value>* proto_p, uint8_t flags = flag_extensible_v)
+        : m_own_props {}, m_proto {proto_p}, m_flags {flags} {}
 
         [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
             return this;
@@ -524,32 +528,40 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_prototype() noexcept -> ObjectBase<Value>* override {
-            return m_proto;
+            return m_proto.to_object();
         }
 
         auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<Value>, Value>& override {
             return m_own_props;
         }
 
-        [[nodiscard]] auto get_property_value(const PropertyHandle<Value>& handle) -> Value* override {
-            if (auto property_entry_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&handle](const auto& prop_pair) -> bool {
+        [[nodiscard]] auto get_property_value(const PropertyHandle<Value>& handle, bool allow_filler) -> Value* override {
+            if (handle.is_proto_key()) {
+                return &m_proto;
+            } else if (auto property_entry_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&handle](const auto& prop_pair) -> bool {
                 return prop_pair.first == handle;
             }); property_entry_it != m_own_props.end()) {
                 return &property_entry_it->second;
-            } else if (m_proto) {       
-                return m_proto->get_property_value(handle);
-            } else {
+            } else if (allow_filler) {
                 return &m_own_props.emplace_back(std::pair {handle, Value {}}).second;
+            } else if (auto prototype_p = m_proto.to_object(); prototype_p) {
+                return prototype_p->get_property_value(handle.as_parent_key(prototype_p), allow_filler);
             }
+
+            return nullptr;
         }
 
         [[maybe_unused]] auto set_property_value(const PropertyHandle<Value>& handle, const Value& value) -> Value* override {
-            if (auto old_prop_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&handle](const auto& prop_pair) -> bool {
+            if (handle.is_proto_key()) {
+                m_proto = value;
+                return &m_proto;
+            } else if (auto old_prop_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&handle](const auto& prop_pair) -> bool {
                 return prop_pair.first == handle;
             }); old_prop_it == m_own_props.end()) {
                 m_own_props.emplace_back(handle, value);
                 return &m_own_props.back().second;
             } else {
+                old_prop_it->second = value;
                 return &old_prop_it->second;
             }
         }
@@ -566,9 +578,9 @@ export namespace DerkJS {
             return false;
         }
 
-        [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
+        [[nodiscard]] auto clone() -> ObjectBase<Value>* override {
             // Due to the Value repr needing an ObjectBase<Value>* ptr, the Value clone method returns a Value vs. `std::unique_ptr<Value>`, and the VM only stores Value-s on its stack, having a raw pointer is unavoidable. This may not be so bad since the PolyPool<ObjectBase<Value>> in the VM can quickly own it via `add_item()`.
-            auto self_clone = new Object {m_proto};
+            auto self_clone = new Object {m_proto.to_object()};
 
             for (const auto& [prop_handle, prop_value] : m_own_props) {
                 self_clone->set_property_value(prop_handle, prop_value.deep_clone());

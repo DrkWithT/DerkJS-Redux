@@ -98,10 +98,13 @@ export namespace DerkJS {
         /// NOTE: holds stack top pointer
         int16_t rsp;
 
+        /// NOTE: indicates if `op_get_prop` should access an object's prototype, bypassing normal key-value lookup.
+        bool rpk;
+
         bool has_err;
 
         ExternVMCtx(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit)
-        : heap (std::move(prgm.heap_items)), stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, rsbp {0}, rsp {-1}, has_err {false} {
+        : heap (std::move(prgm.heap_items)), stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, rsbp {0}, rsp {-1}, rpk {false}, has_err {false} {
             stack.reserve(stack_length_limit);
             stack.resize(stack_length_limit);
             frames.reserve(call_frame_limit);
@@ -509,6 +512,7 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_emplace(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_put_this(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_put_obj_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_put_proto_key(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_get_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_put_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_del_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
@@ -541,7 +545,7 @@ export namespace DerkJS {
     constexpr tco_opcode_fn tco_opcodes[static_cast<std::size_t>(Opcode::last)] = {
         op_nop,
         op_dup, op_dup_local, op_ref_local, op_put_const, op_deref, op_pop, op_emplace,
-        op_put_this, op_put_obj_dud, op_get_prop, op_put_prop, op_del_prop,
+        op_put_this, op_put_obj_dud, op_put_proto_key, op_get_prop, op_put_prop, op_del_prop,
         op_numify, op_strcat,
         op_mod, op_mul, op_div, op_add, op_sub,
         op_test_falsy, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte,
@@ -599,7 +603,7 @@ export namespace DerkJS {
         if (auto& ref_value_ref = ctx.stack[ctx.rsp]; ref_value_ref.get_tag() == ValueTag::val_ref) {
             ctx.stack[ctx.rsp] = ref_value_ref.deep_clone();
         } else {
-            return false;
+            return false; // DEBUG??
         }
 
         ++ctx.rip_p;
@@ -647,15 +651,37 @@ export namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
+    [[nodiscard]] inline auto op_put_proto_key(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        /// NOTE: fake a prototype key Value with this VM flag & a dud key Value.
+        ctx.stack[ctx.rsp + 1] = Value {};
+        ctx.rpk = true;
+
+        ++ctx.rsp;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
     [[nodiscard]] inline auto op_get_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        if (auto& src_val_ref = ctx.stack[ctx.rsp - 1]; src_val_ref.get_tag() != ValueTag::object) {
-            return false;
-        } else if (auto src_obj_p = src_val_ref.to_object(); !src_obj_p) {
-            return false;
-        } else if (auto src_prop_value_p = src_obj_p->get_property_value(PropertyHandle<Value> {src_obj_p, ctx.stack[ctx.rsp], PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)}); !src_prop_value_p) {
+        auto& target_ref = ctx.stack[ctx.rsp - 1];
+        ObjectBase<Value>* target_obj_p = (target_ref.get_tag() == ValueTag::val_ref)
+            ? target_ref.get_value_ref()->to_object()
+            : target_ref.to_object();
+
+        if (!target_obj_p) {
             return false;
         } else {
-            ctx.stack[ctx.rsp - 1] = Value {src_prop_value_p};
+            auto target_prop_key = (ctx.rpk)
+                // prototype access
+                ? PropertyHandle<Value> {target_obj_p, PrototypeAccessOpt {}}
+                // normal property access
+                : PropertyHandle<Value> {target_obj_p, ctx.stack[ctx.rsp], PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)};
+            auto prop_ref_p = target_obj_p->get_property_value(target_prop_key, a0);
+
+            ctx.stack[ctx.rsp - 1] = Value {prop_ref_p};
+            ctx.has_err = !prop_ref_p;
+            ctx.rpk = false;
+
             --ctx.rsp;
             ++ctx.rip_p;
         }
@@ -664,16 +690,27 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_put_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        if (auto obj_p = ctx.stack[ctx.rsp - 2].to_object(); !obj_p) {
+        if (auto target_object_p = ctx.stack[ctx.rsp - 2].to_object(); !target_object_p) {
             return false;
-        } else if (!obj_p->set_property_value(PropertyHandle<Value> { obj_p, ctx.stack[ctx.rsp - 1], PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)}, ctx.stack[ctx.rsp])) {
-            return false;
+        } else {
+            auto target_prop_key = (ctx.rpk)
+                // prototype key
+                ? PropertyHandle<Value> {target_object_p, PrototypeAccessOpt {}}
+                // normal property key 
+                : PropertyHandle<Value> {target_object_p, ctx.stack[ctx.rsp - 1], PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)};
+
+            ctx.has_err = !target_object_p->set_property_value(
+               target_prop_key,
+               ctx.stack[ctx.rsp]
+            );
+            ctx.rpk = false;
+    
+            ctx.rsp -= 2;
+            ++ctx.rip_p;
+    
+            return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
         }
 
-        ctx.rsp -= 2;
-        ++ctx.rip_p;
-
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_del_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {

@@ -58,17 +58,11 @@ export namespace DerkJS {
             return m_own_properties;
         }
 
-        [[nodiscard]] auto get_property_value([[maybe_unused]] const PropertyHandle<Value>& handle) -> Value* override {
-            // if (auto property_entry_it = m_own_properties.find(handle); property_entry_it != m_own_properties.end()) {
-            //     return &property_entry_it->second;
-            // }
-            // return m_proto->get_property_value(handle);
+        [[nodiscard]] auto get_property_value([[maybe_unused]] const PropertyHandle<Value>& handle, [[maybe_unused]] bool allow_filler) -> Value* override {
             return nullptr;
         }
 
         [[nodiscard]] auto set_property_value([[maybe_unused]] const PropertyHandle<Value>& handle, [[maybe_unused]] const Value& value) -> Value* override {
-            // m_own_properties[handle] = value;
-            // return &m_own_properties[handle];
             return nullptr;
         }
 
@@ -110,7 +104,7 @@ export namespace DerkJS {
         }
 
         /// NOTE: this only makes another wrapper around the C++ function ptr, but the raw pointer must be quickly owned by the VM heap (`PolyPool<ObjectBase<Value>>`)!
-        [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
+        [[nodiscard]] auto clone() -> ObjectBase<Value>* override {
             auto copied_native_fn_p = new NativeFunction {m_native_ptr};
 
             return copied_native_fn_p;
@@ -153,6 +147,7 @@ export namespace DerkJS {
             "djs_emplace",
             "djs_put_this",
             "djs_put_obj_dud",
+            "djs_put_proto_key",
             "djs_get_prop", // gets a property value based on RSP: <OBJ-REF>, RSP - 1: <POOLED-STR-REF> 
             "djs_put_prop", // SEE: djs_get_prop for stack args passing...
             "djs_del_prop", // SEE: djs_get_prop for stack args passing...
@@ -182,11 +177,11 @@ export namespace DerkJS {
 
         PropPool<PropertyHandle<Value>, Value> m_own_properties;
         std::vector<Instruction> m_code;
-        // std::unique_ptr<ObjectBase<Value>> m_prototype;
+        Value m_prototype;
 
     public:
-        Lambda(std::vector<Instruction> code) noexcept
-        : m_own_properties {}, m_code (std::move(code)) {}
+        Lambda(std::vector<Instruction> code, ObjectBase<Value>* prototype_p) noexcept
+        : m_own_properties {}, m_code (std::move(code)), m_prototype {prototype_p} {}
 
         [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
             return this;
@@ -197,11 +192,11 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto is_extensible() const noexcept -> bool override {
-            return false;
+            return true;
         }
 
         [[nodiscard]] auto is_frozen() const noexcept -> bool override {
-            return true; // TODO: change this to depend on a member variable later since objects can be frozen (made immutable) at runtime.
+            return false; // TODO: change this to depend on a member variable later since objects can be frozen (made immutable) at runtime.
         }
 
         [[nodiscard]] auto is_prototype() const noexcept -> bool override {
@@ -209,19 +204,42 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_prototype() noexcept -> ObjectBase<Value>* override {
-            return nullptr;
+            return m_prototype.to_object();
         }
 
         [[nodiscard]] auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<Value>, Value>& override {
             return m_own_properties;
         }
 
-        [[nodiscard]] auto get_property_value(const PropertyHandle<Value>& handle) -> Value* override {
+        [[nodiscard]] auto get_property_value(const PropertyHandle<Value>& handle, bool allow_filler) -> Value* override {
+            if (handle.is_proto_key()) {
+                return &m_prototype;
+            } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&handle](const auto& prop_pair) -> bool {
+                return prop_pair.first == handle;
+            }); property_entry_it != m_own_properties.end()) {
+                return &property_entry_it->second;
+            } else if (allow_filler) {
+                return &m_own_properties.emplace_back(std::pair {handle, Value {}}).second;
+            } else if (m_prototype) {
+                return m_prototype.to_object()->get_property_value(handle, allow_filler);
+            }
+
             return nullptr;
         }
 
         [[nodiscard]] auto set_property_value(const PropertyHandle<Value>& handle, const Value& value) -> Value* override {
-            return nullptr;
+            if (handle.is_proto_key()) {
+                m_prototype = value;
+                return &m_prototype;
+            } else if (auto old_prop_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&handle](const auto& prop_pair) -> bool {
+                return prop_pair.first == handle;
+            }); old_prop_it == m_own_properties.end()) {
+                m_own_properties.emplace_back(handle, value);
+                return &m_own_properties.back().second;
+            } else {
+                old_prop_it->second = value;
+                return &old_prop_it->second;
+            }
         }
 
         [[nodiscard]] auto del_property_value(const PropertyHandle<Value>& handle) -> bool override {
@@ -232,23 +250,15 @@ export namespace DerkJS {
             auto vm_context_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
 
             /// NOTE: consume `this` argument (if needed) before the call to avoid garbage results.
-            ObjectBase<Value>* this_arg_p = nullptr;
-
-            if (has_this_arg) {
-                /// NOTE: On this present: Mem-Swap the 2 important Values of the object to call soon: the callee swaps down with the duplicated parent object for `this`. Then consume the object-referencing pointer from the top (`this` argument).
-                std::swap_ranges(reinterpret_cast<std::byte*>(vm_context_p->stack.data() + vm_context_p->rsp), reinterpret_cast<std::byte*>(vm_context_p->stack.data() + vm_context_p->rsp) + sizeof(Value), reinterpret_cast<std::byte*>(vm_context_p->stack.data() + vm_context_p->rsp - 1));
-                this_arg_p = vm_context_p->stack[vm_context_p->rsp].to_object();
-            }
-
-            --vm_context_p->rsp;
+            ObjectBase<Value>* this_arg_p = (has_this_arg) ? vm_context_p->stack[vm_context_p->rsp - 1].to_object() : nullptr;
 
             const auto caller_ret_ip = vm_context_p->rip_p + 1;
             const int16_t old_caller_sbp = vm_context_p->rsbp;
-            const int16_t new_callee_sbp = vm_context_p->rsp - static_cast<int16_t>(argc) + 1 - static_cast<int16_t>(has_this_arg);
+            int16_t new_callee_sbp = vm_context_p->rsp - (argc + static_cast<int16_t>(has_this_arg));
 
             vm_context_p->rip_p = m_code.data();
             vm_context_p->rsbp = new_callee_sbp;
-            vm_context_p->rsp -= static_cast<int16_t>(argc < 1);
+            vm_context_p->rsp = new_callee_sbp + argc - 1;
 
             vm_context_p->frames.emplace_back(tco_call_frame_type {
                 caller_ret_ip,
@@ -263,14 +273,19 @@ export namespace DerkJS {
         /// TODO: support passing of `this` arguments to ctors which may be methods of an object!
         [[nodiscard]] auto call_as_ctor(void* opaque_ctx_p, int argc) -> bool override {
             auto vm_ctx_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
-            auto this_arg_p = vm_ctx_p->heap.add_item(vm_ctx_p->heap.get_next_id(), std::make_unique<Object>(nullptr));
+            // All constructor result objects have the function prototype.
+            auto this_arg_p = vm_ctx_p->heap.add_item(
+                vm_ctx_p->heap.get_next_id(),
+                std::make_unique<Object>(m_prototype.to_object())
+            );
 
             const auto caller_ret_ip = vm_ctx_p->rip_p + 1;
             const int16_t new_callee_sbp = vm_ctx_p->rsp - argc;
             const int16_t old_caller_sbp = vm_ctx_p->rsbp;
 
             vm_ctx_p->rip_p = m_code.data();
-            vm_ctx_p->rsbp = new_callee_sbp;
+            vm_ctx_p->rsbp = new_callee_sbp; // 0, Sequence
+            vm_ctx_p->rsp = new_callee_sbp;
 
             vm_ctx_p->frames.emplace_back(tco_call_frame_type {
                 caller_ret_ip,
@@ -283,8 +298,8 @@ export namespace DerkJS {
         }
 
         /// For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!
-        [[nodiscard]] auto clone() const -> ObjectBase<Value>* override {
-            return new Lambda {m_code};
+        [[nodiscard]] auto clone() -> ObjectBase<Value>* override {
+            return new Lambda {m_code, m_prototype.to_object()};
         }
 
         /// NOTE: For disassembling lambda bytecode for debugging.
