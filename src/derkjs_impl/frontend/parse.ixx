@@ -270,17 +270,18 @@ export namespace DerkJS {
             auto lhs_primary = parse_primary(lexer, source);
 
             while (!at_eof()) {
-                if (const auto member_mark = m_current.tag; member_mark = TokenTag::dot) {
+                if (const auto member_mark = m_current.tag; member_mark == TokenTag::dot) {
                     consume_any(lexer, source);
+                    consume(lexer, source, TokenTag::identifier, TokenTag::keyword_prototype);
 
                     lhs_primary = std::make_unique<Expr>(
                         MemberAccess {
                             .target = std::move(lhs_primary),
                             .key = std::make_unique<Expr>(
-                                Primitive { .token = m_current },
+                                Primitive { .token = m_previous },
                                 0,
-                                m_current.start,
-                                m_current.start + m_current.length
+                                m_previous.start,
+                                m_previous.start + m_previous.length
                             ),
                         },
                         0,
@@ -303,6 +304,8 @@ export namespace DerkJS {
                         snippet_begin,
                         m_current.start - snippet_begin + 1
                     );
+                } else {
+                    break;
                 }
             }
 

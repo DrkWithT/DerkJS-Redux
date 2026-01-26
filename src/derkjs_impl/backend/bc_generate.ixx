@@ -89,6 +89,8 @@ export namespace DerkJS {
 
         bool m_has_call;
 
+
+
         // Overload for universal lookup via priorities 1, 2, 3
         [[nodiscard]] auto lookup_symbol(const std::string& symbol) -> std::optional<Arg> {
             return lookup_symbol(symbol, FindGlobalConstsOpt {})
@@ -263,6 +265,10 @@ export namespace DerkJS {
                         return record_valued_symbol(atom_lexeme, DynamicString {std::move(atom_lexeme)});
                     }
                 }
+                case TokenTag::keyword_prototype: {
+                    m_has_string_ops = false;
+                    return Arg { .n = -3, .tag = Location::heap_obj };
+                }
                 case TokenTag::identifier: {
                     m_has_string_ops = false;
 
@@ -288,6 +294,8 @@ export namespace DerkJS {
                 encode_instruction(local_var_opcode, *primitive_locator);
             } else if (primitive_locate_type == Location::heap_obj && primitive_locator->n == -2) {
                 encode_instruction(Opcode::djs_put_this);
+            } else if (primitive_locate_type == Location::heap_obj && primitive_locator->n == -3) {
+                encode_instruction(Opcode::djs_put_proto_key);
             } else if (primitive_locate_type == Location::code_chunk) {
                 m_immediate_inline_fn_id = primitive_locator->n;
             }
@@ -356,7 +364,10 @@ export namespace DerkJS {
                 .tag = Location::constant
             };
 
-            Lambda temp_callable {std::move(m_code_blobs.front())};
+            Lambda temp_callable {
+                std::move(m_code_blobs.front()),
+                m_heap.add_item(m_heap.get_next_id(), std::make_unique<Object>(nullptr, Object::flag_prototype_v))
+            };
             m_code_blobs.pop_front();
             m_local_maps.pop_back();
 
@@ -401,8 +412,6 @@ export namespace DerkJS {
 
                         /// NOTE: Only ctor calls are done for new exprs e.g `new Foo(1, 2, 3);`
                         const auto within_new_expr_ok = emit_expr(*inner_expr, source);
-
-                        m_has_new_applied = false;
 
                         return OpcodeWithGenFlag {
                             .op = Opcode::djs_nop,
@@ -471,14 +480,13 @@ export namespace DerkJS {
             const auto& [target_expr, key_expr] = member_access;
 
             // 1. Emit the target and then the key evaluations. The `djs_get_prop` opcode takes the target and the property key (PropertyHandle<Value>) on top... These two are "popped" and the property reference takes their place in the VM. If the object has calling property, the target object is emitted twice in case of passing 'THIS'.
-
             m_accessing_property = true;
 
             // For possible this object on member calls OR the parent object reference itself...
             if (!emit_expr(*target_expr, source)) {
                 return false;
             }
-            
+
             // If a property call is enclosing the member access: The callee's parent object is over the copied reference for `this`...
             if (m_has_call) {
                 encode_instruction(Opcode::djs_dup);
@@ -488,7 +496,8 @@ export namespace DerkJS {
                 return false;
             }
 
-            encode_instruction(Opcode::djs_get_prop);
+            /// NOTE: If assignment (lvalues apply) pass `1` for defaulting flag so the RHS goes somewhere legitimate.
+            encode_instruction(Opcode::djs_get_prop, Arg {.n = static_cast<int16_t>(!m_has_call && m_access_as_lval), .tag = Location::immediate});
 
             // NOTE: IF !m_access_as_lval, the member access dereferences the property reference for a usable temporary: `foo.a (ref Value(1)) + foo.b (ref Value(2))` -> `1 + 2 == 3`
             if (!m_access_as_lval) {
@@ -613,6 +622,7 @@ export namespace DerkJS {
                     Opcode::djs_ctor_call,
                     Arg {.n = static_cast<int16_t>(call_argc), .tag = Location::immediate}
                 );
+                m_has_new_applied = false;
             }
 
             m_has_call = false;
