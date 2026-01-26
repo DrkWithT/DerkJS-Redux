@@ -13,7 +13,6 @@ target_sources(
     src/derkjs_impl/frontend/lexicals.ixx
     src/derkjs_impl/frontend/ast.ixx
     src/derkjs_impl/frontend/parse.ixx
-    src/derkjs_impl/frontend/semantics.ixx
     src/derkjs_impl/runtime/objects.ixx
     src/derkjs_impl/runtime/callables.ixx
     src/derkjs_impl/runtime/strings.ixx

@@ -18,11 +18,12 @@ Sequence.prototype.next = function() {
 };
 
 var odds = new Sequence(1);
-var term = 0;
+var num = 0;
 
-while (term < 10) {
-    term = odds.next();
-    console.log(term);
+while (num < 10) {
+    num = odds.next();
+
+    console.log(num);
 }
 
 return 0;

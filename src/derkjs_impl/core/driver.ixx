@@ -22,7 +22,6 @@ export module core.driver;
 import frontend.lexicals;
 import frontend.ast;
 import frontend.parse;
-import frontend.semantics;
 import runtime.objects;
 import runtime.value;
 import runtime.callables;
@@ -87,12 +86,6 @@ export namespace DerkJS::Core {
             Parser parser;
 
             return parser(lexer, file_path, m_src_map.at(0));
-        }
-
-        [[nodiscard]] auto check_sema_of_script(const ASTUnit& ast) -> bool {
-            SemanticAnalyzer sema_check_pass;
-
-            return sema_check_pass(ast, m_src_map);
         }
 
         [[nodiscard]] auto compile_script(const ASTUnit& ast) -> std::optional<Program> {
@@ -185,11 +178,6 @@ export namespace DerkJS::Core {
             }
 
             const auto& ast_ref = script_ast.value();
-
-            if (!check_sema_of_script(ast_ref)) {
-                return false;
-            }
-
             auto prgm = compile_script(ast_ref);
 
             if (!prgm) {
