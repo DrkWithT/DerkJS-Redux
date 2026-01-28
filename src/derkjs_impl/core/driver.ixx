@@ -123,14 +123,14 @@ export namespace DerkJS::Core {
                 });
 
                 if (auto item_as_primitive_p = std::get_if<Value>(&item); item_as_primitive_p) {
-                    PropertyHandle<Value> prop_value_desc {object_p.get(), prop_name_value, PropertyHandleTag::key, 0x00}; // immutable property referencing its underlying value
+                    PropertyHandle<Value> prop_value_desc {prop_name_value, PropertyHandleTag::key, 0x00}; // immutable property referencing its underlying value
 
                     if (!object_p->set_property_value(prop_value_desc, *item_as_primitive_p)) {
                         return false;
                     }
                 } else {
                     auto item_as_object_p = std::get_if<std::unique_ptr<ObjectBase<Value>>>(&item);
-                    PropertyHandle<Value> prop_obj_desc {object_p.get(), prop_name_value, PropertyHandleTag::key, 0x00};
+                    PropertyHandle<Value> prop_obj_desc {prop_name_value, PropertyHandleTag::key, 0x00};
 
                     if (!object_p->set_property_value(prop_obj_desc, Value {item_as_object_p->get()})) {
                         return false;

@@ -670,47 +670,48 @@ export namespace DerkJS {
 
         if (!target_obj_p) {
             return false;
-        } else {
-            auto target_prop_key = (ctx.rpk)
-                // prototype access
-                ? PropertyHandle<Value> {target_obj_p, PrototypeAccessOpt {}}
-                // normal property access
-                : PropertyHandle<Value> {target_obj_p, ctx.stack[ctx.rsp], PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)};
-            auto prop_ref_p = target_obj_p->get_property_value(target_prop_key, a0);
-
-            ctx.stack[ctx.rsp - 1] = Value {prop_ref_p};
-            ctx.has_err = !prop_ref_p;
-            ctx.rpk = false;
-
-            --ctx.rsp;
-            ++ctx.rip_p;
         }
+
+        auto target_prop_key = (ctx.rpk)
+            // prototype access
+            ? PropertyHandle<Value> {PrototypeAccessOpt {}}
+            // normal property access
+            : PropertyHandle<Value> {ctx.stack[ctx.rsp], PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)};
+        auto prop_ref_p = target_obj_p->get_property_value(target_prop_key, a0);
+
+        ctx.stack[ctx.rsp - 1] = Value {prop_ref_p};
+        ctx.has_err = !prop_ref_p;
+        ctx.rpk = false;
+
+        --ctx.rsp;
+        ++ctx.rip_p;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_put_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        if (auto target_object_p = ctx.stack[ctx.rsp - 2].to_object(); !target_object_p) {
-            return false;
-        } else {
-            auto target_prop_key = (ctx.rpk)
-                // prototype key
-                ? PropertyHandle<Value> {target_object_p, PrototypeAccessOpt {}}
-                // normal property key 
-                : PropertyHandle<Value> {target_object_p, ctx.stack[ctx.rsp - 1], PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)};
+        auto target_object_p = ctx.stack[ctx.rsp - 2].to_object();
 
-            ctx.has_err = !target_object_p->set_property_value(
-               target_prop_key,
-               ctx.stack[ctx.rsp]
-            );
-            ctx.rpk = false;
-    
-            ctx.rsp -= 2;
-            ++ctx.rip_p;
-    
-            return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        if (!target_object_p) {
+            return false;
         }
 
+        auto target_prop_key = (ctx.rpk)
+            // prototype key
+            ? PropertyHandle<Value> {PrototypeAccessOpt {}}
+            // normal property key 
+            : PropertyHandle<Value> {ctx.stack[ctx.rsp - 1], PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)};
+
+        ctx.has_err = !target_object_p->set_property_value(
+            target_prop_key,
+            ctx.stack[ctx.rsp]
+        );
+        ctx.rpk = false;
+
+        ctx.rsp -= 2;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_del_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
