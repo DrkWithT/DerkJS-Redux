@@ -348,21 +348,16 @@ export namespace DerkJS {
                 ++item_count;
             }
 
-            // 2. Execute Opcode::djs_put_arr_dud- Now there's the 1st reference to a `[]` on the stack, yet the object is alive on the heap- That is the hidden `this` argument to Array.prototype.push(args...).
-            // 2b. reference an Array interface prototype for the PUT_ARR_DUD opcode. This is consumed by that opcode to create a `[args...]` on the stack. 
+            // 2. Call the equivalent of Array.prototype.constructor(args...)
             encode_instruction(Opcode::djs_put_const, lookup_symbol("Array").value());
-            encode_instruction(Opcode::djs_put_arr_dud);
-
-            // 3. Then fetch a reference to <temp-Array>.push(1, 2, 3, ...) to fill the empty array, consuming the N arguments. The GET_PROP opcode consumes both the duped object-reference and key.
-            encode_instruction(Opcode::djs_dup);
-            encode_instruction(Opcode::djs_put_const, lookup_symbol("push").value());
+            encode_instruction(Opcode::djs_put_const, lookup_symbol("constructor").value());
             encode_instruction(Opcode::djs_get_prop);
 
             // 4. Invoke the pushing of each temporary into the fresh `[]`. Now there's a new array for use. :)
             encode_instruction(
                 Opcode::djs_object_call,
-                Arg {.n = static_cast<int16_t>(call_argc), .tag = Location::immediate},
-                Arg {.n = 1, .tag = Location::immediate}
+                Arg {.n = static_cast<int16_t>(item_count), .tag = Location::immediate},
+                Arg {.n = 0, .tag = Location::immediate}
             );
 
             return true;
@@ -670,6 +665,8 @@ export namespace DerkJS {
             } else if (auto object_p = std::get_if<ObjectLiteral>(&expr.data); object_p) {
                 /// TODO: maybe add opcode support for object cloning... could be good for instances of prototypes.
                 return emit_object_literal(*object_p, source);
+            } else if (auto array_p = std::get_if<ArrayLiteral>(&expr.data); array_p) {
+                return emit_array_literal(*array_p, source);
             } else if (auto lambda_p = std::get_if<LambdaLiteral>(&expr.data); lambda_p) {
                 return emit_lambda(*lambda_p, source);
             } else if (auto member_access_p = std::get_if<MemberAccess>(&expr.data); member_access_p) {

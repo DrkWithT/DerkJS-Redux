@@ -63,6 +63,25 @@ int main(int argc, char* argv[]) {
         }
     };
 
+    Core::NativePropertyStub array_obj_props[] {
+        Core::NativePropertyStub {
+            .name_str = "constructor",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_array_ctor)
+        },
+        Core::NativePropertyStub {
+            .name_str = "push",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_array_push)
+        },
+        Core::NativePropertyStub {
+            .name_str = "pop",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_array_pop)
+        },
+        Core::NativePropertyStub {
+            .name_str = "at",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_array_at)
+        }
+    };
+
     driver.add_js_lexical("var", TokenTag::keyword_var);
     driver.add_js_lexical("if", TokenTag::keyword_if);
     driver.add_js_lexical("else", TokenTag::keyword_else);
@@ -107,6 +126,11 @@ int main(int argc, char* argv[]) {
     driver.add_native_object(
         "clock",
         std::to_array(std::move(clock_obj_props))
+    );
+
+    driver.add_native_object(
+        "Array",
+        std::to_array(std::move(array_obj_props))
     );
 
     return driver.run<DispatchPolicy::tco>(source_path) ? 0 : 1;
