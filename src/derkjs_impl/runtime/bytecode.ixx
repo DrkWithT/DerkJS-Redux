@@ -30,6 +30,7 @@ export namespace DerkJS {
         djs_emplace, // Pops the temporary and stores it into the under value (local variable reference / property reference) which gets popped afterwards.
         djs_put_this, // Pushes a reference to the current `this` object.
         djs_put_obj_dud, // Pushes a newly created, empty JS object.
+        djs_put_arr_dud, // Args: <Array-prototype-ref> -> <new-Array>; Pushes a newly created, empty JS array. The Array prototype is taken as an argument.
         djs_put_proto_key, // Replaces top stack obj-ref with proto-ref.
         djs_get_prop, // djs_get_prop gets a property value's ref based on an object's ref below a pooled string ref on the stack... the result is placed where the targeted ref was. --> Stack placement: <OBJ-REF-LOCAL> <PROP-KEY-HANDLE> --> <PROP-VALUE-REF>
         djs_put_prop, // djs_put_prop --> Stack placement: <OBJ-REF> <PROP-KEY-HANDLE-VALUE> <NEW-VALUE> --> <OBJ-REF>
@@ -100,6 +101,7 @@ export namespace DerkJS {
             "djs_emplace",
             "djs_put_this",
             "djs_put_obj_dud",
+            "djs_put_arr_dud",
             "djs_put_proto_key",
             "djs_get_prop", // Args: <should-default>: gets a property value based on RSP: <OBJ-REF>, RSP - 1: <POOLED-STR-REF>; IF should-default == 1, default any invalid key to `undefined`.
             "djs_put_prop", // SEE: djs_get_prop for stack args passing...

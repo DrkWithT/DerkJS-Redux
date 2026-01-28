@@ -334,6 +334,40 @@ export namespace DerkJS {
             return true;
         }
 
+        [[nodiscard]] auto emit_array_literal(const ArrayLiteral& array, const std::string& source) -> bool {
+            const auto& [items] = array;
+
+            // 1. Push each JS array item via evaluation.
+            int item_count = 0;
+
+            for (const auto& item_expr : items) {
+                if (!emit_expr(*item_expr, source)) {
+                    return false;
+                }
+
+                ++item_count;
+            }
+
+            // 2. Execute Opcode::djs_put_arr_dud- Now there's the 1st reference to a `[]` on the stack, yet the object is alive on the heap- That is the hidden `this` argument to Array.prototype.push(args...).
+            // 2b. reference an Array interface prototype for the PUT_ARR_DUD opcode. This is consumed by that opcode to create a `[args...]` on the stack. 
+            encode_instruction(Opcode::djs_put_const, lookup_symbol("Array").value());
+            encode_instruction(Opcode::djs_put_arr_dud);
+
+            // 3. Then fetch a reference to <temp-Array>.push(1, 2, 3, ...) to fill the empty array, consuming the N arguments. The GET_PROP opcode consumes both the duped object-reference and key.
+            encode_instruction(Opcode::djs_dup);
+            encode_instruction(Opcode::djs_put_const, lookup_symbol("push").value());
+            encode_instruction(Opcode::djs_get_prop);
+
+            // 4. Invoke the pushing of each temporary into the fresh `[]`. Now there's a new array for use. :)
+            encode_instruction(
+                Opcode::djs_object_call,
+                Arg {.n = static_cast<int16_t>(call_argc), .tag = Location::immediate},
+                Arg {.n = 1, .tag = Location::immediate}
+            );
+
+            return true;
+        }
+
         [[nodiscard]] auto emit_lambda(const LambdaLiteral& lambda, const std::string& source) -> bool {
             const auto& [lambda_params, lambda_body] = lambda;
             m_accessing_property = false;
