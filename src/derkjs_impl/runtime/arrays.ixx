@@ -57,6 +57,10 @@ export namespace DerkJS {
         Array(ObjectBase<Value>* prototype_p) noexcept (std::is_nothrow_default_constructible_v<Value>)
         : m_props {}, m_items {}, m_prototype {prototype_p} {}
 
+        [[nodiscard]] auto items() noexcept -> std::vector<Value>& {
+            return m_items;
+        }
+
         [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
             return this;
         }
