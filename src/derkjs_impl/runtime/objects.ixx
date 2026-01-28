@@ -235,28 +235,22 @@ export namespace DerkJS {
 
     template <typename KeyType>
     struct PropertyHandle {
-        void* parent_obj_p; // must refer to the enclosing object's address in memory: helps distinguish properties between different object shapes / types with matching names / IDs
         KeyType key_value; // MUST be a `Value`, but this is templated to avoid circular type referencing
         PropertyHandleTag tag; // discriminator for whether the property is an index (for own props. in Arrays) vs. a string (for any Object property)
         uint8_t flags;
 
         constexpr PropertyHandle() noexcept
-        : parent_obj_p {}, key_value {}, tag {PropertyHandleTag::nil}, flags {0x00} {}
+        : key_value {}, tag {PropertyHandleTag::nil}, flags {0x00} {}
 
         /// NOTE: for special prototype key: no string key needed
-        constexpr PropertyHandle(void* parent_obj_p_, [[maybe_unused]] PrototypeAccessOpt opt) noexcept
-        : parent_obj_p {parent_obj_p_}, key_value {}, tag {PropertyHandleTag::proto}, flags {0x00} {}
+        constexpr PropertyHandle([[maybe_unused]] PrototypeAccessOpt opt) noexcept
+        : key_value {}, tag {PropertyHandleTag::proto}, flags {0x00} {}
 
-        constexpr PropertyHandle(void* parent_obj_p_, KeyType key_value_, PropertyHandleTag tag_, uint8_t flags_) noexcept
-        : parent_obj_p {parent_obj_p_}, key_value {key_value_}, tag {tag_}, flags {flags_} {}
+        constexpr PropertyHandle(KeyType key_value_, PropertyHandleTag tag_, uint8_t flags_) noexcept
+        : key_value {key_value_}, tag {tag_}, flags {flags_} {}
 
         explicit constexpr operator bool(this auto&& self) noexcept {
-            return self.parent_obj_p_ != nullptr && self.opaque_key_p != nullptr && self.tag != PropertyHandleTag::nil;
-        }
-
-        /// NOTE: Use this for accessing data via an object's parent prototype.
-        [[nodiscard]] auto as_parent_key(void* next_parent_p) const noexcept -> PropertyHandle {
-            return PropertyHandle {next_parent_p, key_value, tag, flags};
+            return self.tag != PropertyHandleTag::nil;
         }
 
         template <PropertyHandleFlag Phf>
@@ -272,16 +266,20 @@ export namespace DerkJS {
             return tag == PropertyHandleTag::proto;
         }
 
+        [[nodiscard]] constexpr auto get_key_value() const noexcept -> const KeyType& {
+            return key_value;
+        }
+
         [[nodiscard]] constexpr auto operator==(const PropertyHandle& other) const noexcept -> bool {
-            return parent_obj_p == other.parent_obj_p && key_value == other.key_value;
+            return key_value == other.key_value;
         }
 
         [[nodiscard]] constexpr auto operator<(const PropertyHandle& other) const noexcept -> bool {
-            return parent_obj_p == other.parent_obj_p && key_value < other.key_value;
+            return key_value < other.key_value;
         }
 
         [[nodiscard]] constexpr auto operator>(const PropertyHandle& other) const noexcept -> bool {
-            return parent_obj_p == other.parent_obj_p && key_value > other.key_value;
+            return key_value > other.key_value;
         }
     };
 }
