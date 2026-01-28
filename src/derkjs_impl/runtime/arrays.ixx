@@ -16,7 +16,7 @@ export namespace DerkJS {
     class Array : public ObjectBase<Value> {
     private:
         // Holds non-integral key properties.
-        std::map<PropertyHandle<Value>, Value> m_props;
+        PropPool<PropertyHandle<Value>, Value> m_props;
         // Stores properties (items) accessed by integral keys. These are the sequential items. Sparse arrays can also be implemented via pushing `Value {}` repeatedly.
         std::vector<Value> m_items;
         // Holds a prototype reference.
@@ -89,41 +89,41 @@ export namespace DerkJS {
             return m_props;
         }
 
-        [[nodiscard]] auto get_property_value([[maybe_unused]] const PropertyHandle<V>& handle, [[maybe_unused]] bool allow_filler) -> Value* override {
+        [[nodiscard]] auto get_property_value([[maybe_unused]] const PropertyHandle<Value>& handle, [[maybe_unused]] bool allow_filler) -> Value* override {
             if (handle.is_proto_key()) {
-                return &m_proto;
+                return &m_prototype;
             } else if (Value key = handle.get_key_value().deep_clone(); key.get_tag() == ValueTag::num_i32) {
-                return get_item(key.to_num_i32().value(), allow_filter);
+                return get_item(key.to_num_i32().value(), allow_filler);
             } else if (auto property_entry_it = std::find_if(m_props.begin(), m_props.end(), [&handle](const auto& prop_pair) -> bool {
                 return prop_pair.first == handle;
             }); property_entry_it != m_props.end()) {
                 return &property_entry_it->second;
-            } else if (auto prototype_p = m_proto.to_object(); prototype_p) {
+            } else if (auto prototype_p = m_prototype.to_object(); prototype_p) {
                 return prototype_p->get_property_value(handle, allow_filler);
             }
 
             return nullptr;
         }
 
-        [[maybe_unused]] auto set_property_value([[maybe_unused]] const PropertyHandle<V>& handle, [[maybe_unused]] const Value& value) -> Value* override {
+        [[maybe_unused]] auto set_property_value([[maybe_unused]] const PropertyHandle<Value>& handle, [[maybe_unused]] const Value& value) -> Value* override {
             if (handle.is_proto_key()) {
-                m_proto = value;
-                return &m_proto;
+                m_prototype = value;
+                return &m_prototype;
             } else if (Value key = handle.get_key_value().deep_clone(); key.get_tag() == ValueTag::num_i32) {
                 return put_item(key.to_num_i32().value(), value);
-            } else if (auto old_prop_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&handle](const auto& prop_pair) -> bool {
+            } else if (auto old_prop_it = std::find_if(m_props.begin(), m_props.end(), [&handle](const auto& prop_pair) -> bool {
                 return prop_pair.first == handle;
-            }); old_prop_it != m_own_props.end()) {
+            }); old_prop_it != m_props.end()) {
                 old_prop_it->second = value;
                 return &old_prop_it->second;
             } else {
-                m_own_props.emplace_back(handle, value);
-                return &m_own_props.back().second;
+                m_props.emplace_back(handle, value);
+                return &m_props.back().second;
             }
         }
 
         [[maybe_unused]] auto del_property_value([[maybe_unused]] const PropertyHandle<Value>& handle) -> bool override {
-            return nullptr; // TODO
+            return false; // TODO
         }
 
         [[nodiscard]] auto call([[maybe_unused]] void* opaque_ctx_p, [[maybe_unused]] int argc, [[maybe_unused]] bool has_this_arg) -> bool override {
@@ -136,7 +136,7 @@ export namespace DerkJS {
 
 
         /// For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!
-        [[nodiscard]] auto clone() -> ObjectBase<V>* override {
+        [[nodiscard]] auto clone() -> ObjectBase<Value>* override {
             return new Array {*this};
         }
 
@@ -145,7 +145,7 @@ export namespace DerkJS {
             std::ostringstream sout {};
 
             for (int pending_items = m_items.size(); const auto& temp_item : m_items) {
-                sout << item_item.as_string();
+                sout << temp_item.to_string().value();
                 --pending_items;
 
                 if (pending_items <= 0) {

@@ -96,7 +96,7 @@ export namespace DerkJS {
     };
 
     struct ArrayLiteral {
-        std::vector<std::unique_ptr<ExprPtr>> items;
+        std::vector<ExprPtr> items;
     };
 
     struct LambdaLiteral {

@@ -10,8 +10,9 @@ module;
 export module runtime.vm;
 
 import runtime.objects;
-import runtime.value;
+import runtime.arrays;
 import runtime.strings;
+import runtime.value;
 import runtime.bytecode;
 
 export namespace DerkJS {
@@ -512,6 +513,7 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_emplace(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_put_this(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_put_obj_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_put_arr_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_put_proto_key(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_get_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_put_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
@@ -545,7 +547,7 @@ export namespace DerkJS {
     constexpr tco_opcode_fn tco_opcodes[static_cast<std::size_t>(Opcode::last)] = {
         op_nop,
         op_dup, op_dup_local, op_ref_local, op_put_const, op_deref, op_pop, op_emplace,
-        op_put_this, op_put_obj_dud, op_put_proto_key, op_get_prop, op_put_prop, op_del_prop,
+        op_put_this, op_put_obj_dud, op_put_arr_dud, op_put_proto_key, op_get_prop, op_put_prop, op_del_prop,
         op_numify, op_strcat,
         op_mod, op_mul, op_div, op_add, op_sub,
         op_test_falsy, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte,
@@ -646,6 +648,18 @@ export namespace DerkJS {
         ctx.stack[ctx.rsp + 1] = Value {obj_ref_p};
 
         ++ctx.rsp;
+        ++ctx.rip_p;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_put_arr_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        auto array_prototype_p = ctx.stack[ctx.rsp].to_object();
+        auto array_ref_p = ctx.heap.add_item(ctx.heap.get_next_id(), Array {array_prototype_p});
+
+        ctx.has_err = !array_ref_p;
+        ctx.stack[ctx.rsp] = Value {array_ref_p};
+
         ++ctx.rip_p;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);

@@ -7,7 +7,7 @@ module;
 #include <iostream>
 #include <print>
 
-export module runtime.native_funcs;
+export module runtime.natives;
 
 import runtime.objects;
 import runtime.arrays;
@@ -33,7 +33,7 @@ export namespace DerkJS {
     [[nodiscard]] auto native_console_read_line(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {    
         /// NOTE: Show user the passed-in prompt string: It MUST be the 1st argument on the stack.
         const auto passed_rsbp = ctx->rsbp;
-        std::print("{}", ctx->stack[passed_rbsp].to_string().value());
+        std::print("{}", ctx->stack[passed_rsbp].to_string().value());
 
         std::string temp_line;
         std::getline(std::cin, temp_line);
@@ -70,7 +70,7 @@ export namespace DerkJS {
         auto temp_array = std::make_unique<Array>(nullptr);
 
         for (int temp_item_offset = 0; temp_item_offset < argc; temp_item_offset++) {
-            temp_array->items().emplace_back(ctx->stack[passed_rbsp + temp_item_offset]);
+            temp_array->items().emplace_back(ctx->stack[passed_rsbp + temp_item_offset]);
         }
 
         ObjectBase<Value>* temp_array_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::move(temp_array));
@@ -87,10 +87,10 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_array_push(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(ctx->rsp - 1).to_object()); // consume an array object by reference off the stack for mutation
+        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object()); // consume an array object by reference off the stack for mutation
 
         for (int temp_item_offset = 0; temp_item_offset < argc; temp_item_offset++) {
-            array_this_p->items().emplace_back(ctx->stack[passed_rbsp + temp_item_offset]);
+            array_this_p->items().emplace_back(ctx->stack[passed_rsbp + temp_item_offset]);
         }
 
         /// NOTE: By MDN, Array.prototype.push returns a new length.
@@ -103,7 +103,7 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_array_pop(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(ctx->rsp - 1).to_object());
+        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object());
 
         /// NOTE: By MDN, Array.prototype.pop returns the last element if possible, but this implementation returns undefined otherwise.
         if (array_this_p->items().empty()) {
@@ -118,7 +118,7 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_array_at(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(ctx->rsp - 1).to_object());
+        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object());
         auto actual_index_opt = ctx->stack[passed_rsbp].to_num_i32();
         const int items_n = array_this_p->items().size(); 
 

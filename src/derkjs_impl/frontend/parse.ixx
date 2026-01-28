@@ -252,7 +252,7 @@ export namespace DerkJS {
 
             return std::make_unique<Expr>(
                 ArrayLiteral {
-                    .item = std::move(temp_items)
+                    .items = std::move(temp_items)
                 },
                 0,
                 array_lexeme_begin,
