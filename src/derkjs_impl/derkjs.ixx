@@ -9,6 +9,6 @@ export import runtime.strings;
 export import runtime.callables;
 export import runtime.bytecode;
 export import runtime.vm;
-export import runtime.builtins;
+export import runtime.natives;
 export import backend.bc_generate;
 export import core.driver;
