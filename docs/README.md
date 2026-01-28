@@ -61,8 +61,9 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
  15. Add Arrays:
    - Create `Array` subclass of `ObjectBase<Value>`.
       - ~~Remove need for parent object pointers for property-handles.~~
-   - ~~Add `Array` native object to provide helper methods & be the prototype of `[]` objects.~~
-    - Array methods: `push, pop, at, concat, indexOf`
-    - These array methods should use syntax sugar: `foo.push(1)` is actually `Array.prototype.push(foo, 1)`... Or just pass the instance's property map into the prototype method call.
+   - ~~Add `Array` native object (not an actual function) to provide helper methods & be the 'interface" prototype of `[]` objects.~~
+      - Array methods: `push, pop, at, indexOf`?
+   - Fix bytecode generation for array literals.
+      - Support `djs_put_array_dud`.
  16. Add `+=, -=, *=, /=, %=` operators.
  17. Add mark and sweep GC.
