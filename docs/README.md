@@ -63,7 +63,5 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
       - ~~Remove need for parent object pointers for property-handles.~~
    - ~~Add `Array` native object (not an actual function) to provide helper methods & be the 'interface" prototype of `[]` objects.~~
       - Array methods: `push, pop, at, indexOf`?
-   - Fix bytecode generation for array literals.
-      - Support `djs_put_array_dud`.
  16. Add `+=, -=, *=, /=, %=` operators.
  17. Add mark and sweep GC.
