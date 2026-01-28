@@ -53,16 +53,15 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
       - ~~Update `djs_ctor_call` to bind the constructor function's prototype reference into the result by return `this`.~~
    - Steps:
       - ~~Support dud-property-handle for prototype access in objects.~~
-      - Add a special `djs_put_proto_key` opcode: secretly passes a special dud property-handle for prototype...
-      - Add support for the dud handle in get_property overrides of `ObjectBases`.
-      - Add codegen support for `djs_put_proto_key`... Let the usual `get_prop <1>` get the defaulted undefined property's reference and `djs_emplace` do this job.
+      - ~~Add a special `djs_put_proto_key` opcode: secretly passes a special dud property-handle for prototype...~~
+      - ~~Add support for the dud handle in get_property overrides of `ObjectBases`.~~
+      - ~~Add codegen support for `djs_put_proto_key`... Let the usual `get_prop <1>` get the defaulted undefined property's reference and `djs_emplace` do this job.~~
       - Implement dud handle opcode & change get_prop as needed.
    - Implement `Object.create(), Object.getPrototype()`.
  15. Add Arrays:
    - Create `Array` subclass of `ObjectBase<Value>`.
       - ~~Remove need for parent object pointers for property-handles.~~
-      - JS arrays can have "holes" and only integer-based keys can put in sequential items. However, other key types just set object properties of an array object.
-   - Add `Array` native object to provide helper methods & be the prototype of `[]` objects.
+   - ~~Add `Array` native object to provide helper methods & be the prototype of `[]` objects.~~
     - Array methods: `push, pop, at, concat, indexOf`
     - These array methods should use syntax sugar: `foo.push(1)` is actually `Array.prototype.push(foo, 1)`... Or just pass the instance's property map into the prototype method call.
  16. Add `+=, -=, *=, /=, %=` operators.
