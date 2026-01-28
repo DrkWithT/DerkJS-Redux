@@ -87,12 +87,13 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_array_push(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<Array*>(ctx->frames.back().m_this_p);
+        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(ctx->rsp - 1).to_object()); // consume an array object by reference off the stack for mutation
 
         for (int temp_item_offset = 0; temp_item_offset < argc; temp_item_offset++) {
             array_this_p->items().emplace_back(ctx->stack[passed_rbsp + temp_item_offset]);
         }
 
+        /// NOTE: By MDN, Array.prototype.push returns a new length.
         ctx->stack[passed_rsbp] = Value {
             static_cast<int>(array_this_p->items().size())
         };
@@ -102,8 +103,9 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_array_pop(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<Array*>(ctx->frames.back().m_this_p);
+        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(ctx->rsp - 1).to_object());
 
+        /// NOTE: By MDN, Array.prototype.pop returns the last element if possible, but this implementation returns undefined otherwise.
         if (array_this_p->items().empty()) {
             ctx->stack[passed_rsbp] = Value {};
         } else {
@@ -116,7 +118,7 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_array_at(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<Array*>(ctx->frames.back().m_this_p);
+        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(ctx->rsp - 1).to_object());
         auto actual_index_opt = ctx->stack[passed_rsbp].to_num_i32();
         const int items_n = array_this_p->items().size(); 
 
@@ -126,6 +128,7 @@ export namespace DerkJS {
             return false;
         }
 
+        /// NOTE: By MDN, Array.prototype.at returns from the 0th position for unsigned indices, BUT negative indices offset backwards from N (the length).
         if (auto actual_index = *actual_index_opt; actual_index >= 0 && actual_index < items_n) {
             ctx->stack[passed_rsbp] = array_this_p->items().at(actual_index);
         } else if (actual_index < 0 && items_n > 0) {
@@ -137,4 +140,6 @@ export namespace DerkJS {
 
         return true;
     }
+
+    /// TODO: add Array.prototype.indexOf()??
 }
