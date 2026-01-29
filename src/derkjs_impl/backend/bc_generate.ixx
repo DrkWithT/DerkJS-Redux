@@ -349,15 +349,16 @@ export namespace DerkJS {
             }
 
             // 2. Call the equivalent of Array.prototype.constructor(args...)
-            encode_instruction(Opcode::djs_put_const, lookup_symbol("Array").value());
+            encode_instruction(Opcode::djs_put_const, lookup_symbol("Array").value()); // prototype to bind
+            encode_instruction(Opcode::djs_put_const, lookup_symbol("Array").value()); // for Array.prototype.constructor()
             encode_instruction(Opcode::djs_put_const, lookup_symbol("constructor").value());
             encode_instruction(Opcode::djs_get_prop);
 
-            // 4. Invoke the pushing of each temporary into the fresh `[]`. Now there's a new array for use. :)
+            // 3. Invoke the construction of the array with all arguments & the Array prototype reference just above the temporaries. Now there's a new array for use. :)
             encode_instruction(
                 Opcode::djs_object_call,
                 Arg {.n = static_cast<int16_t>(item_count), .tag = Location::immediate},
-                Arg {.n = 0, .tag = Location::immediate}
+                Arg {.n = 1, .tag = Location::immediate}
             );
 
             return true;

@@ -67,8 +67,10 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_array_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        auto temp_array = std::make_unique<Array>(nullptr);
+        // 1. Consume & bind Array prototype object to a blank array
+        auto temp_array = std::make_unique<Array>(ctx->stack[ctx->rsp].to_object());
 
+        // 2. Fill with N temporary arguments
         for (int temp_item_offset = 0; temp_item_offset < argc; temp_item_offset++) {
             temp_array->items().emplace_back(ctx->stack[passed_rsbp + temp_item_offset]);
         }
@@ -80,6 +82,7 @@ export namespace DerkJS {
             return false;
         }
 
+        // 3. Put reference to new array
         ctx->stack[passed_rsbp] = Value {temp_array_p};
 
         return true;
