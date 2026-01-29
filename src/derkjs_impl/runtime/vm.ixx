@@ -944,6 +944,10 @@ export namespace DerkJS {
 
         ctx.frames.pop_back();
 
+        if (ctx.frames.empty()) {
+            return ctx.has_err;
+        }
+
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 

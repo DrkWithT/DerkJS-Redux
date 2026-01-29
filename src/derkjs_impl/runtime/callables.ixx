@@ -87,7 +87,7 @@ export namespace DerkJS {
 
             vm_context_p->frames.emplace_back(tco_call_frame_type {
                 /// NOTE: Just put nullptr- the native callee will handle its own return of control back to the interpreter.
-                nullptr,
+                vm_context_p->rip_p + 1,
                 /// NOTE: Take the `this` argument of the object passed in case the native callee needs it via the C++ API.
                 this_arg_p,
                 /// NOTE: Put unused dud values for bytecode RBP, etc. because the native callee handles its own return.

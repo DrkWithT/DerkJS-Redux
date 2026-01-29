@@ -172,8 +172,8 @@ export namespace DerkJS {
         uint8_t m_flags;
 
     public:
-        DynamicString(std::string s)
-        : m_own_props {}, m_data (std::move(s)), m_proto {nullptr}, m_flags {0x00} {}
+        DynamicString(const std::string& s)
+        : m_own_props {}, m_data {s}, m_proto {nullptr}, m_flags {0x00} {}
 
         /// BEGIN ObjectBase overrides
 

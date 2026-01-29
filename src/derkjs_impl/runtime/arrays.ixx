@@ -144,15 +144,19 @@ export namespace DerkJS {
         [[nodiscard]] auto as_string() const -> std::string override {
             std::ostringstream sout {};
 
-            for (int pending_items = m_items.size(); const auto& temp_item : m_items) {
-                sout << temp_item.to_string().value();
-                --pending_items;
-
-                if (pending_items <= 0) {
-                    break;
+            if (!m_items.empty()) {
+                for (int pending_items = m_items.size(); const auto& temp_item : m_items) {
+                    sout << temp_item.to_string().value();
+                    --pending_items;
+                    
+                    if (pending_items <= 0) {
+                        break;
+                    }
+                    
+                    sout << ',';
                 }
-
-                sout << ',';
+            } else {
+                sout << "[Array (empty)]";
             }
 
             return sout.str();
