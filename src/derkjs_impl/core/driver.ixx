@@ -101,10 +101,64 @@ export namespace DerkJS::Core {
             m_js_lexicals.emplace(lexeme, tag);
         }
 
-        /// NOTE: takes the native object's name & a StaticString <-> "item" list to preload. The item is a primitive Value OR ObjectBase<Value>.
         template <std::size_t N>
-        [[maybe_unused]] auto add_native_object(std::string name, std::array<NativePropertyStub, N> prop_list) -> bool {
-            auto object_p = std::make_unique<Object>(nullptr);
+        [[nodiscard]] auto add_anonymous_native_object(std::array<NativePropertyStub, N> prop_list) -> ObjectBase<Value>* {
+            auto anonymous_object_p = std::make_unique<Object>(nullptr);
+
+            for (auto& [stub_name, item] : prop_list) {
+                auto prop_name_p = std::make_unique<DynamicString>(stub_name);
+                auto prop_name_value = Value {prop_name_p.get()};
+
+                m_preloads.emplace_back(PreloadItem {
+                    .lexeme = stub_name,
+                    .entity = prop_name_value,
+                    .location = Location::constant
+                });
+
+                m_preloads.emplace_back(PreloadItem {
+                    .lexeme = "",
+                    .entity = std::move(prop_name_p),
+                    .location = Location::heap_obj
+                });
+
+                if (auto item_as_primitive_p = std::get_if<Value>(&item); item_as_primitive_p) {
+                    PropertyHandle<Value> prop_value_desc {prop_name_value, PropertyHandleTag::key, 0x00}; // immutable property referencing its underlying value
+
+                    if (!anonymous_object_p->set_property_value(prop_value_desc, *item_as_primitive_p)) {
+                        return nullptr;
+                    }
+                } else {
+                    auto item_as_object_p = std::get_if<std::unique_ptr<ObjectBase<Value>>>(&item);
+                    PropertyHandle<Value> prop_obj_desc {prop_name_value, PropertyHandleTag::key, 0x00};
+
+                    if (!anonymous_object_p->set_property_value(prop_obj_desc, Value {item_as_object_p->get()})) {
+                        return nullptr;
+                    } else {
+                        /// NOTE: Here, prepare an anonymous JS Object value to be inserted into the heap, likely referenced by this object.
+                        m_preloads.emplace_back(PreloadItem {
+                            .lexeme = "",
+                            .entity = std::move(*item_as_object_p),
+                            .location = Location::heap_obj
+                        });
+                    }
+                }
+            }
+
+            auto anonymous_object_raw_p = anonymous_object_p.get();
+
+            m_preloads.emplace_back(PreloadItem {
+                .lexeme = "",
+                .entity = std::move(anonymous_object_p),
+                .location = Location::heap_obj
+            });
+
+            return anonymous_object_raw_p;
+        }
+
+        /// NOTE: takes the native object's name & a StaticString <-> "item" list to preload. The item is a primitive Value OR ObjectBase<Value>.
+        template <typename ObjectSubType, std::size_t N, typename ... CtorArgs> requires (std::is_base_of_v<ObjectBase<Value>, ObjectSubType> && std::is_constructible_v<ObjectSubType, CtorArgs...>)
+        [[maybe_unused]] auto add_native_object(std::string name, std::array<NativePropertyStub, N> prop_list, CtorArgs&& ... ctor_args) -> bool {
+            auto object_p = std::make_unique<ObjectSubType>(std::forward<CtorArgs>(ctor_args)...);
 
             for (auto& [stub_name, item] : prop_list) {
                 auto prop_name_p = std::make_unique<DynamicString>(stub_name);

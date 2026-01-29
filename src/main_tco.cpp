@@ -118,19 +118,32 @@ int main(int argc, char* argv[]) {
     driver.add_js_lexical("+=", TokenTag::symbol_plus_assign);
     driver.add_js_lexical("-=", TokenTag::symbol_minus_assign);
 
-    driver.add_native_object(
+    driver.add_native_object<Object>(
         "console",
-        std::to_array(std::move(console_obj_props))
+        std::to_array(std::move(console_obj_props)),
+        nullptr // TODO: add JSObject as prototype.
     );
 
-    driver.add_native_object(
+    driver.add_native_object<Object>(
         "clock",
-        std::to_array(std::move(clock_obj_props))
+        std::to_array(std::move(clock_obj_props)),
+        nullptr // TODO: add JSObject as prototype.
     );
 
-    driver.add_native_object(
-        "Array",
+    // Add `Array.prototype` object here!
+    auto array_prototype_object_p = driver.add_anonymous_native_object(
         std::to_array(std::move(array_obj_props))
+    );
+
+    if (!array_prototype_object_p) {
+        std::println(std::cerr, "SETUP ERROR: failed to allocate Array.prototype object.");
+        return 1;
+    }
+
+    driver.add_native_object<Array>(
+        "Array",
+        std::to_array(std::move(array_obj_props)),
+        array_prototype_object_p
     );
 
     return driver.run<DispatchPolicy::tco>(source_path) ? 0 : 1;
