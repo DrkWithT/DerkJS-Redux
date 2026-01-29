@@ -12,8 +12,11 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
  - `use strict` is the locked default.
  - No automatic semicolon insertion.
 
-### Simple Print
+#### Demo: Function Expressions
 <img src="imgs/DerkJS_lambda_test.png" size="25%">
+
+#### Demo: Array methods
+<img src="imgs/DerkJS_array_methods.png" size="25%">
 
 ### Usage
  1. Give `./utility.sh` run permissions.
@@ -59,7 +62,7 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
       - Implement dud handle opcode & change get_prop as needed.
    - Implement `Object.create(), Object.getPrototype()`.
  15. Add Arrays:
-   - Create `Array` subclass of `ObjectBase<Value>`.
+   - ~~Create `Array` subclass of `ObjectBase<Value>`.~~
       - ~~Remove need for parent object pointers for property-handles.~~
    - ~~Add `Array` native object (not an actual function) to provide helper methods & be the 'interface" prototype of `[]` objects.~~
       - Array methods: `push, pop, at, indexOf`?
