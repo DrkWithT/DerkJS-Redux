@@ -334,6 +334,36 @@ export namespace DerkJS {
             return true;
         }
 
+        [[nodiscard]] auto emit_array_literal(const ArrayLiteral& array, const std::string& source) -> bool {
+            const auto& [items] = array;
+
+            // 1. Push each JS array item via evaluation.
+            int item_count = 0;
+
+            for (const auto& item_expr : items) {
+                if (!emit_expr(*item_expr, source)) {
+                    return false;
+                }
+
+                ++item_count;
+            }
+
+            // 2. Call the equivalent of Array.prototype.constructor(args...)
+            encode_instruction(Opcode::djs_put_const, lookup_symbol("Array").value()); // prototype to bind
+            encode_instruction(Opcode::djs_put_const, lookup_symbol("Array").value()); // for Array.prototype.constructor()
+            encode_instruction(Opcode::djs_put_const, lookup_symbol("constructor").value());
+            encode_instruction(Opcode::djs_get_prop);
+
+            // 3. Invoke the construction of the array with all arguments & the Array prototype reference just above the temporaries. Now there's a new array for use. :)
+            encode_instruction(
+                Opcode::djs_object_call,
+                Arg {.n = static_cast<int16_t>(item_count), .tag = Location::immediate},
+                Arg {.n = 1, .tag = Location::immediate}
+            );
+
+            return true;
+        }
+
         [[nodiscard]] auto emit_lambda(const LambdaLiteral& lambda, const std::string& source) -> bool {
             const auto& [lambda_params, lambda_body] = lambda;
             m_accessing_property = false;
@@ -636,6 +666,8 @@ export namespace DerkJS {
             } else if (auto object_p = std::get_if<ObjectLiteral>(&expr.data); object_p) {
                 /// TODO: maybe add opcode support for object cloning... could be good for instances of prototypes.
                 return emit_object_literal(*object_p, source);
+            } else if (auto array_p = std::get_if<ArrayLiteral>(&expr.data); array_p) {
+                return emit_array_literal(*array_p, source);
             } else if (auto lambda_p = std::get_if<LambdaLiteral>(&expr.data); lambda_p) {
                 return emit_lambda(*lambda_p, source);
             } else if (auto member_access_p = std::get_if<MemberAccess>(&expr.data); member_access_p) {

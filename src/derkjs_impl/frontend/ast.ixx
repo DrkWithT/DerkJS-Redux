@@ -69,6 +69,7 @@ export namespace DerkJS {
 
     struct Primitive;
     struct ObjectLiteral;
+    struct ArrayLiteral;
     struct LambdaLiteral;
     struct MemberAccess;
     struct Unary;
@@ -76,7 +77,7 @@ export namespace DerkJS {
     struct Assign;
     struct Call;
 
-    using Expr = ExprNode<Primitive, ObjectLiteral, LambdaLiteral, MemberAccess, Unary, Binary, Assign, Call>;
+    using Expr = ExprNode<Primitive, ObjectLiteral, ArrayLiteral, LambdaLiteral, MemberAccess, Unary, Binary, Assign, Call>;
     using ExprPtr = std::unique_ptr<Expr>;
 
     /// BEGIN NODE DEFINITIONS ///
@@ -92,6 +93,10 @@ export namespace DerkJS {
 
     struct ObjectLiteral {
         std::vector<ObjectField> fields;
+    };
+
+    struct ArrayLiteral {
+        std::vector<ExprPtr> items;
     };
 
     struct LambdaLiteral {

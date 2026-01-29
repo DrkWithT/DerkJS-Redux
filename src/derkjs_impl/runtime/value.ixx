@@ -545,7 +545,7 @@ export namespace DerkJS {
             } else if (allow_filler) {
                 return &m_own_props.emplace_back(std::pair {handle, Value {}}).second;
             } else if (auto prototype_p = m_proto.to_object(); prototype_p) {
-                return prototype_p->get_property_value(handle.as_parent_key(prototype_p), allow_filler);
+                return prototype_p->get_property_value(handle, allow_filler);
             }
 
             return nullptr;

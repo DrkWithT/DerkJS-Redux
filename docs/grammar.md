@@ -1,10 +1,11 @@
 ### Grammar (Expressions)
 
 ```
-<primary> = "undefined" | "null" | "this" | <identifier> | <boolean> | <number> | <object> | <lambda> | "(" <expr> ")"
+<primary> = "undefined" | "null" | "this" | <identifier> | <boolean> | <number> | <object> | <array> | <lambda> | "(" <expr> ")"
 <object> = "{" (<property> ",")* "}"
-<lambda> = "function" "(" <identifier> ( "," <identifier> )* ")" <block>
 <property> = <identifier> : <expr>
+<array> = "[" (<expr> ("," <expr>)* )? "]"
+<lambda> = "function" "(" <identifier> ( "," <identifier> )* ")" <block>
 <member> = <primary> ( "." <identifier> | "[" <expr> "]" )*
     ; TODO: Update member grammar rule to support longer accesses.
 <new> = "new"? <member>

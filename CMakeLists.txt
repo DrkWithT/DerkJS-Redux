@@ -14,13 +14,14 @@ target_sources(
     src/derkjs_impl/frontend/ast.ixx
     src/derkjs_impl/frontend/parse.ixx
     src/derkjs_impl/runtime/objects.ixx
+    src/derkjs_impl/runtime/arrays.ixx
     src/derkjs_impl/runtime/callables.ixx
     src/derkjs_impl/runtime/strings.ixx
     src/derkjs_impl/runtime/value.ixx
     src/derkjs_impl/runtime/bytecode.ixx
     src/derkjs_impl/backend/bc_generate.ixx
     src/derkjs_impl/runtime/vm.ixx
-    src/derkjs_impl/runtime/builtins.ixx
+    src/derkjs_impl/runtime/natives.ixx
     src/derkjs_impl/core/driver.ixx
 )
 

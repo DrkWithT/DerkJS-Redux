@@ -153,6 +153,8 @@ export namespace DerkJS {
                 );
             case TokenTag::left_brace:
                 return parse_object(lexer, source);
+            case TokenTag::left_bracket:
+                return parse_array(lexer, source);
             case TokenTag::keyword_function:
                 return parse_lambda(lexer, source);
             case TokenTag::left_paren:
@@ -222,6 +224,39 @@ export namespace DerkJS {
                 0,
                 object_lexeme_begin,
                 m_current.start - object_lexeme_begin + 1
+            );
+        }
+
+        [[nodiscard]] auto parse_array(Lexer& lexer, const std::string& source) -> ExprPtr {
+            // ArrayLiteral
+            const auto array_lexeme_begin = m_current.start;
+            consume_any(lexer, source); // eat pre-checked '[' since this is only called by parse_primary()
+
+            std::vector<ExprPtr> temp_items;
+
+            if (!m_current.match_tag_to(TokenTag::right_bracket)) {
+                temp_items.emplace_back(parse_logical_or(lexer, source));
+            }
+
+            while (!at_eof()) {
+                if (!m_current.match_tag_to(TokenTag::comma)) {
+                    break;
+                }
+
+                consume_any(lexer, source);
+
+                temp_items.emplace_back(parse_logical_or(lexer, source));
+            }
+
+            consume(lexer, source, TokenTag::right_bracket);
+
+            return std::make_unique<Expr>(
+                ArrayLiteral {
+                    .items = std::move(temp_items)
+                },
+                0,
+                array_lexeme_begin,
+                m_current.start - array_lexeme_begin + 1
             );
         }
 

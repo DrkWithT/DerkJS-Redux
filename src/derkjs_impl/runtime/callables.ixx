@@ -74,10 +74,9 @@ export namespace DerkJS {
         [[nodiscard]] auto call(void* opaque_ctx_p, int argc, [[maybe_unused]] bool has_this_arg) -> bool override {
             /// NOTE: On usage, the `opaque_ctx_p` argument MUST point to an `ExternVMCtx` and MUST NOT own the context.
             auto vm_context_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
+            ObjectBase<Value>* this_arg_p = (has_this_arg) ? vm_context_p->stack[vm_context_p->rsp - 1].to_object() : nullptr;
 
             if (has_this_arg) {
-                /// NOTE: On this present: Mem-Swap the 2 important Values of the object to call soon: the callee swaps down with the duplicated parent object for `this`. Then discard the object-referencing pointer from the top (`this` argument).
-                std::swap_ranges(reinterpret_cast<std::byte*>(vm_context_p->stack.data() + vm_context_p->rsp), reinterpret_cast<std::byte*>(vm_context_p->stack.data() + vm_context_p->rsp) + sizeof(Value), reinterpret_cast<std::byte*>(vm_context_p->stack.data() + vm_context_p->rsp - 1));
                 --vm_context_p->rsp;
             }
 
@@ -86,10 +85,21 @@ export namespace DerkJS {
             const int16_t caller_rsbp = vm_context_p->rsbp;
             vm_context_p->rsbp = callee_rsbp;
 
+            vm_context_p->frames.emplace_back(tco_call_frame_type {
+                /// NOTE: Just put nullptr- the native callee will handle its own return of control back to the interpreter.
+                nullptr,
+                /// NOTE: Take the `this` argument of the object passed in case the native callee needs it via the C++ API.
+                this_arg_p,
+                /// NOTE: Put unused dud values for bytecode RBP, etc. because the native callee handles its own return.
+                -1,
+                -1
+            });
+
             // 2. Make native call
             auto native_call_ok = m_native_ptr(vm_context_p, &m_own_properties, argc);
 
             // 3. Restore caller stack state after native call
+            vm_context_p->frames.pop_back();
             vm_context_p->rsp = callee_rsbp;
             vm_context_p->rsbp = caller_rsbp;
 

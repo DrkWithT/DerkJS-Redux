@@ -20,3 +20,6 @@
  - For simplicity, it's a special variable referencing a local context of a function.
    - This would help represent closures... The caller's is the parent prototype, the callee's is the instance.
  - IFF a function returns `this`, it's a constructor.
+
+### Arrays
+JS arrays can have "holes" and only integer-based keys can put in sequential items. However, other key types just set object properties of an array object.
