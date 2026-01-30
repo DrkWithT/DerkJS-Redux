@@ -38,7 +38,8 @@ export namespace DerkJS {
         virtual auto is_prototype() const noexcept -> bool = 0;
 
         virtual auto get_prototype() noexcept -> ObjectBase<V>* = 0;
-        virtual auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<V>, V>& = 0;
+        virtual auto get_seq_items() noexcept -> std::vector<V>* = 0;
+        virtual auto get_own_prop_pool() noexcept -> PropPool<PropertyHandle<V>, V>& = 0;
         virtual auto get_property_value(const PropertyHandle<V>& handle, bool allow_filler) -> V* = 0;
         virtual auto set_property_value(const PropertyHandle<V>& handle, const V& value) -> V* = 0;
         virtual auto del_property_value(const PropertyHandle<V>& handle) -> bool = 0;
@@ -97,7 +98,7 @@ export namespace DerkJS {
             m_items.resize(capacity);
         }
 
-        [[nodiscard]] auto get_overhead() const noexcept -> std:;size_t {
+        [[nodiscard]] auto get_overhead() const noexcept -> std::size_t {
             return m_overhead;
         }
     

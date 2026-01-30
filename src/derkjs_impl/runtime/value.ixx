@@ -531,6 +531,10 @@ export namespace DerkJS {
             return m_proto.to_object();
         }
 
+        [[nodiscard]] auto get_seq_items() noexcept -> std::vector<Value>* override {
+            return nullptr;
+        }
+
         auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<Value>, Value>& override {
             return m_own_props;
         }
