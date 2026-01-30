@@ -4,4 +4,6 @@ var ans = (function(a, b) {
     return foo(a, b);
 })(2, 21);
 
-return ans;
+console.log(ans);
+
+return 0;

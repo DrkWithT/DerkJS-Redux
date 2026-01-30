@@ -6,4 +6,6 @@ function fib_r(n) {
     return fib_r(n - 1) + fib_r(n - 2);
 }
 
-return fib_r(35);
+console.log(fib_r(35));
+
+return 0;

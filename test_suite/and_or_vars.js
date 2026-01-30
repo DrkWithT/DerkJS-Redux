@@ -7,4 +7,6 @@ var z = null;
 var ans_2 = z || y || x * x;
 
 /* ans_2 MUST be 100 */
-return ans_2;
+console.log(ans_2);
+
+return 0;

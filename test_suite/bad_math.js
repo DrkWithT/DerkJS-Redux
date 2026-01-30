@@ -4,4 +4,6 @@ var a = 10;
 var b = undefined;
 
 /* This should yield NaN. */
-return a + b;
+console.log(a + b);
+
+return 0;
