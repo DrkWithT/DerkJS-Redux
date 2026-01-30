@@ -13,6 +13,8 @@ function get_quad(x, y) {
 }
 
 /* NOTE: This should give 3 */
-console.log(get_quad(-4.5, -1.5));
+var ans = get_quad(-4.5, -1.5);
+
+console.log(ans);
 
 return 0;
