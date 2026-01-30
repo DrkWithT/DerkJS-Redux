@@ -65,7 +65,11 @@ export namespace DerkJS {
             return m_proto;
         }
 
-        auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<Value>, Value>& override {
+        [[nodiscard]] auto get_seq_items() noexcept -> std::vector<Value>* override {
+            return nullptr;
+        }
+
+        auto get_own_prop_pool() noexcept -> PropPool<PropertyHandle<Value>, Value>& override {
             return m_own_props;
         }
 
@@ -172,8 +176,8 @@ export namespace DerkJS {
         uint8_t m_flags;
 
     public:
-        DynamicString(std::string s)
-        : m_own_props {}, m_data (std::move(s)), m_proto {nullptr}, m_flags {0x00} {}
+        DynamicString(const std::string& s)
+        : m_own_props {}, m_data {s}, m_proto {nullptr}, m_flags {0x00} {}
 
         /// BEGIN ObjectBase overrides
 
@@ -201,7 +205,11 @@ export namespace DerkJS {
             return nullptr;
         }
 
-        [[nodiscard]] auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<Value>, Value>& override {
+        [[nodiscard]] auto get_seq_items() noexcept -> std::vector<Value>* override {
+            return nullptr;
+        }
+
+        [[nodiscard]] auto get_own_prop_pool() noexcept -> PropPool<PropertyHandle<Value>, Value>& override {
             return m_own_props;
         }
 

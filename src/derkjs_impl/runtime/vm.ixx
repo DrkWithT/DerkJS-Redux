@@ -13,6 +13,7 @@ import runtime.objects;
 import runtime.arrays;
 import runtime.strings;
 import runtime.value;
+import runtime.gc;
 import runtime.bytecode;
 
 export namespace DerkJS {
@@ -78,6 +79,7 @@ export namespace DerkJS {
     struct ExternVMCtx {
         using call_frame_type = CallFrame<DispatchPolicy::tco>;
 
+        GC gc;
         PolyPool<ObjectBase<Value>> heap;
         std::vector<Value> stack;
         std::vector<call_frame_type> frames;
@@ -104,8 +106,8 @@ export namespace DerkJS {
 
         bool has_err;
 
-        ExternVMCtx(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit)
-        : heap (std::move(prgm.heap_items)), stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, rsbp {0}, rsp {-1}, rpk {false}, has_err {false} {
+        ExternVMCtx(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit, std::size_t gc_heap_threshold)
+        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, rsbp {0}, rsp {-1}, rpk {false}, has_err {false} {
             stack.reserve(stack_length_limit);
             stack.resize(stack_length_limit);
             frames.reserve(call_frame_limit);
@@ -581,7 +583,7 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_ref_local(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         auto& target_local_ref = ctx.stack[ctx.rsbp + a0];
 
-        if (const auto target_tag = target_local_ref.get_tag(); target_tag == ValueTag::val_ref || target_tag == ValueTag::object) {
+        if (const auto target_tag = target_local_ref.get_tag(); target_tag == ValueTag::val_ref/* || target_tag == ValueTag::object*/) {
             ctx.stack[ctx.rsp + 1] = target_local_ref;
         } else {
             ctx.stack[ctx.rsp + 1] = Value {&ctx.stack[ctx.rsbp + a0]};
@@ -642,6 +644,8 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_put_obj_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.gc(ctx.heap, ctx.stack, ctx.rsp);
+
         auto obj_ref_p = ctx.heap.add_item(ctx.heap.get_next_id(), Object {nullptr});
 
         ctx.has_err = !obj_ref_p;
@@ -654,6 +658,8 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_put_arr_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.gc(ctx.heap, ctx.stack, ctx.rsp);
+
         auto array_prototype_p = ctx.stack[ctx.rsp].to_object();
         auto array_ref_p = ctx.heap.add_item(ctx.heap.get_next_id(), Array {array_prototype_p});
 
@@ -745,6 +751,8 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_strcat(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        ctx.gc(ctx.heap, ctx.stack, ctx.rsp);
+
         DynamicString result {ctx.stack[ctx.rsp].to_string().value()};
         result.append_back(ctx.stack[ctx.rsp - 1].to_string().value());
 
@@ -944,6 +952,10 @@ export namespace DerkJS {
 
         ctx.frames.pop_back();
 
+        if (ctx.frames.empty()) {
+            return ctx.has_err;
+        }
+
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -970,8 +982,8 @@ export namespace DerkJS {
         /// NOTE: This SHOULD NOT be modified directly!
         ExternVMCtx m_ctx;
 
-        explicit VM(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit)
-        : m_ctx {prgm, stack_length_limit, call_frame_limit} {}
+        explicit VM(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit, std::size_t gc_threshold)
+        : m_ctx {prgm, stack_length_limit, call_frame_limit, gc_threshold} {}
 
         [[nodiscard]] auto peek_final_result() const noexcept -> const Value& {
             return m_ctx.stack[0];

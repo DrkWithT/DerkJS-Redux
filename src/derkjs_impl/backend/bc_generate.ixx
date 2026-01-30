@@ -143,7 +143,7 @@ export namespace DerkJS {
                 m_global_consts_map[symbol] = next_global_loc;
 
                 return next_global_loc;
-            } else if constexpr (std::is_same_v<plain_item_type, StaticString> || std::is_same_v<plain_item_type, DynamicString> || std::is_same_v<plain_item_type, std::unique_ptr<ObjectBase<Value>>>) {
+            } else if constexpr (std::is_same_v<plain_item_type, StaticString> || std::is_same_v<plain_item_type, std::unique_ptr<ObjectBase<Value>>>) {
                 // 1a, 1b. For global & interned string references as constants:
                 const int16_t next_global_ref_const_id = m_consts.size();
                 Arg next_global_ref_loc {
@@ -154,6 +154,24 @@ export namespace DerkJS {
                 if (auto heap_static_str_p = m_heap.add_item(m_heap.get_next_id(), std::move(item)); heap_static_str_p) {
                     m_consts.emplace_back(Value {heap_static_str_p});
                     m_global_consts_map[symbol] = next_global_ref_loc;
+                    m_heap.update_tenure_count();
+                } else {
+                    return {};
+                }
+
+                return next_global_ref_loc;
+            } else if constexpr (std::is_same_v<plain_item_type, std::string>) {
+                // 1c. For std::string as DynamicString-reference constants:
+                const int16_t next_global_ref_const_id = m_consts.size();
+                Arg next_global_ref_loc {
+                    .n = next_global_ref_const_id,
+                    .tag = Location::constant
+                };
+
+                if (auto heap_static_str_p = m_heap.add_item(m_heap.get_next_id(), std::make_unique<DynamicString>(std::forward<Item>(item))); heap_static_str_p) {
+                    m_consts.emplace_back(Value {heap_static_str_p});
+                    m_global_consts_map[symbol] = next_global_ref_loc;
+                    m_heap.update_tenure_count();
                 } else {
                     return {};
                 }
@@ -234,15 +252,15 @@ export namespace DerkJS {
                 switch (expr_token_tag) {
                 case TokenTag::keyword_this:
                     m_has_string_ops = false;
-                    return record_valued_symbol(atom_lexeme, RecordSpecialThisOpt {});
+                    return record_valued_symbol("this", RecordSpecialThisOpt {});
                 case TokenTag::keyword_undefined:
                     m_has_string_ops = false;
                     m_accessing_property = false;
-                    return record_valued_symbol(atom_lexeme, Value {});
+                    return record_valued_symbol("undefined", Value {});
                 case TokenTag::keyword_null:
                     m_has_string_ops = false;
                     m_accessing_property = false;
-                    return record_valued_symbol(atom_lexeme, Value {JSNullOpt {}});
+                    return record_valued_symbol("null", Value {JSNullOpt {}});
                 case TokenTag::keyword_true: case TokenTag::keyword_false:
                     m_has_string_ops = false;
                     m_accessing_property = false;
@@ -262,7 +280,7 @@ export namespace DerkJS {
                     if (const int atom_text_length = atom_lexeme.length(); atom_text_length <= StaticString::max_length_v) {
                         return record_valued_symbol(atom_lexeme, StaticString {nullptr, atom_lexeme.c_str(), atom_text_length});
                     } else {
-                        return record_valued_symbol(atom_lexeme, DynamicString {std::move(atom_lexeme)});
+                        return record_valued_symbol(atom_lexeme, atom_lexeme);
                     }
                 }
                 case TokenTag::keyword_prototype: {
@@ -276,7 +294,7 @@ export namespace DerkJS {
                         if (const int atom_text_length = atom_lexeme.length(); atom_text_length <= StaticString::max_length_v) {
                             return record_valued_symbol(atom_lexeme, StaticString {nullptr, atom_lexeme.c_str(), atom_text_length});
                         } else {
-                            return record_valued_symbol(atom_lexeme, DynamicString {std::move(atom_lexeme)});
+                            return record_valued_symbol(atom_lexeme, atom_lexeme);
                         }
                     } else {
                         return lookup_symbol(atom_lexeme);
@@ -885,6 +903,7 @@ export namespace DerkJS {
                     auto& js_object_p = std::get<std::unique_ptr<ObjectBase<Value>>>(pre_entity);
                     if (pre_name.empty()) {
                         m_heap.add_item(m_heap.get_next_id(), std::move(js_object_p));
+                        m_heap.update_tenure_count();
                     } else {
                         record_valued_symbol(pre_name, std::move(js_object_p));
                     }

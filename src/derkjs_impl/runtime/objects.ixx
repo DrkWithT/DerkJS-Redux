@@ -38,7 +38,8 @@ export namespace DerkJS {
         virtual auto is_prototype() const noexcept -> bool = 0;
 
         virtual auto get_prototype() noexcept -> ObjectBase<V>* = 0;
-        virtual auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<V>, V>& = 0;
+        virtual auto get_seq_items() noexcept -> std::vector<V>* = 0;
+        virtual auto get_own_prop_pool() noexcept -> PropPool<PropertyHandle<V>, V>& = 0;
         virtual auto get_property_value(const PropertyHandle<V>& handle, bool allow_filler) -> V* = 0;
         virtual auto set_property_value(const PropertyHandle<V>& handle, const V& value) -> V* = 0;
         virtual auto del_property_value(const PropertyHandle<V>& handle) -> bool = 0;
@@ -79,23 +80,39 @@ export namespace DerkJS {
     template <typename ItemBase> requires (std::is_polymorphic_v<ItemBase>)
     class PolyPool {
     public:
+        // ObjectOverhead ~= sizeof(PropPool<...>) + sizeof(Value) + <possible-metadata> = 24 + 16 + 8;
+        static constexpr std::size_t object_overhead = 48UL + 16UL + 8UL;
         static constexpr int max_id = 32767;
 
     private:
         std::vector<std::unique_ptr<ItemBase>> m_items;
         std::vector<int> m_free_slots;
+        std::size_t m_overhead;
         int m_next_id;
         int m_id_max;
+        int m_last_tenured_id; // mark the end of preloaded native objects, etc.
 
     public:
         PolyPool(int capacity)
-        : m_items {}, m_free_slots {}, m_next_id {0}, m_id_max {capacity} {
+        : m_items {}, m_free_slots {}, m_overhead {0UL}, m_next_id {0}, m_id_max {capacity}, m_last_tenured_id {-1} {
             m_items.reserve(capacity);
             m_items.resize(capacity);
+        }
+
+        [[nodiscard]] auto get_overhead() const noexcept -> std::size_t {
+            return m_overhead;
         }
     
         [[nodiscard]] auto view_items() const noexcept -> const std::vector<std::unique_ptr<ItemBase>>& {
             return m_items;
+        }
+
+        [[nodiscard]] auto items() noexcept -> const std::vector<std::unique_ptr<ItemBase>>& {
+            return m_items;
+        }
+
+        void update_tenure_count() {
+            ++m_last_tenured_id;
         }
 
         [[nodiscard]] auto get_next_id() noexcept -> int {
@@ -160,6 +177,7 @@ export namespace DerkJS {
             }
 
             m_items[slot_id] = std::make_unique<item_kind_type>(std::forward<item_kind_type>(item));
+            m_overhead += object_overhead;
 
             return m_items[slot_id].get();
         }
@@ -181,6 +199,7 @@ export namespace DerkJS {
             }
 
             m_items[slot_id] = std::unique_ptr<ItemKind>(item_p);
+            m_overhead += object_overhead;
 
             return m_items[slot_id].get();
         }
@@ -202,17 +221,19 @@ export namespace DerkJS {
             }
 
             m_items[slot_id] = std::move(item_sp);
+            m_overhead += object_overhead;
 
             return m_items[slot_id].get();
         }
 
-        [[nodiscard]] auto remove_item(int id) -> bool {
-            if (id < 0 || id >= static_cast<int>(m_items.size())) {
+        [[maybe_unused]] auto remove_item(int id) -> bool {
+            if (id < 0 || id >= static_cast<int>(m_items.size()) || id <= m_last_tenured_id) {
                 return false;
             }
 
             m_items[id] = {};
             m_free_slots.emplace_back(id);
+            m_overhead -= object_overhead;
 
             return true;
         }

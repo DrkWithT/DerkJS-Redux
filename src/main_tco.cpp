@@ -6,6 +6,9 @@
 
 import derkjs_impl;
 
+constexpr std::size_t derkjs_gc_threshold = 144000; // ~ 2K heap objects
+constexpr int derkjs_heap_count = 4096;
+
 int main(int argc, char* argv[]) {
     using namespace DerkJS;
 
@@ -22,7 +25,7 @@ int main(int argc, char* argv[]) {
             .version_minor = 1,
             .version_patch = 2
         },
-        1024 // increase object count limit for VM if needed
+        derkjs_heap_count // increase object count limit for VM if needed
     };
 
     std::string source_path;
@@ -146,5 +149,5 @@ int main(int argc, char* argv[]) {
         array_prototype_object_p
     );
 
-    return driver.run<DispatchPolicy::tco>(source_path) ? 0 : 1;
+    return driver.run<DispatchPolicy::tco>(source_path, derkjs_gc_threshold) ? 0 : 1;
 }

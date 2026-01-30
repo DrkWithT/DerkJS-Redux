@@ -54,7 +54,11 @@ export namespace DerkJS {
             return nullptr;
         }
 
-        [[nodiscard]] auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<Value>, Value>& override {
+        [[nodiscard]] auto get_seq_items() noexcept -> std::vector<Value>* override {
+            return nullptr;
+        }
+
+        [[nodiscard]] auto get_own_prop_pool() noexcept -> PropPool<PropertyHandle<Value>, Value>& override {
             return m_own_properties;
         }
 
@@ -87,7 +91,7 @@ export namespace DerkJS {
 
             vm_context_p->frames.emplace_back(tco_call_frame_type {
                 /// NOTE: Just put nullptr- the native callee will handle its own return of control back to the interpreter.
-                nullptr,
+                vm_context_p->rip_p + 1,
                 /// NOTE: Take the `this` argument of the object passed in case the native callee needs it via the C++ API.
                 this_arg_p,
                 /// NOTE: Put unused dud values for bytecode RBP, etc. because the native callee handles its own return.
@@ -217,7 +221,11 @@ export namespace DerkJS {
             return m_prototype.to_object();
         }
 
-        [[nodiscard]] auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<Value>, Value>& override {
+        [[nodiscard]] auto get_seq_items() noexcept -> std::vector<Value>* override {
+            return nullptr;
+        }
+
+        [[nodiscard]] auto get_own_prop_pool() noexcept -> PropPool<PropertyHandle<Value>, Value>& override {
             return m_own_properties;
         }
 

@@ -85,7 +85,11 @@ export namespace DerkJS {
             return m_prototype.to_object();
         }
 
-        [[nodiscard]] auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<Value>, Value>& override {
+        [[nodiscard]] auto get_seq_items() noexcept -> std::vector<Value>* override {
+            return &m_items;
+        }
+
+        [[nodiscard]] auto get_own_prop_pool() noexcept -> PropPool<PropertyHandle<Value>, Value>& override {
             return m_props;
         }
 
@@ -144,15 +148,19 @@ export namespace DerkJS {
         [[nodiscard]] auto as_string() const -> std::string override {
             std::ostringstream sout {};
 
-            for (int pending_items = m_items.size(); const auto& temp_item : m_items) {
-                sout << temp_item.to_string().value();
-                --pending_items;
-
-                if (pending_items <= 0) {
-                    break;
+            if (!m_items.empty()) {
+                for (int pending_items = m_items.size(); const auto& temp_item : m_items) {
+                    sout << temp_item.to_string().value();
+                    --pending_items;
+                    
+                    if (pending_items <= 0) {
+                        break;
+                    }
+                    
+                    sout << ',';
                 }
-
-                sout << ',';
+            } else {
+                sout << "[Array (empty)]";
             }
 
             return sout.str();
