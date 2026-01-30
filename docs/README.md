@@ -49,12 +49,13 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
    - ~~Add semantic checker support.~~
    - ~~Add `Lambda` internals for bytecode-callables.~~
    - ~~Modify the codegen to handle callable objects.~~
- 14. Add support for `this` in functions & objects.
+ 14. ~~Add support for `this` in functions & objects.~~
    - Implement `Object.create(), Object.getPrototype()`.
  15. Add Arrays:
    - ~~Create `Array` subclass of `ObjectBase<Value>`.~~
       - ~~Remove need for parent object pointers for property-handles.~~
    - ~~Add `Array` native object (not an actual function) to provide helper methods & be the 'interface" prototype of `[]` objects.~~
-      - Array methods: `push, pop, at, indexOf`?
- 16. Add mark and sweep GC.
- 17. Add `+=, -=, *=, /=, %=` operators.
+      - ~~Array methods: `push, pop, at, indexOf, reverse`.~~
+ 16. ~~Add mark and sweep GC.~~
+ 17. Add support for immutable properties, configurability, etc.
+ 18. Add `+=, -=, *=, /=, %=` operators.
