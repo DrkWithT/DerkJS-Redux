@@ -989,7 +989,7 @@ export namespace DerkJS {
             return m_ctx.stack[0];
         }
 
-        [[nodiscard]] inline auto operator()() -> bool {
+        [[nodiscard]] auto operator()() -> bool {
             return dispatch_op(m_ctx, m_ctx.rip_p->args[0], m_ctx.rip_p->args[1]);
         }
     };

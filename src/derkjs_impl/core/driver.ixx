@@ -224,18 +224,18 @@ export namespace DerkJS::Core {
 
         /// TODO: run stages before VM here & add configs for VM limits.
         template <DispatchPolicy Dp>
-        [[nodiscard]] auto run(const std::string& file_path, std::size_t gc_threshold) -> bool {
+        [[nodiscard]] auto run(const std::string& file_path, std::size_t gc_threshold) -> int {
             auto script_ast = parse_script(file_path, read_script(file_path));
 
             if (!script_ast) {
-                return false;
+                return 1;
             }
 
             const auto& ast_ref = script_ast.value();
             auto prgm = compile_script(ast_ref);
 
             if (!prgm) {
-                return false;
+                return 1;
             }
 
             if (m_allow_bytecode_dump) {
@@ -245,12 +245,12 @@ export namespace DerkJS::Core {
             DerkJS::VM<Dp> vm {prgm.value(), default_stack_size, default_call_depth_limit, gc_threshold};
 
             auto derkjs_start_time = std::chrono::steady_clock::now();
-            const auto vm_failed = vm();
+            const auto derkjs_had_error = vm();
             auto derkjs_running_time = std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::steady_clock::now() - derkjs_start_time);
 
             std::println("DerkJS [Result]: \x1b[1;32m{}\x1b[0m\n\nFinished in \x1b[1;33m{}\x1b[0m", vm.peek_final_result().to_string().value(), derkjs_running_time);
 
-            return !vm_failed;
+            return (derkjs_had_error) ? 1 : vm.peek_final_result().to_num_i32().value();
         }
     };
 }
