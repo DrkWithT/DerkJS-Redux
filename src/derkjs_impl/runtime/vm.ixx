@@ -583,7 +583,7 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_ref_local(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         auto& target_local_ref = ctx.stack[ctx.rsbp + a0];
 
-        if (const auto target_tag = target_local_ref.get_tag(); target_tag == ValueTag::val_ref || target_tag == ValueTag::object) {
+        if (const auto target_tag = target_local_ref.get_tag(); target_tag == ValueTag::val_ref/* || target_tag == ValueTag::object*/) {
             ctx.stack[ctx.rsp + 1] = target_local_ref;
         } else {
             ctx.stack[ctx.rsp + 1] = Value {&ctx.stack[ctx.rsbp + a0]};

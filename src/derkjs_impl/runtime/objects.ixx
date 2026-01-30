@@ -90,10 +90,11 @@ export namespace DerkJS {
         std::size_t m_overhead;
         int m_next_id;
         int m_id_max;
+        int m_last_tenured_id; // mark the end of preloaded native objects, etc.
 
     public:
         PolyPool(int capacity)
-        : m_items {}, m_free_slots {}, m_overhead {0UL}, m_next_id {0}, m_id_max {capacity} {
+        : m_items {}, m_free_slots {}, m_overhead {0UL}, m_next_id {0}, m_id_max {capacity}, m_last_tenured_id {-1} {
             m_items.reserve(capacity);
             m_items.resize(capacity);
         }
@@ -108,6 +109,10 @@ export namespace DerkJS {
 
         [[nodiscard]] auto items() noexcept -> const std::vector<std::unique_ptr<ItemBase>>& {
             return m_items;
+        }
+
+        void update_tenure_count() {
+            ++m_last_tenured_id;
         }
 
         [[nodiscard]] auto get_next_id() noexcept -> int {
@@ -222,7 +227,7 @@ export namespace DerkJS {
         }
 
         [[maybe_unused]] auto remove_item(int id) -> bool {
-            if (id < 0 || id >= static_cast<int>(m_items.size())) {
+            if (id < 0 || id >= static_cast<int>(m_items.size()) || id <= m_last_tenured_id) {
                 return false;
             }
 
