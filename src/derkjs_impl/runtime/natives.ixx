@@ -69,7 +69,7 @@ export namespace DerkJS {
         const auto exit_status = ctx->stack.at(passed_rsbp).to_num_i32().value_or(1);
 
         ctx->stack[0] = Value {exit_status};
-        ctx->frames.clear();
+        ctx->rip_p = nullptr;
 
         return true;
     }
