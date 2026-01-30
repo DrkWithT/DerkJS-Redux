@@ -535,7 +535,7 @@ export namespace DerkJS {
             return nullptr;
         }
 
-        auto get_own_prop_pool() const noexcept -> const PropPool<PropertyHandle<Value>, Value>& override {
+        auto get_own_prop_pool() noexcept -> PropPool<PropertyHandle<Value>, Value>& override {
             return m_own_props;
         }
 
@@ -606,13 +606,6 @@ export namespace DerkJS {
                 return true;
             }
 
-            const auto& self_props = get_own_prop_pool();
-            const auto& other_props = other.get_own_prop_pool();
-
-            if (self_props.size() != other_props.size()) {
-                return false;
-            }
-
             // TODO
 
             return true;
@@ -623,13 +616,6 @@ export namespace DerkJS {
                 return false;
             }
 
-            const auto& self_props = get_own_prop_pool();
-            const auto& other_props = other.get_own_prop_pool();
-
-            if (self_props.size() != other_props.size()) {
-                return false;
-            }
-
             // TODO
 
             return true;
@@ -637,13 +623,6 @@ export namespace DerkJS {
 
         [[nodiscard]] auto operator>(const ObjectBase& other) const noexcept -> bool override {
             if (get_class_name() != other.get_class_name()) {
-                return false;
-            }
-
-            const auto& self_props = get_own_prop_pool();
-            const auto& other_props = other.get_own_prop_pool();
-
-            if (self_props.size() != other_props.size()) {
                 return false;
             }
 

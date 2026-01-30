@@ -92,7 +92,7 @@ namespace DerkJS {
             }
 
             // 3. Delete all object IDs that are "dead".
-            for (auto& [next_object_p, life_info] : m_tracked) {
+            for (auto [next_object_p, life_info] : m_tracked) {
                 if (auto [target_id, target_mark] = life_info; target_mark == GCMark::dead) {
                     heap.remove_item(target_id);
                     reap_count++;

@@ -224,7 +224,7 @@ export namespace DerkJS::Core {
 
         /// TODO: run stages before VM here & add configs for VM limits.
         template <DispatchPolicy Dp>
-        [[nodiscard]] auto run(const std::string& file_path) -> bool {
+        [[nodiscard]] auto run(const std::string& file_path, std::size_t gc_threshold) -> bool {
             auto script_ast = parse_script(file_path, read_script(file_path));
 
             if (!script_ast) {
@@ -242,7 +242,7 @@ export namespace DerkJS::Core {
                 disassemble_program(prgm.value());
             }
 
-            DerkJS::VM<Dp> vm {prgm.value(), default_stack_size, default_call_depth_limit};
+            DerkJS::VM<Dp> vm {prgm.value(), default_stack_size, default_call_depth_limit, gc_threshold};
 
             auto derkjs_start_time = std::chrono::steady_clock::now();
             const auto vm_failed = vm();

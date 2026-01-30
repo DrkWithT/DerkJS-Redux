@@ -8,6 +8,7 @@ export import runtime.value;
 export import runtime.strings;
 export import runtime.callables;
 export import runtime.arrays;
+export import runtime.gc;
 export import runtime.bytecode;
 export import runtime.vm;
 export import runtime.natives;
