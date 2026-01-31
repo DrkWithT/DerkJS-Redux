@@ -753,7 +753,7 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_strcat(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         ctx.gc(ctx.heap, ctx.stack, ctx.rsp);
 
-        DynamicString result {ctx.stack[ctx.rsp].to_string().value()};
+        DynamicString result {ctx.stack[ctx.rsp].to_object()->get_prototype(), ctx.stack[ctx.rsp].to_string().value()};
         result.append_back(ctx.stack[ctx.rsp - 1].to_string().value());
 
         if (auto temp_str_p = ctx.heap.add_item(ctx.heap.get_next_id(), std::move(result)); !temp_str_p) {
@@ -924,12 +924,6 @@ export namespace DerkJS {
             return false;
         }
 
-        if (ctx.rip_p == nullptr) {
-            return true;
-        }
-
-        ++ctx.rip_p;
-
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -972,7 +966,7 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        if (!ctx.rip_p || ctx.has_err) {
+        if (ctx.has_err + ctx.frames.empty()) {
             return ctx.has_err;
         }
 
