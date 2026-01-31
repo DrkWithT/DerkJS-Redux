@@ -67,11 +67,34 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_property_value([[maybe_unused]] const PropertyHandle<Value>& handle, [[maybe_unused]] bool allow_filler) -> Value* override {
+            if (handle.is_proto_key()) {
+                return &m_prototype;
+            } else if (auto property_entry_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&handle](const auto& prop_pair) -> bool {
+                return prop_pair.first == handle;
+            }); property_entry_it != m_own_props.end()) {
+                return &property_entry_it->second;
+            } else if (allow_filler) {
+                return &m_own_props.emplace_back(std::pair {handle, Value {}}).second;
+            } else if (auto prototype_p = m_prototype.to_object(); prototype_p) {
+                return prototype_p->get_property_value(handle, allow_filler);
+            }
+
             return nullptr;
         }
 
         [[nodiscard]] auto set_property_value([[maybe_unused]] const PropertyHandle<Value>& handle, const Value& value) -> Value* override {
-            return nullptr;
+            if (handle.is_proto_key()) {
+                m_prototype = value;
+                return &m_prototype;
+            } else if (auto old_prop_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&handle](const auto& prop_pair) -> bool {
+                return prop_pair.first == handle;
+            }); old_prop_it == m_own_props.end()) {
+                m_own_props.emplace_back(handle, value);
+                return &m_own_props.back().second;
+            } else {
+                old_prop_it->second = value;
+                return &old_prop_it->second;
+            }
         }
 
         [[nodiscard]] auto del_property_value([[maybe_unused]] const PropertyHandle<Value>& handle) -> bool override {
@@ -117,7 +140,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_slice(int start, int length) -> std::unique_ptr<StringBase> override {
-            return std::make_unique<DynamicString>(m_data.substr(start, length));
+            return std::make_unique<DynamicString>(m_prototype.to_object(), m_data.substr(start, length));
         }
 
         [[nodiscard]] auto get_length() const noexcept -> int override {

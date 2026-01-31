@@ -27,7 +27,7 @@ export namespace DerkJS {
 
         try {
             ctx->stack[passed_rsbp] = Value {std::stoi(temp_str)};
-        } catch (const std::runtime_error& err) {
+        } catch (const std::exception& err) {
             std::println(std::cerr, "Invalid integer literal!");
             ctx->stack[passed_rsbp] = Value {JSNaNOpt {}};
         }
@@ -69,8 +69,9 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] auto native_str_substr(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
-        const int vm_rsbp = ctx->rsbp;
-        const auto str_this_p = dynamic_cast<const StringBase*>(ctx->stack[passed_rsbp + argc].to_object());
+        const int passed_rsbp = ctx->rsbp;
+        auto str_as_obj_p = ctx->stack[passed_rsbp + argc].to_object();
+        const auto str_this_p = dynamic_cast<const StringBase*>(str_as_obj_p);
         const int substr_begin = ctx->stack[passed_rsbp].to_num_i32().value_or(0);
         const int substr_len = ctx->stack[passed_rsbp].to_num_i32().value_or(0);
 
@@ -81,7 +82,7 @@ export namespace DerkJS {
             temp_substr += c;
         }
 
-        if (auto created_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), DynamicString {str_this_p.get_prototype(), std::move(temp_substr)}); created_str_p) {
+        if (auto created_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), DynamicString {str_as_obj_p->get_prototype(), std::move(temp_substr)}); created_str_p) {
             ctx->stack[passed_rsbp] = Value {created_str_p};
             return true;
         } else {
@@ -93,10 +94,10 @@ export namespace DerkJS {
     //// BEGIN console impls:
 
     [[nodiscard]] auto native_console_log(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
-        const int vm_rsbp = ctx->rsbp;
+        const int passed_rsbp = ctx->rsbp;
 
         for (auto passed_arg_local_offset = 0; passed_arg_local_offset < argc; ++passed_arg_local_offset) {
-            std::print("{} ", ctx->stack[vm_rsbp + passed_arg_local_offset].to_string().value());
+            std::print("{} ", ctx->stack[passed_rsbp + passed_arg_local_offset].to_string().value());
         }
 
         std::println();
@@ -115,7 +116,7 @@ export namespace DerkJS {
             return false;
         }
 
-        std::print("{}", prompt_str_p.as_string());
+        std::print("{}", prompt_str_p->as_string());
 
         std::string temp_line;
         std::getline(std::cin, temp_line);
@@ -140,16 +141,6 @@ export namespace DerkJS {
 
         /// NOTE: the VM's `djs_native_call` opcode will restore RSP -> callee RBP automtically, so the result would have to be placed there for other code.
         ctx->stack[passed_rsbp] = Value {current_time_ms.count()};
-
-        return true;
-    }
-
-    [[nodiscard]] auto native_process_exit(ExternVMCtx* ctx, PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
-        const auto passed_rsbp = ctx->rsbp;
-        const auto exit_status = ctx->stack.at(passed_rsbp).to_num_i32().value_or(1);
-
-        ctx->stack[0] = Value {exit_status};
-        ctx->rip_p = nullptr;
 
         return true;
     }
