@@ -4,4 +4,8 @@ function mid(a, b) {
     return (a + b) / 2;
 }
 
-return mid(10, 30);
+var ans = mid(10, 30);
+
+console.log(ans);
+
+return 0;

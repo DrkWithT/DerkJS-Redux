@@ -659,6 +659,7 @@ export namespace DerkJS {
                     Arg {.n = static_cast<int16_t>(m_immediate_inline_fn_id), .tag = Location::code_chunk},
                     Arg {.n = static_cast<int16_t>(call_argc), .tag = Location::immediate}
                 );
+                m_immediate_inline_fn_id = -1;
             } else if (!m_has_new_applied) {
                 encode_instruction(
                     Opcode::djs_object_call,

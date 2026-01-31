@@ -107,9 +107,6 @@ export namespace DerkJS {
             vm_context_p->rsp = callee_rsbp;
             vm_context_p->rsbp = caller_rsbp;
 
-            /// NOTE: Advance past the NATIVE_CALL to avoid endlessly dispatching!
-            ++vm_context_p->rip_p;
-
             return native_call_ok;
         }
 

@@ -94,7 +94,7 @@ export namespace DerkJS {
             do {
                 temp = lexer(source);
 
-                if (const auto temp_tag = temp.tag; temp_tag == TokenTag::spaces || temp_tag == TokenTag::block_comment) {
+                if (const auto temp_tag = temp.tag; temp_tag == TokenTag::spaces || temp_tag == TokenTag::line_comment || temp_tag == TokenTag::block_comment) {
                     continue;
                 }
 

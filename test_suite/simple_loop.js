@@ -13,4 +13,6 @@ function consecutive_sum(n) {
 }
 
 /* Should yield 55 */
-return consecutive_sum(10);
+console.log(consecutive_sum(10));
+
+return 0;

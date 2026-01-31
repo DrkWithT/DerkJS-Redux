@@ -3,6 +3,7 @@ module;
 #include <utility>
 #include <memory>
 #include <string>
+#include <algorithm>
 #include <chrono>
 #include <iostream>
 #include <print>
@@ -62,6 +63,20 @@ export namespace DerkJS {
 
         return true;
     }
+
+    [[nodiscard]] auto native_process_exit(ExternVMCtx* ctx, PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
+        const auto passed_rsbp = ctx->rsbp;
+        const auto exit_status = ctx->stack.at(passed_rsbp).to_num_i32().value_or(1);
+
+        ctx->stack[0] = Value {exit_status};
+        ctx->rip_p = nullptr;
+
+        return true;
+    }
+
+    // [[nodiscard]] auto native_process_getenv(ExternVMCtx* ctx, PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
+    //     return false; // TODO
+    // }
 
     /// BEGIN Array.prototype.xyz impls:
 
@@ -144,5 +159,36 @@ export namespace DerkJS {
         return true;
     }
 
-    /// TODO: add Array.prototype.indexOf()??
+    [[nodiscard]] auto native_array_index_of(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
+        const auto passed_rsbp = ctx->rsbp;
+        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object());
+        const auto& array_items_view = *array_this_p->get_seq_items();
+        const auto& target_item = ctx->stack.at(passed_rsbp);
+        auto found_pos = -1;
+
+        for (int pos = 0; const auto& item_value : array_items_view) {
+            if (item_value == target_item) {
+                found_pos = pos;
+                break;
+            }
+
+            pos++;
+        }
+
+        ctx->stack.at(passed_rsbp) = Value {found_pos};
+
+        return true;
+    }
+
+    [[nodiscard]] auto native_array_reverse(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
+        const auto passed_rsbp = ctx->rsbp;
+        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object());
+        auto& array_items_view = *array_this_p->get_seq_items();
+
+        std::ranges::reverse(array_items_view);
+
+        ctx->stack[passed_rsbp] = Value {array_this_p};
+
+        return true;
+    }
 }

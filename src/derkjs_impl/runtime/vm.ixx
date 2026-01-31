@@ -924,6 +924,12 @@ export namespace DerkJS {
             return false;
         }
 
+        if (ctx.rip_p == nullptr) {
+            return true;
+        }
+
+        ++ctx.rip_p;
+
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -960,14 +966,13 @@ export namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ctx.has_err = a0 ^ 0; // 1. A non-zero flag is an errorneous exit.
-        ctx.frames.clear();
+        ctx.has_err = true;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        if (ctx.frames.empty() + ctx.has_err) {
+        if (!ctx.rip_p || ctx.has_err) {
             return ctx.has_err;
         }
 
@@ -989,7 +994,7 @@ export namespace DerkJS {
             return m_ctx.stack[0];
         }
 
-        [[nodiscard]] inline auto operator()() -> bool {
+        [[nodiscard]] auto operator()() -> bool {
             return dispatch_op(m_ctx, m_ctx.rip_p->args[0], m_ctx.rip_p->args[1]);
         }
     };

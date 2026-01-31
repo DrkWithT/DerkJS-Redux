@@ -22,8 +22,8 @@ int main(int argc, char* argv[]) {
             .name = "DerkJS",
             .author = "DrkWithT (GitHub)",
             .version_major = 0,
-            .version_minor = 1,
-            .version_patch = 2
+            .version_minor = 2,
+            .version_patch = 5
         },
         derkjs_heap_count // increase object count limit for VM if needed
     };
@@ -66,6 +66,17 @@ int main(int argc, char* argv[]) {
         }
     };
 
+    Core::NativePropertyStub process_obj_props[] {
+        Core::NativePropertyStub {
+            .name_str = "exit",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_process_exit)
+        }/*,
+        Core::NativePropertyStub {
+            .name_str = "getEnv",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_process_getenv)
+        }*/
+    };
+
     Core::NativePropertyStub array_obj_props[] {
         Core::NativePropertyStub {
             .name_str = "constructor",
@@ -82,6 +93,14 @@ int main(int argc, char* argv[]) {
         Core::NativePropertyStub {
             .name_str = "at",
             .item = std::make_unique<NativeFunction>(DerkJS::native_array_at)
+        },
+        Core::NativePropertyStub {
+            .name_str = "indexOf",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_array_index_of)
+        },
+        Core::NativePropertyStub {
+            .name_str = "reverse",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_array_reverse)
         }
     };
 
@@ -133,6 +152,12 @@ int main(int argc, char* argv[]) {
         nullptr // TODO: add JSObject as prototype.
     );
 
+    driver.add_native_object<Object>(
+        "process",
+        std::to_array(std::move(process_obj_props)),
+        nullptr
+    );
+
     // Add `Array.prototype` object here!
     auto array_prototype_object_p = driver.add_anonymous_native_object(
         std::to_array(std::move(array_obj_props))
@@ -149,5 +174,5 @@ int main(int argc, char* argv[]) {
         array_prototype_object_p
     );
 
-    return driver.run<DispatchPolicy::tco>(source_path, derkjs_gc_threshold) ? 0 : 1;
+    return driver.run<DispatchPolicy::tco>(source_path, derkjs_gc_threshold);
 }

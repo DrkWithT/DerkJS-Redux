@@ -11,6 +11,7 @@ export namespace DerkJS {
     enum class TokenTag : uint8_t {
         unknown,
         spaces,
+        line_comment,
         block_comment,
         identifier,
         keyword_var,
@@ -224,6 +225,35 @@ export namespace DerkJS {
             };
         }
 
+        [[nodiscard]] auto lex_line_comment(const std::string& source) noexcept -> Token {
+            auto temp_start = m_pos;
+            auto temp_length = 0;
+            const auto temp_line = m_line;
+            const auto temp_column = m_column;
+            bool closed = false;
+
+            while (!at_eof()) {
+                if (const auto c = source.at(m_pos), c_past = source.at(m_pos + 1); c == '\n') {
+                    // end line comment with LF
+                    closed = true;
+                    break;
+                } else {
+                    update_source_location(c);
+                    ++temp_length;
+                }
+            }
+
+            update_source_location(source.at(m_pos));
+
+            return {
+                TokenTag::line_comment,
+                temp_start,
+                temp_length,
+                temp_line,
+                temp_column
+            };
+        }
+
         [[nodiscard]] auto lex_block_comment(const std::string& source) noexcept -> Token {
             auto temp_start = m_pos;
             auto temp_length = 0;
@@ -232,21 +262,18 @@ export namespace DerkJS {
             bool closed = false;
 
             while (!at_eof()) {
-                if (const auto c = source.at(m_pos); c != '*') {
+                if (const auto c = source.at(m_pos), c_past = source.at(m_pos + 1); c == '*' && c_past == '/') {
+                    // end block comment with '*/'
+                    closed = true;
+                    break;
+                } else {
                     update_source_location(c);
                     ++temp_length;
-                } else {
-                    break;
                 }
             }
 
-            // NOTE: handle the ending of a JS block comment: '*/'
             update_source_location(source.at(m_pos));
-
-            if (const auto last_comment_delim = source.at(m_pos); last_comment_delim == '/') {
-                update_source_location(last_comment_delim);
-                closed = true;
-            }
+            update_source_location(source.at(m_pos));
 
             return {
                 (closed) ? TokenTag::block_comment : TokenTag::unknown,
@@ -391,6 +418,8 @@ export namespace DerkJS {
                 update_source_location(peek_1);
 
                 return lex_block_comment(source);
+            } else if (peek_0 == '/' && peek_1 == '/') {
+                return lex_line_comment(source);
             } else if (is_whitespace(peek_0)) {
                 return lex_whitespace(source);
             } else if ((peek_0 == '-' && is_numeric(peek_1)) || is_numeric(peek_0)) {
