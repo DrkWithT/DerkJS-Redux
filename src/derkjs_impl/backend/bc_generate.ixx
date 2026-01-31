@@ -168,10 +168,10 @@ export namespace DerkJS {
                     .tag = Location::constant
                 };
 
-                auto string_prototype_heap_id = lookup_symbol("String")->n;
+                auto string_prototype_const_id = lookup_symbol("String", FindGlobalConstsOpt {})->n;
 
                 if (auto heap_static_str_p = m_heap.add_item(m_heap.get_next_id(), std::make_unique<DynamicString>(
-                    m_heap.get_item(string_prototype_heap_id),
+                    m_consts.at(string_prototype_const_id).to_object(),
                     std::forward<Item>(item))
                 ); heap_static_str_p) {
                     m_consts.emplace_back(Value {heap_static_str_p});
@@ -280,7 +280,6 @@ export namespace DerkJS {
                     return record_valued_symbol(atom_lexeme, Value {std::stod(atom_lexeme)});
                 case TokenTag::literal_string: {
                     m_has_string_ops = true;
-                    m_accessing_property = false;
                     return record_valued_symbol(atom_lexeme, atom_lexeme);
                 }
                 case TokenTag::keyword_prototype: {
