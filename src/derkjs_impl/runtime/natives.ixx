@@ -39,7 +39,11 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_str_charcode_at(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
-        const auto str_this_p = dynamic_cast<const StringBase*>(ctx->stack[passed_rsbp + argc].to_object());
+        const auto str_this_p = dynamic_cast<const StringBase*>(
+            (ctx->stack[passed_rsbp + argc].get_tag() == ValueTag::val_ref)
+                ? ctx->stack[passed_rsbp + argc].get_value_ref()->to_object()
+                : ctx->stack[passed_rsbp + argc].to_object()
+        );
         const int str_at_pos = ctx->stack[passed_rsbp].to_num_i32().value_or(-1);
         std::string_view chars_view = str_this_p->as_str_view();
 

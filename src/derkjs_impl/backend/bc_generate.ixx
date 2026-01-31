@@ -75,6 +75,8 @@ export namespace DerkJS {
 
         int m_immediate_inline_fn_id;
 
+        int m_member_depth;
+
         // Whether an addition has any string operands or not.
         bool m_has_string_ops;
 
@@ -516,8 +518,9 @@ export namespace DerkJS {
         [[nodiscard]] auto emit_member_access(const MemberAccess& member_access, const std::string& source) -> bool {
             const auto& [target_expr, key_expr] = member_access;
 
-            // 1. Emit the target and then the key evaluations. The `djs_get_prop` opcode takes the target and the property key (PropertyHandle<Value>) on top... These two are "popped" and the property reference takes their place in the VM. If the object has calling property, the target object is emitted twice in case of passing 'THIS'.
+            // 1. Emit the target and then the key evaluations. The `djs_get_prop` opcode takes the target and the property key (PropertyHandle<Value>) on top... These two are "popped" and the property reference takes their place in the VM. If the top callee expr has a calling property, the target object is emitted again (member-access-depth == 1).
             m_accessing_property = true;
+            m_member_depth++;
 
             // For possible this object on member calls OR the parent object reference itself...
             if (!emit_expr(*target_expr, source)) {
@@ -525,13 +528,15 @@ export namespace DerkJS {
             }
 
             // If a property call is enclosing the member access: The callee's parent object is over the copied reference for `this`...
-            if (m_has_call) {
+            if (m_has_call && m_member_depth <= 1) {
                 encode_instruction(Opcode::djs_dup);
             }
 
             if (!emit_expr(*key_expr, source)) {
                 return false;
             }
+
+            m_member_depth--;
 
             /// NOTE: If assignment (lvalues apply) pass `1` for defaulting flag so the RHS goes somewhere legitimate.
             encode_instruction(Opcode::djs_get_prop, Arg {.n = static_cast<int16_t>(!m_has_call && m_access_as_lval), .tag = Location::immediate});
@@ -557,10 +562,12 @@ export namespace DerkJS {
             if (!emit_expr(*expr_rhs, source)) {
                 return false;
             }
+            m_member_depth = 0;
 
             if (!emit_expr(*expr_lhs, source)) {
                 return false;
             }
+            m_member_depth = 0;
 
             const auto deduced_opcode = ([](AstOp op) noexcept -> std::optional<Opcode> {
                 switch (op) {
@@ -609,6 +616,7 @@ export namespace DerkJS {
             }
 
             m_access_as_lval = false;
+            m_member_depth = 0;
 
             if (!emit_expr(*rhs_expr, source)) {
                 return false;
@@ -641,6 +649,7 @@ export namespace DerkJS {
             auto has_extra_this_arg = m_has_call && std::holds_alternative<MemberAccess>(expr_callee->data);
 
             m_access_as_lval = false;
+            m_member_depth = 0;
 
             if (m_immediate_inline_fn_id != -1) {
                 encode_instruction(
@@ -877,7 +886,7 @@ export namespace DerkJS {
 
     public:
         BytecodeGenPass(std::vector<PreloadItem> preloadables, int heap_object_capacity)
-        : m_global_consts_map {}, m_globals_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code_blobs {}, m_chunk_offsets {}, m_immediate_inline_fn_id {-1}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_has_call {false} {
+        : m_global_consts_map {}, m_globals_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code_blobs {}, m_chunk_offsets {}, m_immediate_inline_fn_id {-1}, m_member_depth {0}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_has_call {false} {
             m_local_maps.emplace_back(CodeGenScope {
                 .locals = {},
                 .next_local_id = 0
