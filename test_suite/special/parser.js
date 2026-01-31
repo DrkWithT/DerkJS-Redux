@@ -15,7 +15,7 @@ var tag_eof = 7;
 
 var matchSpace = function (c_code) {
     return c_code == 32;
-}
+};
 
 var matchDigit = function(c_code) {
     return c_code >= 48 && c_code <= 57;
@@ -36,13 +36,14 @@ var matchOp = function(c_code) {
 };
 
 var Lexer = {
-    src: null,
-    pos: 0,
-    end: 0,
     init: function(txt) {
         this.src = txt;
+        console.log(1);
         this.pos = 0;
+        console.log(2);
         this.end = txt.len();
+        console.log(3);
+        return undefined;
     },
     done: function() {
         return this.pos >= this.end;
@@ -107,7 +108,7 @@ var Lexer = {
         };
     },
     next: function() {
-        var peek = this.src[this.pos];
+        var peek = this.src.charCodeAt(this.pos);
 
         if (this.done()) {
             return {
@@ -128,18 +129,20 @@ var Lexer = {
 };
 
 var exprSrc = console.readln("Enter expr: ");
-var tempToken;
+var tempToken = Lexer.init(exprSrc);
 
-Lexer.init(exprSrc);
+console.log(exprSrc);
+console.log("Lexer.pos = ", Lexer.pos, ", Lexer.end = ", Lexer.end);
 
-while (!Lexer.done()) {
-    tempToken = Lexer.next();
+// while (!Lexer.done()) {
+console.log("get tokens:");
+tempToken = Lexer.next();
 
-    if (tempToken.tkType == tag_eof) {
-        console.log("EOF");
-    } else {
-        console.log("Token [start, length, tag]", tempToken.tkStart, tempToken.tkLen, tempToken.tkType);
-    }
-}
+// if (tempToken.tkType == tag_eof) {
+//     console.log("EOF");
+// } else {
+//     console.log("Token [start, length, tag]", tempToken.tkStart, tempToken.tkLen, tempToken.tkType);
+// }
+// }
 
 return 0;
