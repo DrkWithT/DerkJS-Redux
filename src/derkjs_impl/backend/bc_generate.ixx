@@ -143,7 +143,7 @@ export namespace DerkJS {
                 m_global_consts_map[symbol] = next_global_loc;
 
                 return next_global_loc;
-            } else if constexpr (std::is_same_v<plain_item_type, StaticString> || std::is_same_v<plain_item_type, std::unique_ptr<ObjectBase<Value>>>) {
+            } else if constexpr (std::is_same_v<plain_item_type, std::unique_ptr<ObjectBase<Value>>>) {
                 // 1a, 1b. For global & interned string references as constants:
                 const int16_t next_global_ref_const_id = m_consts.size();
                 Arg next_global_ref_loc {
@@ -168,7 +168,12 @@ export namespace DerkJS {
                     .tag = Location::constant
                 };
 
-                if (auto heap_static_str_p = m_heap.add_item(m_heap.get_next_id(), std::make_unique<DynamicString>(std::forward<Item>(item))); heap_static_str_p) {
+                auto string_prototype_heap_id = lookup_symbol("String")->n;
+
+                if (auto heap_static_str_p = m_heap.add_item(m_heap.get_next_id(), std::make_unique<DynamicString>(
+                    m_heap.get_item(string_prototype_heap_id),
+                    std::forward<Item>(item))
+                ); heap_static_str_p) {
                     m_consts.emplace_back(Value {heap_static_str_p});
                     m_global_consts_map[symbol] = next_global_ref_loc;
                     m_heap.update_tenure_count();
@@ -276,12 +281,7 @@ export namespace DerkJS {
                 case TokenTag::literal_string: {
                     m_has_string_ops = true;
                     m_accessing_property = false;
-
-                    if (const int atom_text_length = atom_lexeme.length(); atom_text_length <= StaticString::max_length_v) {
-                        return record_valued_symbol(atom_lexeme, StaticString {nullptr, atom_lexeme.c_str(), atom_text_length});
-                    } else {
-                        return record_valued_symbol(atom_lexeme, atom_lexeme);
-                    }
+                    return record_valued_symbol(atom_lexeme, atom_lexeme);
                 }
                 case TokenTag::keyword_prototype: {
                     m_has_string_ops = false;
@@ -291,11 +291,7 @@ export namespace DerkJS {
                     m_has_string_ops = false;
 
                     if (m_accessing_property) {
-                        if (const int atom_text_length = atom_lexeme.length(); atom_text_length <= StaticString::max_length_v) {
-                            return record_valued_symbol(atom_lexeme, StaticString {nullptr, atom_lexeme.c_str(), atom_text_length});
-                        } else {
-                            return record_valued_symbol(atom_lexeme, atom_lexeme);
-                        }
+                        return record_valued_symbol(atom_lexeme, atom_lexeme);
                     } else {
                         return lookup_symbol(atom_lexeme);
                     }
@@ -328,13 +324,7 @@ export namespace DerkJS {
             for (const auto& [prop_name_token, prop_init_expr] : object.fields) {
                 std::string prop_name = prop_name_token.as_string(source);
 
-                auto prop_name_locator = ([this] (std::string name_s) -> std::optional<Arg> {
-                    if (const int name_length = name_s.length(); name_length <= StaticString::max_length_v) {
-                        return record_valued_symbol(name_s, StaticString {nullptr, name_s.c_str(), name_length});
-                    } else {
-                        return record_valued_symbol(name_s, DynamicString {std::move(name_s)});
-                    }
-                })(prop_name);
+                auto prop_name_locator = record_valued_symbol(prop_name, prop_name);
 
                 if (!prop_name_locator) {
                     return false;

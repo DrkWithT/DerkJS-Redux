@@ -48,6 +48,23 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    Core::NativePropertyStub dud_props[] {};
+
+    Core::NativePropertyStub str_props[] {
+        Core::NativePropertyStub {
+            .name_str = "charCodeAt",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_str_charcode_at)
+        },
+        Core::NativePropertyStub {
+            .name_str = "len",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_str_len)
+        }
+        Core::NativePropertyStub {
+            .name_str = "substr",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_str_substr)
+        }
+    };
+
     Core::NativePropertyStub console_obj_props[] {
         Core::NativePropertyStub {
             .name_str = "log",
@@ -139,6 +156,23 @@ int main(int argc, char* argv[]) {
     driver.add_js_lexical("/=", TokenTag::symbol_slash_assign);
     driver.add_js_lexical("+=", TokenTag::symbol_plus_assign);
     driver.add_js_lexical("-=", TokenTag::symbol_minus_assign);
+
+    driver.add_native_object<NativeFunction>(
+        "parseInt",
+        std::to_array(dud_props),
+        DerkJS::native_parse_int
+    );
+
+    /// Add `String.prototype` object here!
+    auto string_prototype_object_p = driver.add_anonymous_native_object(
+        std::to_array(std::move(str_props))
+    );
+
+    driver.add_native_object<Object>(
+        "String",
+        std::to_array(std::move(dud_props)),
+        string_prototype_object_p
+    );
 
     driver.add_native_object<Object>(
         "console",

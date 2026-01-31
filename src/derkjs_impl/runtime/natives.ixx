@@ -3,7 +3,9 @@ module;
 #include <utility>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <algorithm>
+#include <stdexcept>
 #include <chrono>
 #include <iostream>
 #include <print>
@@ -17,6 +19,77 @@ import runtime.value;
 import runtime.vm;
 
 export namespace DerkJS {
+    //// BEGIN global functions:
+
+    [[nodiscard]] auto native_parse_int(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
+        const int passed_rsbp = ctx->rsbp;
+        std::string temp_str = ctx->stack[passed_rsbp].to_string().value_or("");
+
+        try {
+            ctx->stack[passed_rsbp] = Value {std::stoi(temp_str)};
+        } catch (const std::runtime_error& err) {
+            std::println(std::cerr, "Invalid integer literal!");
+            ctx->stack[passed_rsbp] = Value {JSNaNOpt {}};
+        }
+
+        return true;
+    }
+
+    /// BEGIN string impls:
+
+    [[nodiscard]] auto native_str_charcode_at(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
+        const int passed_rsbp = ctx->rsbp;
+        const auto str_this_p = dynamic_cast<const StringBase*>(ctx->stack[passed_rsbp + argc].to_object());
+        const int str_at_pos = ctx->stack[passed_rsbp].to_num_i32().value_or(-1);
+        std::string_view chars_view = str_this_p->as_str_view();
+
+        if (const int chars_n = chars_view.length(); str_at_pos < 0 || str_at_pos >= chars_n) {
+            ctx->stack[passed_rsbp] = Value {JSNaNOpt {}}; // get undefined for invalid char positions
+        } else {
+            ctx->stack[passed_rsbp] = Value {static_cast<int>(chars_view[str_at_pos])};
+        }
+
+        return true;
+    }
+
+    [[nodiscard]] auto native_str_len(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
+        const int passed_rsbp = ctx->rsbp;
+        const auto str_this_p = dynamic_cast<const StringBase*>(ctx->stack[passed_rsbp + argc].to_object());
+
+        if (!str_this_p) {
+            ctx->stack[passed_rsbp] = Value {JSNaNOpt {}};
+            return false;
+        }
+
+        const int str_len_i32 = str_this_p->as_str_view().length();
+
+        ctx->stack[passed_rsbp] = Value {str_len_i32};
+
+        return true;
+    }
+
+    [[nodiscard]] auto native_str_substr(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
+        const int vm_rsbp = ctx->rsbp;
+        const auto str_this_p = dynamic_cast<const StringBase*>(ctx->stack[passed_rsbp + argc].to_object());
+        const int substr_begin = ctx->stack[passed_rsbp].to_num_i32().value_or(0);
+        const int substr_len = ctx->stack[passed_rsbp].to_num_i32().value_or(0);
+
+        std::string_view chars_view = str_this_p->as_str_view().substr(substr_begin, substr_len);
+        std::string temp_substr;
+
+        for (auto c : chars_view) {
+            temp_substr += c;
+        }
+
+        if (auto created_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), DynamicString {str_this_p.get_prototype(), std::move(temp_substr)}); created_str_p) {
+            ctx->stack[passed_rsbp] = Value {created_str_p};
+            return true;
+        } else {
+            ctx->stack[passed_rsbp] = Value {JSNullOpt {}};
+            return false;
+        }
+    }
+
     //// BEGIN console impls:
 
     [[nodiscard]] auto native_console_log(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
@@ -34,21 +107,28 @@ export namespace DerkJS {
     [[nodiscard]] auto native_console_read_line(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {    
         /// NOTE: Show user the passed-in prompt string: It MUST be the 1st argument on the stack.
         const auto passed_rsbp = ctx->rsbp;
-        std::print("{}", ctx->stack[passed_rsbp].to_string().value());
+        const auto prompt_str_p = ctx->stack[passed_rsbp].to_object();
+        ObjectBase<Value>* prompt_str_prototype = prompt_str_p->get_prototype();
 
-        std::string temp_line;
-        std::getline(std::cin, temp_line);
-
-        ObjectBase<Value>* line_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), DynamicString {std::move(temp_line)});
-
-        if (!line_str_p) {
+        if (!prompt_str_p || prompt_str_p->get_class_name() != "string") {
             ctx->stack[passed_rsbp] = Value {};
             return false;
         }
 
-        ctx->stack[passed_rsbp] = Value {line_str_p};
+        std::print("{}", prompt_str_p.as_string());
 
-        return true;
+        std::string temp_line;
+        std::getline(std::cin, temp_line);
+
+        ObjectBase<Value>* line_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), DynamicString { prompt_str_prototype, std::move(temp_line)});
+
+        if (!line_str_p) {
+            ctx->stack[passed_rsbp] = Value {};
+            return false;
+        } else {            
+            ctx->stack[passed_rsbp] = Value {line_str_p};
+            return true;
+        }
     }
 
     //// BEGIN time impls:
