@@ -75,6 +75,8 @@ export namespace DerkJS {
 
         int m_immediate_inline_fn_id;
 
+        int m_member_depth;
+
         // Whether an addition has any string operands or not.
         bool m_has_string_ops;
 
@@ -143,7 +145,7 @@ export namespace DerkJS {
                 m_global_consts_map[symbol] = next_global_loc;
 
                 return next_global_loc;
-            } else if constexpr (std::is_same_v<plain_item_type, StaticString> || std::is_same_v<plain_item_type, std::unique_ptr<ObjectBase<Value>>>) {
+            } else if constexpr (std::is_same_v<plain_item_type, std::unique_ptr<ObjectBase<Value>>>) {
                 // 1a, 1b. For global & interned string references as constants:
                 const int16_t next_global_ref_const_id = m_consts.size();
                 Arg next_global_ref_loc {
@@ -168,7 +170,12 @@ export namespace DerkJS {
                     .tag = Location::constant
                 };
 
-                if (auto heap_static_str_p = m_heap.add_item(m_heap.get_next_id(), std::make_unique<DynamicString>(std::forward<Item>(item))); heap_static_str_p) {
+                auto string_prototype_const_id = lookup_symbol("String", FindGlobalConstsOpt {})->n;
+
+                if (auto heap_static_str_p = m_heap.add_item(m_heap.get_next_id(), std::make_unique<DynamicString>(
+                    m_consts.at(string_prototype_const_id).to_object(),
+                    std::forward<Item>(item))
+                ); heap_static_str_p) {
                     m_consts.emplace_back(Value {heap_static_str_p});
                     m_global_consts_map[symbol] = next_global_ref_loc;
                     m_heap.update_tenure_count();
@@ -275,13 +282,7 @@ export namespace DerkJS {
                     return record_valued_symbol(atom_lexeme, Value {std::stod(atom_lexeme)});
                 case TokenTag::literal_string: {
                     m_has_string_ops = true;
-                    m_accessing_property = false;
-
-                    if (const int atom_text_length = atom_lexeme.length(); atom_text_length <= StaticString::max_length_v) {
-                        return record_valued_symbol(atom_lexeme, StaticString {nullptr, atom_lexeme.c_str(), atom_text_length});
-                    } else {
-                        return record_valued_symbol(atom_lexeme, atom_lexeme);
-                    }
+                    return record_valued_symbol(atom_lexeme, atom_lexeme);
                 }
                 case TokenTag::keyword_prototype: {
                     m_has_string_ops = false;
@@ -291,11 +292,7 @@ export namespace DerkJS {
                     m_has_string_ops = false;
 
                     if (m_accessing_property) {
-                        if (const int atom_text_length = atom_lexeme.length(); atom_text_length <= StaticString::max_length_v) {
-                            return record_valued_symbol(atom_lexeme, StaticString {nullptr, atom_lexeme.c_str(), atom_text_length});
-                        } else {
-                            return record_valued_symbol(atom_lexeme, atom_lexeme);
-                        }
+                        return record_valued_symbol(atom_lexeme, atom_lexeme);
                     } else {
                         return lookup_symbol(atom_lexeme);
                     }
@@ -328,13 +325,7 @@ export namespace DerkJS {
             for (const auto& [prop_name_token, prop_init_expr] : object.fields) {
                 std::string prop_name = prop_name_token.as_string(source);
 
-                auto prop_name_locator = ([this] (std::string name_s) -> std::optional<Arg> {
-                    if (const int name_length = name_s.length(); name_length <= StaticString::max_length_v) {
-                        return record_valued_symbol(name_s, StaticString {nullptr, name_s.c_str(), name_length});
-                    } else {
-                        return record_valued_symbol(name_s, DynamicString {std::move(name_s)});
-                    }
-                })(prop_name);
+                auto prop_name_locator = record_valued_symbol(prop_name, prop_name);
 
                 if (!prop_name_locator) {
                     return false;
@@ -527,8 +518,9 @@ export namespace DerkJS {
         [[nodiscard]] auto emit_member_access(const MemberAccess& member_access, const std::string& source) -> bool {
             const auto& [target_expr, key_expr] = member_access;
 
-            // 1. Emit the target and then the key evaluations. The `djs_get_prop` opcode takes the target and the property key (PropertyHandle<Value>) on top... These two are "popped" and the property reference takes their place in the VM. If the object has calling property, the target object is emitted twice in case of passing 'THIS'.
+            // 1. Emit the target and then the key evaluations. The `djs_get_prop` opcode takes the target and the property key (PropertyHandle<Value>) on top... These two are "popped" and the property reference takes their place in the VM. If the top callee expr has a calling property, the target object is emitted again (member-access-depth == 1).
             m_accessing_property = true;
+            m_member_depth++;
 
             // For possible this object on member calls OR the parent object reference itself...
             if (!emit_expr(*target_expr, source)) {
@@ -536,13 +528,15 @@ export namespace DerkJS {
             }
 
             // If a property call is enclosing the member access: The callee's parent object is over the copied reference for `this`...
-            if (m_has_call) {
+            if (m_has_call && m_member_depth <= 1) {
                 encode_instruction(Opcode::djs_dup);
             }
 
             if (!emit_expr(*key_expr, source)) {
                 return false;
             }
+
+            m_member_depth--;
 
             /// NOTE: If assignment (lvalues apply) pass `1` for defaulting flag so the RHS goes somewhere legitimate.
             encode_instruction(Opcode::djs_get_prop, Arg {.n = static_cast<int16_t>(!m_has_call && m_access_as_lval), .tag = Location::immediate});
@@ -568,10 +562,12 @@ export namespace DerkJS {
             if (!emit_expr(*expr_rhs, source)) {
                 return false;
             }
+            m_member_depth = 0;
 
             if (!emit_expr(*expr_lhs, source)) {
                 return false;
             }
+            m_member_depth = 0;
 
             const auto deduced_opcode = ([](AstOp op) noexcept -> std::optional<Opcode> {
                 switch (op) {
@@ -620,6 +616,7 @@ export namespace DerkJS {
             }
 
             m_access_as_lval = false;
+            m_member_depth = 0;
 
             if (!emit_expr(*rhs_expr, source)) {
                 return false;
@@ -652,6 +649,7 @@ export namespace DerkJS {
             auto has_extra_this_arg = m_has_call && std::holds_alternative<MemberAccess>(expr_callee->data);
 
             m_access_as_lval = false;
+            m_member_depth = 0;
 
             if (m_immediate_inline_fn_id != -1) {
                 encode_instruction(
@@ -888,7 +886,7 @@ export namespace DerkJS {
 
     public:
         BytecodeGenPass(std::vector<PreloadItem> preloadables, int heap_object_capacity)
-        : m_global_consts_map {}, m_globals_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code_blobs {}, m_chunk_offsets {}, m_immediate_inline_fn_id {-1}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_has_call {false} {
+        : m_global_consts_map {}, m_globals_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code_blobs {}, m_chunk_offsets {}, m_immediate_inline_fn_id {-1}, m_member_depth {0}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_has_call {false} {
             m_local_maps.emplace_back(CodeGenScope {
                 .locals = {},
                 .next_local_id = 0

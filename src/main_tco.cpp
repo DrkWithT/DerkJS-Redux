@@ -48,6 +48,21 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    Core::NativePropertyStub str_props[] {
+        Core::NativePropertyStub {
+            .name_str = "charCodeAt",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_str_charcode_at)
+        },
+        Core::NativePropertyStub {
+            .name_str = "len",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_str_len)
+        },
+        Core::NativePropertyStub {
+            .name_str = "substr",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_str_substr)
+        }
+    };
+
     Core::NativePropertyStub console_obj_props[] {
         Core::NativePropertyStub {
             .name_str = "log",
@@ -64,17 +79,6 @@ int main(int argc, char* argv[]) {
             .name_str = "now",
             .item = std::make_unique<NativeFunction>(DerkJS::clock_time_now)
         }
-    };
-
-    Core::NativePropertyStub process_obj_props[] {
-        Core::NativePropertyStub {
-            .name_str = "exit",
-            .item = std::make_unique<NativeFunction>(DerkJS::native_process_exit)
-        }/*,
-        Core::NativePropertyStub {
-            .name_str = "getEnv",
-            .item = std::make_unique<NativeFunction>(DerkJS::native_process_getenv)
-        }*/
     };
 
     Core::NativePropertyStub array_obj_props[] {
@@ -140,26 +144,30 @@ int main(int argc, char* argv[]) {
     driver.add_js_lexical("+=", TokenTag::symbol_plus_assign);
     driver.add_js_lexical("-=", TokenTag::symbol_minus_assign);
 
+    driver.add_native_global<NativeFunction>(
+        "parseInt",
+        DerkJS::native_parse_int
+    );
+
+    auto initial_string_p = driver.setup_string_prototype(std::to_array(std::move(str_props)));
+
     driver.add_native_object<Object>(
+        initial_string_p,
         "console",
         std::to_array(std::move(console_obj_props)),
         nullptr // TODO: add JSObject as prototype.
     );
 
     driver.add_native_object<Object>(
+        initial_string_p,
         "clock",
         std::to_array(std::move(clock_obj_props)),
         nullptr // TODO: add JSObject as prototype.
     );
 
-    driver.add_native_object<Object>(
-        "process",
-        std::to_array(std::move(process_obj_props)),
-        nullptr
-    );
-
     // Add `Array.prototype` object here!
     auto array_prototype_object_p = driver.add_anonymous_native_object(
+        initial_string_p,
         std::to_array(std::move(array_obj_props))
     );
 
@@ -169,10 +177,13 @@ int main(int argc, char* argv[]) {
     }
 
     driver.add_native_object<Array>(
+        initial_string_p,
         "Array",
         std::to_array(std::move(array_obj_props)),
         array_prototype_object_p
     );
 
+    /// TODO: fix nullptr prototype in strings, causing strings_1.js to FAIL.
+    // for some reason, callables.ixx:66:13 is reached: .len is the wrong prototype!
     return driver.run<DispatchPolicy::tco>(source_path, derkjs_gc_threshold);
 }

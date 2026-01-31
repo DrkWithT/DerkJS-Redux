@@ -106,6 +106,7 @@ export namespace DerkJS {
             vm_context_p->frames.pop_back();
             vm_context_p->rsp = callee_rsbp;
             vm_context_p->rsbp = caller_rsbp;
+            vm_context_p->rip_p++;
 
             return native_call_ok;
         }
@@ -158,8 +159,9 @@ export namespace DerkJS {
             "djs_emplace",
             "djs_put_this",
             "djs_put_obj_dud",
+            "djs_put_arr_dud",
             "djs_put_proto_key",
-            "djs_get_prop", // gets a property value based on RSP: <OBJ-REF>, RSP - 1: <POOLED-STR-REF> 
+            "djs_get_prop", // Args: <should-default>: gets a property value based on RSP: <OBJ-REF>, RSP - 1: <POOLED-STR-REF>; IF should-default == 1, default any invalid key to `undefined`.
             "djs_put_prop", // SEE: djs_get_prop for stack args passing...
             "djs_del_prop", // SEE: djs_get_prop for stack args passing...
             "djs_numify",
