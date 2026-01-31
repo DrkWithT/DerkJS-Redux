@@ -5,7 +5,7 @@
 
 var a = "ones";
 
-// console.log(a.charCodeAt() == 111);
+console.log(a.charCodeAt(0) == 111);
 console.log(a.len()); // 4
 // console.log(a.substr(0, 2));
 

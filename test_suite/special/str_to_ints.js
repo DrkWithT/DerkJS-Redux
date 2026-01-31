@@ -4,12 +4,9 @@
  * @author DrkWithT
  */
 
-var a = parseInt("foo");
-var b = parseInt("15");
 var c = parseInt("69");
 var d = parseInt("420");
 
-console.log(a + b); // NaN
-console.log(c + d); // 435
+console.log(c + d); // 489
 
 return 0;

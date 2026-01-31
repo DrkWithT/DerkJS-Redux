@@ -4,92 +4,85 @@
  * @author DrkWithT
  */
 
-var tag_spaces = 0;
-var tag_num = 1;
-var tag_op_mul = 2;
-var tag_op_div = 3;
-var tag_op_plus = 4;
-var tag_op_minus = 5;
-var tag_bad = 6;
-var tag_eof = 7;
+var token_names = ["SPACES", "NUMBER", "*", "/", "+", "-", "BAD", "EOF"];
 
-var matchSpace = function (c_code) {
-    return c_code == 32;
-};
-
-var matchDigit = function(c_code) {
-    return c_code >= 48 && c_code <= 57;
-};
-
-var matchOp = function(c_code) {
-    if (c_code == 43) {
-        return tag_op_plus;
-    } else if (c_code == 45) {
-        return tag_op_minus;
-    } else if (c_code == 42) {
-        return tag_op_mul;
-    } else if (c_code == 47) {
-        return tag_op_div;
-    }
-
-    return tag_bad;
-};
+// var tag_spaces = 0;
+// var tag_num = 1;
+// var tag_op_mul = 2;
+// var tag_op_div = 3;
+// var tag_op_plus = 4;
+// var tag_op_minus = 5;
+// var tag_bad = 6;
+// var tag_eof = 7;
 
 var Lexer = {
     init: function(txt) {
         this.src = txt;
-        console.log(1);
         this.pos = 0;
-        console.log(2);
         this.end = txt.len();
-        console.log(3);
         return undefined;
+    },
+    matchDigit: function(c_code) {
+        return c_code >= 48 && c_code <= 57;
+    },
+    matchOp: function(c_code) {
+        if (c_code == 43) {
+            return 4;
+        } else if (c_code == 45) {
+            return 5;
+        } else if (c_code == 42) {
+            return 2;
+        } else if (c_code == 47) {
+            return 3;
+        } else {
+            return 6;
+        }
     },
     done: function() {
         return this.pos >= this.end;
     },
     lexSpaces: function() {
-        var done = false;
         var begin = this.pos;
+        var eaten = false;
         var count = 0;
-        var c;
+        var c = undefined;
 
-        while (!this.done() && !done) {
-            c = this.src.charCodeAt(begin + count);
+        while (!this.done() && !eaten) {
+            c = this.src.charCodeAt(this.pos);
 
-            if (!matchSpace(c)) {
-                done = true;
+            if (c != 32) {
+                eaten = true;
             } else {
                 count = count + 1;
-                this.pos = begin + count;
+                this.pos = this.pos + 1;
             }
         }
 
         return {
-            tkType: tag_spaces,
+            tkType: 0,
             tkStart: begin,
             tkLen: count
         };
     },
     lexNumber: function() {
-        var done = false;
         var begin = this.pos;
+        var eaten = false;
         var count = 0;
-        var c;
+        var c = undefined;
 
-        while (!this.done() && !done) {
-            c = this.src.charCodeAt(begin + count);
+        while (!this.done() && !eaten) {
+            c = this.src.charCodeAt(this.pos);
 
-            if (!matchDigit(c)) {
-                done = true;
+            if (!this.matchDigit(c)) {
+                eaten = true;
             } else {
                 count = count + 1;
-                this.pos = begin + count;
+                this.pos = this.pos + 1;
             }
         }
 
         return {
-            tkType: tag_num,
+            tkType: 1,
             tkStart: begin,
             tkLen: count
         };
@@ -97,9 +90,9 @@ var Lexer = {
     lexOp: function() {
         var begin = this.pos;
         var op_ascii = this.src.charCodeAt(begin);
-        var op_tk_tag = matchOp(op_ascii);
-
-        this.pos = begin + 1;
+        var op_tk_tag = this.matchOp(op_ascii);
+        
+        this.pos = this.pos + 1;
 
         return {
             tkType: op_tk_tag,
@@ -108,19 +101,21 @@ var Lexer = {
         };
     },
     next: function() {
-        var peek = this.src.charCodeAt(this.pos);
+        var curr = this.pos;
+        var peek = this.src.charCodeAt(curr);
 
         if (this.done()) {
             return {
-                tkType: tag_eof,
-                tkStart: this.end,
+                tkType: 7,
+                tkStart: curr,
                 tkLen: 1
             };
         }
 
-        if (matchSpace(peek)) {
+        if (peek == 32) {
+            console.log("spaces");
             return this.lexSpaces();
-        } else if (matchDigit(peek)) {
+        } else if (this.matchDigit(peek)) {
             return this.lexNumber();
         } else {
             return this.lexOp();
@@ -131,18 +126,19 @@ var Lexer = {
 var exprSrc = console.readln("Enter expr: ");
 var tempToken = Lexer.init(exprSrc);
 
-console.log(exprSrc);
-console.log("Lexer.pos = ", Lexer.pos, ", Lexer.end = ", Lexer.end);
+while (!Lexer.done()) {
+    tempToken = Lexer.next();
 
-// while (!Lexer.done()) {
-console.log("get tokens:");
-tempToken = Lexer.next();
-
-// if (tempToken.tkType == tag_eof) {
-//     console.log("EOF");
-// } else {
-//     console.log("Token [start, length, tag]", tempToken.tkStart, tempToken.tkLen, tempToken.tkType);
-// }
-// }
+    if (tempToken.tkType == 7) {
+        console.log("EOF");
+    } else {
+        console.log(
+            "Token [start, length, tag]",
+            tempToken.tkStart,
+            tempToken.tkLen,
+            token_names.at(tempToken.tkType)
+        );
+    }
+}
 
 return 0;
