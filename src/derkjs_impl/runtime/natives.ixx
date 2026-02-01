@@ -5,7 +5,6 @@ module;
 #include <string>
 #include <string_view>
 #include <algorithm>
-#include <stdexcept>
 #include <chrono>
 #include <iostream>
 #include <print>

@@ -2,9 +2,7 @@ module;
 
 #include <cstddef>
 #include <utility>
-#include <memory>
 #include <optional>
-#include <format>
 #include <string>
 
 export module runtime.value;

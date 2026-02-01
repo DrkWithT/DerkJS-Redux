@@ -1,6 +1,5 @@
 #include <string>
 #include <array>
-#include <flat_map>
 #include <print>
 #include <iostream>
 
@@ -113,6 +112,8 @@ int main(int argc, char* argv[]) {
     driver.add_js_lexical("else", TokenTag::keyword_else);
     driver.add_js_lexical("return", TokenTag::keyword_return);
     driver.add_js_lexical("while", TokenTag::keyword_while);
+    driver.add_js_lexical("break", TokenTag::keyword_break);
+    driver.add_js_lexical("break", TokenTag::keyword_continue);
     driver.add_js_lexical("function", TokenTag::keyword_function);
     driver.add_js_lexical("prototype", TokenTag::keyword_prototype);
     driver.add_js_lexical("this", TokenTag::keyword_this);

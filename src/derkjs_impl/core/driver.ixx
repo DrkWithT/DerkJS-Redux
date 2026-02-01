@@ -1,6 +1,5 @@
 module;
 
-#include <cstdint>
 #include <type_traits>
 #include <utility>
 #include <memory>
@@ -76,6 +75,8 @@ export namespace DerkJS::Core {
                 src_buffer << src_line << '\n';
             }
 
+            std::vector<int> a;
+
             return src_buffer.str();
         }
 
@@ -98,7 +99,7 @@ export namespace DerkJS::Core {
         : m_js_lexicals {}, m_src_map {}, m_app_name {info.name}, m_app_author {info.author}, m_version_major {info.version_major}, m_version_minor {info.version_minor}, m_version_patch {info.version_patch}, m_max_heap_object_n {max_heap_object_count}, m_allow_bytecode_dump {false} {}
 
         void add_js_lexical(std::string_view lexeme, TokenTag tag) {
-            m_js_lexicals.emplace(lexeme, tag);
+            m_js_lexicals[lexeme] = tag;
         }
 
         template <std::size_t N>
