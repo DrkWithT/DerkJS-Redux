@@ -47,6 +47,13 @@ export namespace DerkJS::Core {
     public:
         static constexpr std::size_t default_stack_size = 2048;
         static constexpr std::size_t default_call_depth_limit = 208;
+        static constexpr std::array<std::string_view, static_cast<std::size_t>(VMErrcode::last)> error_code_msgs = {
+            "OK",
+            "ERROR: cannot access undefined property.",
+            "ERROR: bad Function call or assignment operation.",
+            "ERROR: heap allocation failed.",
+            "ERROR: VM aborted via halt.",
+        };
 
     private:
         std::flat_map<std::string_view, TokenTag> m_js_lexicals;
@@ -335,6 +342,18 @@ export namespace DerkJS::Core {
             auto derkjs_start_time = std::chrono::steady_clock::now();
             const auto derkjs_had_error = vm();
             auto derkjs_running_time = std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::steady_clock::now() - derkjs_start_time);
+
+            switch (const auto vm_status = vm.peek_status(); vm_status) {
+            case VMErrcode::bad_property_access:
+            case VMErrcode::bad_operation:
+            case VMErrcode::bad_heap_alloc:
+            case VMErrcode::vm_abort:
+                std::println(std::cerr, "{}", error_code_msgs.at(static_cast<int>(vm_status)));
+                break;
+            case VMErrcode::ok:
+            default:
+                break;
+            }
 
             std::println("DerkJS [Result]: \x1b[1;32m{}\x1b[0m\n\nFinished in \x1b[1;33m{}\x1b[0m", vm.peek_final_result().to_string().value(), derkjs_running_time);
 
