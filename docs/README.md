@@ -57,5 +57,6 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
    - ~~Add `Array` native object (not an actual function) to provide helper methods & be the 'interface" prototype of `[]` objects.~~
       - ~~Array methods: `push, pop, at, indexOf, reverse`.~~
  16. ~~Add mark and sweep GC.~~
- 17. Add support for immutable properties, configurability, etc.
+ 17. Add `break` and `continue`.
  18. Add `+=, -=, *=, /=, %=` operators.
+ 19. Add support for immutable properties, configurability, etc.
