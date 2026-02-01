@@ -254,6 +254,17 @@ export namespace DerkJS {
         return true;
     }
 
+    [[nodiscard]] auto native_array_len(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
+        const int passed_rsbp = ctx->rsbp;
+        auto array_this_p = dynamic_cast<const Array*>(ctx->stack[passed_rsbp + argc].to_object());
+
+        const int array_len_i32 = array_this_p->items().size();
+
+        ctx->stack[passed_rsbp] = Value {array_len_i32};
+
+        return true;
+    }
+
     [[nodiscard]] auto native_array_reverse(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
         auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object());

@@ -104,6 +104,10 @@ int main(int argc, char* argv[]) {
         Core::NativePropertyStub {
             .name_str = "reverse",
             .item = std::make_unique<NativeFunction>(DerkJS::native_array_reverse)
+        },
+        Core::NativePropertyStub {
+            .name_str = "len",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_array_len)
         }
     };
 
