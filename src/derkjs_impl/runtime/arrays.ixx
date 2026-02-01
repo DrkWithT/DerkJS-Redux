@@ -4,7 +4,6 @@ module;
 #include <utility>
 #include <string>
 #include <vector>
-#include <map>
 #include <sstream>
 
 export module runtime.arrays;
@@ -57,8 +56,12 @@ export namespace DerkJS {
         Array(ObjectBase<Value>* prototype_p) noexcept (std::is_nothrow_default_constructible_v<Value>)
         : m_props {}, m_items {}, m_prototype {prototype_p} {}
 
-        [[nodiscard]] decltype(auto) items(this auto&& self) noexcept {
-            return self.m_items;
+        [[nodiscard]] auto items() noexcept -> std::vector<Value>& {
+            return m_items;
+        }
+
+        [[nodiscard]] auto items() const noexcept -> const std::vector<Value>& {
+            return m_items;
         }
 
         [[nodiscard]] auto get_unique_addr() noexcept -> void* override {

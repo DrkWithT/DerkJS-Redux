@@ -182,7 +182,6 @@ export namespace DerkJS::Core {
             return true;
         }
 
-
         /// NOTE: takes the native object's name & a StaticString <-> "item" list to preload. The item is a primitive Value OR ObjectBase<Value>.
         template <typename ObjectSubType, std::size_t N, typename ... CtorArgs> requires (std::is_base_of_v<ObjectBase<Value>, ObjectSubType> && std::is_constructible_v<ObjectSubType, CtorArgs...>)
         [[maybe_unused]] auto add_native_object(ObjectBase<Value>* string_proto, std::string name, std::array<NativePropertyStub, N> prop_list, CtorArgs&& ... ctor_args) -> bool {
@@ -340,7 +339,7 @@ export namespace DerkJS::Core {
             DerkJS::VM<Dp> vm {prgm.value(), default_stack_size, default_call_depth_limit, gc_threshold};
 
             auto derkjs_start_time = std::chrono::steady_clock::now();
-            const auto derkjs_had_error = vm();
+            const auto derkjs_had_error = !vm();
             auto derkjs_running_time = std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::steady_clock::now() - derkjs_start_time);
 
             switch (const auto vm_status = vm.peek_status(); vm_status) {

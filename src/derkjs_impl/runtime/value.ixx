@@ -92,6 +92,10 @@ export namespace DerkJS {
             return m_tag;
         }
 
+        [[nodiscard]] constexpr auto is_reference() const noexcept -> bool {
+            return m_tag == ValueTag::val_ref || m_tag == ValueTag::object;
+        }
+
         [[nodiscard]] constexpr auto is_truthy() const noexcept -> bool {
             if (m_tag == ValueTag::undefined || m_tag == ValueTag::null || m_tag == ValueTag::num_nan) {
                 return false;
@@ -121,7 +125,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] constexpr auto operator==(const Value& other) const noexcept -> bool {
-            if (const auto lhs_tag = get_tag(), rhs_tag = other.get_tag(); lhs_tag != rhs_tag && lhs_tag != ValueTag::val_ref && rhs_tag != ValueTag::val_ref) {
+            if (const auto lhs_tag = get_tag(), rhs_tag = other.get_tag(); lhs_tag != rhs_tag && !is_reference() && !other.is_reference()) {
                 return false;
             } else if (lhs_tag == ValueTag::undefined || lhs_tag == ValueTag::null) {
                 return true;
@@ -133,7 +137,8 @@ export namespace DerkJS {
                 /// NOTE: As per https://262.ecma-international.org/5.1/#sec-11.9.6, the boolean values in this case must be both T / both F. This is actually the negation of a Boolean XOR.
                 return (m_data.b ^ other.m_data.b) == 0;
             } else if (lhs_tag == ValueTag::object) {
-                return m_data.obj_p == other.m_data.obj_p;
+                /// TODO: add object comparison algorithm!
+                return m_data.obj_p == other.m_data.obj_p || m_data.obj_p->as_string() == other.m_data.obj_p->as_string();
             } else if (lhs_tag == ValueTag::val_ref) {
                 return (m_data.ref_p) ? m_data.ref_p->operator==(other.deep_clone()) : false;
             } else {
@@ -503,7 +508,7 @@ export namespace DerkJS {
     public:
         /// NOTE: Creates mutable instances of anonymous objects. Pass the `flag_prototype_v | flag_extensible_v` if needed for Foo.prototype!
         Object(ObjectBase<Value>* proto_p, uint8_t flags = flag_extensible_v)
-        : m_own_props {}, m_proto {proto_p}, m_flags {flags} {}
+        : m_own_props {}, m_proto {}, m_flags {flags} {}
 
         [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
             return this;
@@ -600,8 +605,8 @@ export namespace DerkJS {
                 return true;
             }
 
-            if (get_class_name() == other.get_class_name()) {
-                return true;
+            if (get_class_name() != other.get_class_name()) {
+                return false;
             }
 
             // TODO
