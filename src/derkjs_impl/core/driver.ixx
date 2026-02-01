@@ -1,6 +1,5 @@
 module;
 
-#include <cstdint>
 #include <type_traits>
 #include <utility>
 #include <memory>
@@ -48,6 +47,13 @@ export namespace DerkJS::Core {
     public:
         static constexpr std::size_t default_stack_size = 2048;
         static constexpr std::size_t default_call_depth_limit = 208;
+        static constexpr std::array<std::string_view, static_cast<std::size_t>(VMErrcode::last)> error_code_msgs = {
+            "OK",
+            "ERROR: cannot access undefined property.",
+            "ERROR: bad Function call or assignment operation.",
+            "ERROR: heap allocation failed.",
+            "ERROR: VM aborted via halt.",
+        };
 
     private:
         std::flat_map<std::string_view, TokenTag> m_js_lexicals;
@@ -76,6 +82,8 @@ export namespace DerkJS::Core {
                 src_buffer << src_line << '\n';
             }
 
+            std::vector<int> a;
+
             return src_buffer.str();
         }
 
@@ -98,7 +106,7 @@ export namespace DerkJS::Core {
         : m_js_lexicals {}, m_src_map {}, m_app_name {info.name}, m_app_author {info.author}, m_version_major {info.version_major}, m_version_minor {info.version_minor}, m_version_patch {info.version_patch}, m_max_heap_object_n {max_heap_object_count}, m_allow_bytecode_dump {false} {}
 
         void add_js_lexical(std::string_view lexeme, TokenTag tag) {
-            m_js_lexicals.emplace(lexeme, tag);
+            m_js_lexicals[lexeme] = tag;
         }
 
         template <std::size_t N>
@@ -173,7 +181,6 @@ export namespace DerkJS::Core {
 
             return true;
         }
-
 
         /// NOTE: takes the native object's name & a StaticString <-> "item" list to preload. The item is a primitive Value OR ObjectBase<Value>.
         template <typename ObjectSubType, std::size_t N, typename ... CtorArgs> requires (std::is_base_of_v<ObjectBase<Value>, ObjectSubType> && std::is_constructible_v<ObjectSubType, CtorArgs...>)
@@ -332,8 +339,20 @@ export namespace DerkJS::Core {
             DerkJS::VM<Dp> vm {prgm.value(), default_stack_size, default_call_depth_limit, gc_threshold};
 
             auto derkjs_start_time = std::chrono::steady_clock::now();
-            const auto derkjs_had_error = vm();
+            const auto derkjs_had_error = !vm();
             auto derkjs_running_time = std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::steady_clock::now() - derkjs_start_time);
+
+            switch (const auto vm_status = vm.peek_status(); vm_status) {
+            case VMErrcode::bad_property_access:
+            case VMErrcode::bad_operation:
+            case VMErrcode::bad_heap_alloc:
+            case VMErrcode::vm_abort:
+                std::println(std::cerr, "{}", error_code_msgs.at(static_cast<int>(vm_status)));
+                break;
+            case VMErrcode::ok:
+            default:
+                break;
+            }
 
             std::println("DerkJS [Result]: \x1b[1;32m{}\x1b[0m\n\nFinished in \x1b[1;33m{}\x1b[0m", vm.peek_final_result().to_string().value(), derkjs_running_time);
 

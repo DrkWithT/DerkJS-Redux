@@ -1,6 +1,5 @@
 module;
 
-#include <memory>
 #include <vector>
 #include <queue>
 #include <flat_map>

@@ -16,11 +16,20 @@ import runtime.value;
 import runtime.gc;
 import runtime.bytecode;
 
-export namespace DerkJS {
+namespace DerkJS {
     /// NOTE: This scoped enum enables instantiation of a specialized VM that either does loop-switch or tail-call-friendly control flow when running opcodes.
-    enum class DispatchPolicy : uint8_t {
+    export enum class DispatchPolicy : uint8_t {
         loop_switch,
         tco,
+    };
+
+    export enum class VMErrcode : uint8_t {
+        ok,
+        bad_property_access,
+        bad_operation,
+        bad_heap_alloc,
+        vm_abort,
+        last
     };
 
     /**
@@ -76,7 +85,7 @@ export namespace DerkJS {
     #endif
 
     /// NOTE: This type decouples the internal state of the bytecode VM. It's used when the `DispatchPolicy::tco` specialization is used with a opcode dispatch table and dispatch TCO'd function internally apply in `VM<DispatchPolicy::tco>`. However, this is only enabled on LLVM Clang 20+ to be safe.
-    struct ExternVMCtx {
+    export struct ExternVMCtx {
         using call_frame_type = CallFrame<DispatchPolicy::tco>;
 
         GC gc;
@@ -104,16 +113,16 @@ export namespace DerkJS {
         /// NOTE: indicates if `op_get_prop` should access an object's prototype, bypassing normal key-value lookup.
         bool rpk;
 
-        bool has_err;
+        VMErrcode status;
 
         ExternVMCtx(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit, std::size_t gc_heap_threshold)
-        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, rsbp {0}, rsp {-1}, rpk {false}, has_err {false} {
+        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, rsbp {0}, rsp {-1}, rpk {false}, status {VMErrcode::ok} {
             stack.reserve(stack_length_limit);
             stack.resize(stack_length_limit);
             frames.reserve(call_frame_limit);
 
             if (auto global_this_p = heap.add_item(heap.get_next_id(), std::make_unique<Object>(nullptr)); !global_this_p) {
-                has_err = true;
+                status = VMErrcode::bad_heap_alloc;
             } else {
                 frames.emplace_back(call_frame_type {
                     .m_caller_ret_ip = nullptr,
@@ -130,10 +139,10 @@ export namespace DerkJS {
      * 
      * @tparam Dp Determines how bytecode opcodes are dispatched, either by loop-switch or tail-call optimization-friendly recursion. Tail call optimization (TCO) allows a slight speedup in the VM over a typical switch-loop by avoiding some overhead of creating / unwinding call frames.
      */
-    template <DispatchPolicy Dp>
+    export template <DispatchPolicy Dp>
     class VM;
 
-    template <>
+    export template <>
     class VM<DispatchPolicy::loop_switch> {
     private:
         using call_frame_type = CallFrame<DispatchPolicy::loop_switch>;
@@ -544,7 +553,7 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
 
-    using tco_call_frame_type = CallFrame<DispatchPolicy::tco>;
+    export using tco_call_frame_type = CallFrame<DispatchPolicy::tco>;
     using tco_opcode_fn = bool(*)(ExternVMCtx&, int16_t, int16_t);
     constexpr tco_opcode_fn tco_opcodes[static_cast<std::size_t>(Opcode::last)] = {
         op_nop,
@@ -625,7 +634,7 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_emplace(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         auto& dest_val_ref = ctx.stack[ctx.rsp - 1];
 
-        ctx.has_err = dest_val_ref.get_tag() != ValueTag::val_ref;
+        ctx.status = (dest_val_ref.get_tag() != ValueTag::val_ref) ? VMErrcode::bad_operation : VMErrcode::ok;
         dest_val_ref.get_value_ref()[0] = ctx.stack[ctx.rsp];
 
         --ctx.rsp;
@@ -648,7 +657,7 @@ export namespace DerkJS {
 
         auto obj_ref_p = ctx.heap.add_item(ctx.heap.get_next_id(), Object {nullptr});
 
-        ctx.has_err = !obj_ref_p;
+        ctx.status = (!obj_ref_p) ? VMErrcode::bad_heap_alloc : VMErrcode::ok;
         ctx.stack[ctx.rsp + 1] = Value {obj_ref_p};
 
         ++ctx.rsp;
@@ -663,7 +672,7 @@ export namespace DerkJS {
         auto array_prototype_p = ctx.stack[ctx.rsp].to_object();
         auto array_ref_p = ctx.heap.add_item(ctx.heap.get_next_id(), Array {array_prototype_p});
 
-        ctx.has_err = !array_ref_p;
+        ctx.status = (!array_ref_p) ? VMErrcode::bad_heap_alloc : VMErrcode::ok;
         ctx.stack[ctx.rsp] = Value {array_ref_p};
 
         ++ctx.rip_p;
@@ -688,21 +697,21 @@ export namespace DerkJS {
             ? target_ref.get_value_ref()->to_object()
             : target_ref.to_object();
 
-        if (!target_obj_p) {
-            return false;
-        }
-
         auto target_prop_key = (ctx.rpk)
             // prototype access
             ? PropertyHandle<Value> {PrototypeAccessOpt {}}
             // normal property access
             : PropertyHandle<Value> {ctx.stack[ctx.rsp], PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)};
-        auto prop_ref_p = target_obj_p->get_property_value(target_prop_key, a0);
 
-        ctx.stack[ctx.rsp - 1] = Value {prop_ref_p};
-        ctx.has_err = !prop_ref_p;
+        if (target_obj_p) { 
+            auto prop_ref_p = target_obj_p->get_property_value(target_prop_key, a0);
+            
+            ctx.stack[ctx.rsp - 1] = Value {prop_ref_p};
+        } else {
+            ctx.stack[ctx.rsp - 1] = Value {}; // "null" property ref -> undefined value
+        }
+
         ctx.rpk = false;
-
         --ctx.rsp;
         ++ctx.rip_p;
 
@@ -712,20 +721,20 @@ export namespace DerkJS {
     [[nodiscard]] inline auto op_put_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         auto target_object_p = ctx.stack[ctx.rsp - 2].to_object();
 
-        if (!target_object_p) {
-            return false;
-        }
-
         auto target_prop_key = (ctx.rpk)
             // prototype key
             ? PropertyHandle<Value> {PrototypeAccessOpt {}}
             // normal property key 
             : PropertyHandle<Value> {ctx.stack[ctx.rsp - 1], PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)};
 
-        ctx.has_err = !target_object_p->set_property_value(
+        if (!target_object_p) {
+            return false;
+        }
+
+        ctx.status = (!target_object_p->set_property_value(
             target_prop_key,
             ctx.stack[ctx.rsp]
-        );
+        )) ? VMErrcode::bad_property_access : VMErrcode::ok;
         ctx.rpk = false;
 
         ctx.rsp -= 2;
@@ -917,9 +926,9 @@ export namespace DerkJS {
         auto& callable_value = ctx.stack[ctx.rsp];
 
         if (const auto val_tag = callable_value.get_tag(); val_tag == ValueTag::val_ref && callable_value.get_value_ref()->get_tag() == ValueTag::object) {
-            ctx.has_err = !callable_value.get_value_ref()->to_object()->call(&ctx, a0, a1);
+            ctx.status = (!callable_value.get_value_ref()->to_object()->call(&ctx, a0, a1)) ? VMErrcode::bad_operation : VMErrcode::ok;
         } else if (val_tag == ValueTag::object) {
-            ctx.has_err = !callable_value.to_object()->call(&ctx, a0, a1);
+            ctx.status = (!callable_value.to_object()->call(&ctx, a0, a1)) ? VMErrcode::bad_operation : VMErrcode::ok;
         } else {
             return false;
         }
@@ -931,9 +940,9 @@ export namespace DerkJS {
         auto& callable_value = ctx.stack[ctx.rsp];
 
         if (const auto val_tag = callable_value.get_tag(); val_tag == ValueTag::val_ref && callable_value.get_value_ref()->get_tag() == ValueTag::object) {
-            ctx.has_err = !callable_value.get_value_ref()->to_object()->call_as_ctor(&ctx, a0);
+            ctx.status = (!callable_value.get_value_ref()->to_object()->call_as_ctor(&ctx, a0)) ? VMErrcode::bad_operation : VMErrcode::ok;
         } else if (val_tag == ValueTag::object) {
-            ctx.has_err = !callable_value.to_object()->call_as_ctor(&ctx, a0);
+            ctx.status = (!callable_value.to_object()->call_as_ctor(&ctx, a0)) ? VMErrcode::bad_operation : VMErrcode::ok;
         } else {
             return false;
         }
@@ -953,27 +962,29 @@ export namespace DerkJS {
         ctx.frames.pop_back();
 
         if (ctx.frames.empty()) {
-            return ctx.has_err;
+            ctx.status = VMErrcode::ok;
+            return ctx.status == VMErrcode::ok;
         }
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ctx.has_err = true;
+        ctx.status = VMErrcode::vm_abort;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        if (ctx.has_err + ctx.frames.empty()) {
-            return ctx.has_err;
+        constexpr auto ok_errcode = static_cast<uint8_t>(VMErrcode::ok);
+        if (const auto errcode = static_cast<uint8_t>(ctx.status) + ctx.frames.empty()) {
+            return errcode ^ ok_errcode;
         }
 
         return tco_opcodes[ctx.rip_p->op](ctx, a0, a1);
     }
 
-    template <>
+    export template <>
     class VM<DispatchPolicy::tco> {
     public:
         static_assert(is_tco_enabled_v, "TCO is not enabled for this compiler toolchain (version).");
@@ -986,6 +997,10 @@ export namespace DerkJS {
 
         [[nodiscard]] auto peek_final_result() const noexcept -> const Value& {
             return m_ctx.stack[0];
+        }
+
+        [[nodiscard]] auto peek_status(this auto&& self) noexcept -> VMErrcode {
+            return self.m_ctx.status;
         }
 
         [[nodiscard]] auto operator()() -> bool {

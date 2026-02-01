@@ -16,13 +16,13 @@ if [[ $action = "help" ]]; then
     usage_exit 0;
 elif [[ $action = "build" && $argc -eq 3 ]]; then
     rm -rf ./.cache;
-    rm -f ./build/compile_commands.json;
+    rm -f ./compile_commands.json;
     rm -f ./build/derkjs;
-    cmake -S . -B build --preset "local-$2-build" -DUSE_TCO_WITH_BC_VM:BOOL=$3 && cmake --build build;
+    cmake -S . -B build --preset "local-$2-build" -DUSE_TCO_WITH_BC_VM:BOOL=$3 && cmake --build build && mv ./build/compile_commands.json .;
 elif [[ $action = "rebuild" && $argc -eq 3 ]]; then
     rm -rf ./.cache;
     rm -rf ./build/;
-    cmake -S . -B build --preset "local-$2-build" -DUSE_TCO_WITH_BC_VM:BOOL=$3 && cmake --build build;
+    cmake -S . -B build --preset "local-$2-build" -DUSE_TCO_WITH_BC_VM:BOOL=$3 && cmake --build build && mv ./build/compile_commands.json .;
 elif [[ $action = "unittest" && $argc -eq 1 ]]; then
     # touch ./test_logs.txt;
     # ctest --test-dir build --timeout 2 -V 1> ./test_logs.txt;

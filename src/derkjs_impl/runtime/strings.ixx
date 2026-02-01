@@ -3,11 +3,8 @@ module;
 #include <utility>
 #include <memory>
 #include <vector>
-#include <array>
 #include <string>
 #include <string_view>
-#include <sstream>
-#include <format>
 
 export module runtime.strings;
 

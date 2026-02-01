@@ -5,7 +5,6 @@ module;
 #include <string>
 #include <string_view>
 #include <algorithm>
-#include <stdexcept>
 #include <chrono>
 #include <iostream>
 #include <print>
@@ -251,6 +250,17 @@ export namespace DerkJS {
         }
 
         ctx->stack.at(passed_rsbp) = Value {found_pos};
+
+        return true;
+    }
+
+    [[nodiscard]] auto native_array_len(ExternVMCtx* ctx, [[maybe_unused]] PropPool<PropertyHandle<Value>, Value>* props, int argc) -> bool {
+        const int passed_rsbp = ctx->rsbp;
+        auto array_this_p = dynamic_cast<const Array*>(ctx->stack[passed_rsbp + argc].to_object());
+
+        const int array_len_i32 = array_this_p->items().size();
+
+        ctx->stack[passed_rsbp] = Value {array_len_i32};
 
         return true;
     }

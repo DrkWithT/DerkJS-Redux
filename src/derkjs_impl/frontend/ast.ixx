@@ -53,10 +53,12 @@ export namespace DerkJS {
     struct If;
     struct Return;
     struct While;
+    struct Break;
+    struct Continue;
     struct Block;
     struct FunctionDecl;
 
-    using Stmt = StmtNode<ExprStmt, Variables, If, Return, While, Block, FunctionDecl>;
+    using Stmt = StmtNode<ExprStmt, Variables, If, Return, While, Break, Continue, Block, FunctionDecl>;
     using StmtPtr = std::unique_ptr<Stmt>;
 
     template <typename ... ExprKind>
@@ -152,6 +154,10 @@ export namespace DerkJS {
         ExprPtr check;
         StmtPtr body;
     };
+
+    struct Break {};
+
+    struct Continue {};
 
     struct If {
         ExprPtr check;

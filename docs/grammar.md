@@ -29,7 +29,12 @@
 <if> = "if" "(" <expr> ")" <block> ( "else" ( <block> | <if> | <return> | <expr-stmt> ) )? ; maybe add dangling while loops later, meh
 <return> = "return" <expr> ";"
 <while> = "while" "(" <expr> ")" <block>   ; just have loops contain block bodies for simplicity!
+<break> = "break" ";"
+<continue> = "continue" ";"
 <function> = "function" <identifier> "(" ( <identifier> ( "," <identifier> )* )? ")" <block>
 <block> = "{" <stmt>+ "}"
 <expr-stmt> = <call> ( "=" <expr> )? ";"
 ```
+
+### Other Notes
+ - I should check if breaks & continues are in a loop, even at top-level.

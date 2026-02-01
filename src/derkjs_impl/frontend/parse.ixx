@@ -660,6 +660,10 @@ export namespace DerkJS {
                 return parse_return(lexer, source);
             } else if (stmt_keyword == TokenTag::keyword_while) {
                 return parse_while(lexer, source);
+            } else if (stmt_keyword == TokenTag::keyword_break) {
+                return parse_break(lexer, source);
+            } else if (stmt_keyword == TokenTag::keyword_continue) {
+                return parse_continue(lexer, source);
             } else if (stmt_keyword == TokenTag::keyword_function) {
                 return parse_function(lexer, source);
             } else {
@@ -812,6 +816,34 @@ export namespace DerkJS {
                     .check = std::move(loop_check_expr),
                     .body = std::move(loop_body)
                 },
+                0,
+                snippet_begin,
+                m_current.start - snippet_begin + 1
+            );
+        }
+
+        [[nodiscard]] auto parse_break(Lexer& lexer, const std::string& source) -> StmtPtr {
+            const auto snippet_begin = m_current.start;
+
+            consume_any(lexer, source);
+            consume(lexer, source, TokenTag::semicolon);
+
+            return std::make_unique<Stmt>(
+                Break {},
+                0,
+                snippet_begin,
+                m_current.start - snippet_begin + 1
+            );
+        }
+
+        [[nodiscard]] auto parse_continue(Lexer& lexer, const std::string& source) -> StmtPtr {
+            const auto snippet_begin = m_current.start;
+
+            consume_any(lexer, source);
+            consume(lexer, source, TokenTag::semicolon);
+
+            return std::make_unique<Stmt>(
+                Continue {},
                 0,
                 snippet_begin,
                 m_current.start - snippet_begin + 1

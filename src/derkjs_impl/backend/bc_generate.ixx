@@ -45,6 +45,11 @@ export namespace DerkJS {
         int next_local_id;                       // Tracks next stack slot for a local variable value.
     };
 
+    struct ActiveLoop {
+        std::vector<int> exits; // locations of any immediate, break jumps
+        std::vector<int> repeats; // locations of any immediate, continue jumps
+    };
+
     class BytecodeGenPass {
     private:
         static constexpr Arg dud_arg {
@@ -66,6 +71,8 @@ export namespace DerkJS {
 
         // filled with primitive literals & interned string refs
         std::vector<Value> m_consts;
+
+        std::forward_list<ActiveLoop> m_active_loops;
 
         // stack of bytecode buffers, accounting for arbitrary nesting of lambdas
         std::forward_list<std::vector<Instruction>> m_code_blobs;
@@ -805,6 +812,11 @@ export namespace DerkJS {
             const auto& [loop_check, loop_body] = loop_by_while;
             const int loop_begin_pos = m_code_blobs.front().size();
 
+            m_active_loops.push_front(ActiveLoop {
+                .exits = {},
+                .repeats = {}
+            });
+
             if (!emit_expr(*loop_check, source)) {
                 return false;
             }
@@ -816,11 +828,50 @@ export namespace DerkJS {
                 return false;
             }
 
+            // 2. Patch main loop jumps!
             const int loop_repeat_jump_pos = m_code_blobs.front().size();
             encode_instruction(Opcode::djs_jump, Arg {.n = -1, .tag = Location::immediate});
+            const int loop_exit_pos = loop_repeat_jump_pos + 1;
 
             m_code_blobs.front().at(loop_exit_jump_pos).args[0] = 1 + loop_repeat_jump_pos - loop_exit_jump_pos;
             m_code_blobs.front().at(loop_repeat_jump_pos).args[0] = loop_begin_pos - loop_repeat_jump_pos;
+
+            // 3. Patch breaks, continues...
+            const auto& [wloop_exits, wloop_repeats] = m_active_loops.front();
+
+            for (auto wloop_break_pos : wloop_exits) {
+                m_code_blobs.front().at(wloop_break_pos).args[0] = loop_exit_pos - wloop_break_pos;
+            }
+
+            for (auto wloop_repeat_pos : wloop_repeats) {
+                m_code_blobs.front().at(wloop_repeat_pos).args[0] = loop_begin_pos - wloop_repeat_pos;
+            }
+
+            m_active_loops.pop_front();
+
+            return true;
+        }
+
+        [[nodiscard]] auto emit_break() -> bool {
+            const int current_code_pos = m_code_blobs.front().size();
+
+            encode_instruction(Opcode::djs_jump, Arg {
+                .n = -1,
+                .tag = Location::immediate
+            });
+            m_active_loops.front().exits.push_back(current_code_pos);
+
+            return true;
+        }
+
+        [[nodiscard]] auto emit_continue() -> bool {
+            const int current_code_pos = m_code_blobs.front().size();
+
+            encode_instruction(Opcode::djs_jump, Arg {
+                .n = -1,
+                .tag = Location::immediate
+            });
+            m_active_loops.front().repeats.push_back(current_code_pos);
 
             return true;
         }
@@ -875,6 +926,10 @@ export namespace DerkJS {
                 return emit_return(*ret_p, source);
             } else if (auto loop_by_while_p = std::get_if<While>(&stmt.data); loop_by_while_p) {
                 return emit_while(*loop_by_while_p, source);
+            } else if (auto loop_break_p = std::get_if<Break>(&stmt.data); loop_break_p) {
+                return emit_break();
+            } else if (auto loop_continue_p = std::get_if<Continue>(&stmt.data); loop_continue_p) {
+                return emit_continue();
             } else if (auto block_p = std::get_if<Block>(&stmt.data); block_p) {
                 return emit_block(*block_p, source);
             } else if (auto func_p = std::get_if<FunctionDecl>(&stmt.data); func_p) {

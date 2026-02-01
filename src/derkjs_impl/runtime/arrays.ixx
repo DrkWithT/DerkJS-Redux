@@ -4,7 +4,6 @@ module;
 #include <utility>
 #include <string>
 #include <vector>
-#include <map>
 #include <sstream>
 
 export module runtime.arrays;
@@ -58,6 +57,10 @@ export namespace DerkJS {
         : m_props {}, m_items {}, m_prototype {prototype_p} {}
 
         [[nodiscard]] auto items() noexcept -> std::vector<Value>& {
+            return m_items;
+        }
+
+        [[nodiscard]] auto items() const noexcept -> const std::vector<Value>& {
             return m_items;
         }
 

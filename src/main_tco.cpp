@@ -1,6 +1,5 @@
 #include <string>
 #include <array>
-#include <flat_map>
 #include <print>
 #include <iostream>
 
@@ -105,6 +104,10 @@ int main(int argc, char* argv[]) {
         Core::NativePropertyStub {
             .name_str = "reverse",
             .item = std::make_unique<NativeFunction>(DerkJS::native_array_reverse)
+        },
+        Core::NativePropertyStub {
+            .name_str = "len",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_array_len)
         }
     };
 
@@ -113,6 +116,8 @@ int main(int argc, char* argv[]) {
     driver.add_js_lexical("else", TokenTag::keyword_else);
     driver.add_js_lexical("return", TokenTag::keyword_return);
     driver.add_js_lexical("while", TokenTag::keyword_while);
+    driver.add_js_lexical("break", TokenTag::keyword_break);
+    driver.add_js_lexical("continue", TokenTag::keyword_continue);
     driver.add_js_lexical("function", TokenTag::keyword_function);
     driver.add_js_lexical("prototype", TokenTag::keyword_prototype);
     driver.add_js_lexical("this", TokenTag::keyword_this);
@@ -149,17 +154,17 @@ int main(int argc, char* argv[]) {
         DerkJS::native_parse_int
     );
 
-    auto initial_string_p = driver.setup_string_prototype(std::to_array(std::move(str_props)));
+    auto string_prototype_p = driver.setup_string_prototype(std::to_array(std::move(str_props)));
 
     driver.add_native_object<Object>(
-        initial_string_p,
+        string_prototype_p,
         "console",
         std::to_array(std::move(console_obj_props)),
         nullptr // TODO: add JSObject as prototype.
     );
 
     driver.add_native_object<Object>(
-        initial_string_p,
+        string_prototype_p,
         "clock",
         std::to_array(std::move(clock_obj_props)),
         nullptr // TODO: add JSObject as prototype.
@@ -167,7 +172,7 @@ int main(int argc, char* argv[]) {
 
     // Add `Array.prototype` object here!
     auto array_prototype_object_p = driver.add_anonymous_native_object(
-        initial_string_p,
+        string_prototype_p,
         std::to_array(std::move(array_obj_props))
     );
 
@@ -176,10 +181,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    driver.add_native_object<Array>(
-        initial_string_p,
+    driver.add_native_global<Array>(
         "Array",
-        std::to_array(std::move(array_obj_props)),
         array_prototype_object_p
     );
 
