@@ -966,7 +966,10 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto operator()([[maybe_unused]] const ASTUnit& tu, [[maybe_unused]] const std::vector<std::string>& source_map) -> std::optional<Program> {
-            /// TODO: 1. emit all vars (especially function declaration syntax sugar) FIRST as per JS hoisting.
+            /// 1. emit all top-level non-function statements as an implicit function that's called right away.
+            auto global_func_id = record_function_begin("__js_global__");
+
+            /// 2. emit all vars (especially function declaration syntax sugar) FIRST as per JS hoisting.
             for (const auto& [src_filename, decl, src_id] : tu) {
                 if (std::holds_alternative<Variables>(decl->data)) {
                     if (!emit_stmt(*decl, source_map.at(src_id))) {
@@ -975,9 +978,6 @@ export namespace DerkJS {
                     }
                 }
             }
-
-            /// TODO: 2. emit all top-level non-function statements as an implicit function that's called right away.
-            auto global_func_id = record_function_begin("__js_global__");
 
             for (const auto& [src_filename, decl, src_id] : tu) {
                 if (!std::holds_alternative<Variables>(decl->data)) {
