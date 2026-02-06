@@ -6,7 +6,7 @@ module;
 
 export module frontend.ast;
 
-import frontend.lexicals;
+export import frontend.lexicals;
 
 export namespace DerkJS {
     enum class AstOp : uint8_t {

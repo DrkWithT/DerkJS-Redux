@@ -18,10 +18,8 @@ module;
 
 export module core.driver;
 
-import frontend.lexicals;
-import frontend.ast;
+export import frontend.ast;
 import frontend.parse;
-import runtime.objects;
 import runtime.value;
 import runtime.callables;
 import runtime.strings;

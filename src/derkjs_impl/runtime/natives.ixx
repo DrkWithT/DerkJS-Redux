@@ -11,7 +11,6 @@ module;
 
 export module runtime.natives;
 
-import runtime.objects;
 import runtime.arrays;
 import runtime.strings;
 import runtime.value;

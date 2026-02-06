@@ -8,7 +8,6 @@ module;
 
 export module runtime.callables;
 
-import runtime.objects;
 import runtime.value;
 import runtime.bytecode;
 import runtime.vm;

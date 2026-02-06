@@ -12,7 +12,6 @@ module;
 
 export module frontend.parse;
 
-import frontend.lexicals;
 import frontend.ast;
 
 export namespace DerkJS {
@@ -38,8 +37,8 @@ export namespace DerkJS {
         last,
     };
 
-    constexpr std::array<std::string_view, static_cast<std::size_t>(SyntaxTag::last)> syntax_names = {
-        "expr-primary",
+    constexpr std::array<std::string_view, static_cast<std::size_t>(SyntaxTag::last)> syntax_names {
+        std::string_view {"expr-primary"},
         "expr-object",
         "expr-lambda", 
         "expr-member",
@@ -60,7 +59,8 @@ export namespace DerkJS {
     };
 
     [[nodiscard]] constexpr auto syntax_tag_name(SyntaxTag tag) -> std::string_view {
-        return syntax_names.at(static_cast<std::size_t>(tag));
+        const auto tag_id = static_cast<std::size_t>(tag);
+        return std::string_view {syntax_names.at(tag_id)};
     }
 
     class Parser {
@@ -80,7 +80,7 @@ export namespace DerkJS {
                 culprit_line,
                 culprit_column,
                 msg,
-                culprit.as_str(source)
+                culprit.as_string(source)
             )};
         }
 
@@ -119,7 +119,7 @@ export namespace DerkJS {
             /// FIXME: The syntax tags are not properly tracked... A reversed stack is needed to track the most appropriate syntax reached.
             report_syntax_error(
                 source,
-                std::format("Invalid token found in {}", syntax_tag_name(m_syntax)),
+                std::format("Invalid token found in {} construct.", syntax_tag_name(m_syntax)),
                 m_current
             );
         }
@@ -881,11 +881,24 @@ export namespace DerkJS {
 
             consume(lexer, source, TokenTag::right_paren);
 
+            /// NOTE: Treat function <name>(args...) {...} as var name = function(args...) {...} here.
+            std::vector<VarDecl> hidden_lambda_var_decl;
+            hidden_lambda_var_decl.emplace_back(VarDecl {
+                .name = name_token,
+                .rhs = std::make_unique<Expr>(
+                    LambdaLiteral {
+                        .params = std::move(params),
+                        .body = parse_block(lexer, source)
+                    },
+                    0,
+                    snippet_begin,
+                    m_current.start - snippet_begin + 1
+                )
+            });
+
             return std::make_unique<Stmt>(
-                FunctionDecl {
-                    .params = std::move(params),
-                    .name = name_token,
-                    .body = parse_block(lexer, source)
+                Variables {
+                    .vars = std::move(hidden_lambda_var_decl)
                 },
                 0,
                 snippet_begin,

@@ -14,12 +14,10 @@ module;
 
 export module backend.bc_generate;
 
-import frontend.lexicals;
 import frontend.ast;
-import runtime.objects;
-import runtime.value;
 import runtime.strings;
 import runtime.callables;
+import runtime.value;
 import runtime.bytecode;
 
 export namespace DerkJS {
@@ -968,9 +966,9 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto operator()([[maybe_unused]] const ASTUnit& tu, [[maybe_unused]] const std::vector<std::string>& source_map) -> std::optional<Program> {
-            /// TODO: 1. emit all function decls FIRST as per JS function hoisting.
+            /// TODO: 1. emit all vars (especially function declaration syntax sugar) FIRST as per JS hoisting.
             for (const auto& [src_filename, decl, src_id] : tu) {
-                if (std::holds_alternative<FunctionDecl>(decl->data)) {
+                if (std::holds_alternative<Variables>(decl->data)) {
                     if (!emit_stmt(*decl, source_map.at(src_id))) {
                         std::println(std::cerr, "Compile Error at source '{}' around '{}': unsupported JS construct :(\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length));
                         return {};
@@ -982,7 +980,7 @@ export namespace DerkJS {
             auto global_func_id = record_function_begin("__js_global__");
 
             for (const auto& [src_filename, decl, src_id] : tu) {
-                if (!std::holds_alternative<FunctionDecl>(decl->data)) {
+                if (!std::holds_alternative<Variables>(decl->data)) {
                     if (!emit_stmt(*decl, source_map.at(src_id))) {
                         std::println(std::cerr, "Compile Error at source '{}' around '{}': unsupported JS construct :(\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length));
                         return {};

@@ -6,7 +6,6 @@ module;
 
 export module runtime.bytecode;
 
-import runtime.objects;
 import runtime.value;
 
 export namespace DerkJS {

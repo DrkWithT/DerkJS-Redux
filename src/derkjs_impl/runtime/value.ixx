@@ -7,7 +7,7 @@ module;
 
 export module runtime.value;
 
-import runtime.objects;
+export import runtime.objects;
 
 /// TODO: make Boolean, Number, Object, and Function as built-in objects registered to the interpreter before running.
 export namespace DerkJS {

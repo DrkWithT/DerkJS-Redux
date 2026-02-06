@@ -9,10 +9,9 @@ module;
 
 export module runtime.vm;
 
-import runtime.objects;
+import runtime.value;
 import runtime.arrays;
 import runtime.strings;
-import runtime.value;
 import runtime.gc;
 import runtime.bytecode;
 
