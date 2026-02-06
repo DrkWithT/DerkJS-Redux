@@ -78,6 +78,10 @@ export namespace DerkJS {
         // filled with global function IDs -> absolute offsets into the bytecode blob
         std::vector<int> m_chunk_offsets;
 
+        /// NOTE: temporary fields to handle self-recursive function declaration sugar: `var name = function() {...}` must define name as self!
+        std::vector<int> m_self_call_stubs;
+        std::string m_self_callee;
+
         int m_immediate_inline_fn_id;
 
         int m_member_depth;
@@ -95,8 +99,6 @@ export namespace DerkJS {
         bool m_accessing_property;
 
         bool m_has_call;
-
-
 
         // Overload for universal lookup via priorities 1, 2, 3
         [[nodiscard]] auto lookup_symbol(const std::string& symbol) -> std::optional<Arg> {
@@ -306,8 +308,12 @@ export namespace DerkJS {
                 }
             })();
 
-            if (!primitive_locator) {
+            if (!primitive_locator && !m_has_call) {
                 return false;
+            } else if (!primitive_locator && m_has_call && atom_lexeme == m_self_callee) {
+                // patch self-recursive calls...
+                m_self_call_stubs.emplace_back(static_cast<int>(m_code_blobs.front().size()));
+                encode_instruction(Opcode::djs_put_const, Arg { .n = -1, .tag = Location::immediate });
             } else if (const auto primitive_locate_type = primitive_locator->tag; primitive_locate_type == Location::constant) {
                 encode_instruction(Opcode::djs_put_const, *primitive_locator);
             } else if (const auto local_var_opcode = (m_access_as_lval && !m_accessing_property) ? Opcode::djs_ref_local : Opcode::djs_dup_local; primitive_locate_type == Location::local) {
@@ -408,19 +414,27 @@ export namespace DerkJS {
                 .tag = Location::constant
             };
 
+            // NOTE: patch self-calls here from any unknown identifiers that matched the callee name itself!
+            for (const auto& stub_callee_loads : m_self_call_stubs) {
+                m_code_blobs.front().at(stub_callee_loads).args[0] = next_global_ref_const_id;
+            }
+
             Lambda temp_callable {
                 std::move(m_code_blobs.front()),
                 m_heap.add_item(m_heap.get_next_id(), std::make_unique<Object>(nullptr, Object::flag_prototype_v))
             };
-            m_code_blobs.pop_front();
-            m_local_maps.pop_back();
-
+            
             if (auto lambda_object_ptr = m_heap.add_item(m_heap.get_next_id(), std::move(temp_callable)); lambda_object_ptr) {
                 // As per any DerkJS object, the real thing is owned by the VM heap but is referenced by many non-owning raw pointers to its base: `ObjectBase<Value>*`.
                 m_consts.emplace_back(Value {lambda_object_ptr});
             } else {
                 return false;
             }
+
+            m_code_blobs.pop_front();
+            m_local_maps.pop_back();
+            m_self_call_stubs.clear();
+            m_self_callee.clear();
 
             encode_instruction(
                 Opcode::djs_put_const,
@@ -715,6 +729,7 @@ export namespace DerkJS {
         [[nodiscard]] auto emit_var_decl(const VarDecl& stmt, const std::string& source) -> bool {
             const auto& [var_name_token, var_init_expr] = stmt;
             std::string var_name = var_name_token.as_string(source);
+            m_self_callee = var_name;
             
             if (m_local_maps.back().locals.contains(var_name)) {
                 return false;
@@ -939,7 +954,7 @@ export namespace DerkJS {
 
     public:
         BytecodeGenPass(std::vector<PreloadItem> preloadables, int heap_object_capacity)
-        : m_global_consts_map {}, m_globals_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code_blobs {}, m_chunk_offsets {}, m_immediate_inline_fn_id {-1}, m_member_depth {0}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_has_call {false} {
+        : m_global_consts_map {}, m_globals_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code_blobs {}, m_chunk_offsets {}, m_self_call_stubs {}, m_immediate_inline_fn_id {-1}, m_member_depth {0}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_has_call {false} {
             m_local_maps.emplace_back(CodeGenScope {
                 .locals = {},
                 .next_local_id = 0
