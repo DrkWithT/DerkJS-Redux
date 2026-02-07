@@ -28,8 +28,10 @@ export namespace DerkJS {
     };
 
     struct FindGlobalConstsOpt {};
-    struct FindGlobalNamesOpt {};
+    struct FindKeyConstOpt {};
     struct FindLocalsOpt {};
+    struct FindCaptureOpt {};
+
     struct RecordLocalOpt {};
     struct RecordSpecialThisOpt {};
 
@@ -55,13 +57,13 @@ export namespace DerkJS {
             .tag = Location::immediate
         };
 
-        // 1st priority lookup: contains interned strings & primitive constants from top-level
+        // 1st priority lookup: maps primitive constants / native object names of top-level
         std::flat_map<std::string, Arg> m_global_consts_map;
 
-        // 2nd priority lookup: contains function names, variable names, etc. at top level
-        std::flat_map<std::string, Arg> m_globals_map;
+        // 2nd priority lookup: maps property names and outside variable names
+        std::flat_map<std::string, Arg> m_key_consts_map;
 
-        // 3rd priority lookup
+        // 3rd priority lookup: maps local variable names to locations
         std::vector<CodeGenScope> m_local_maps;
 
         // filled with interned strings -> object-refs in consts -> stack temporaries
@@ -103,14 +105,13 @@ export namespace DerkJS {
         // Whether to emit any `var a = ...;` declaration as an undefined stub first. Otherwise, the `var a = ...;` declarations are treated as assignments.
         bool m_prepass_vars;
 
-        // Overload for universal lookup via priorities 1, 2, 3
+        // Overload for lookup of globals before locals
         [[nodiscard]] auto lookup_symbol(const std::string& symbol) -> std::optional<Arg> {
             return lookup_symbol(symbol, FindGlobalConstsOpt {})
-                .or_else([&symbol, this]() { return lookup_symbol(symbol, FindGlobalNamesOpt {}); })
                 .or_else([&symbol, this]() { return lookup_symbol(symbol, FindLocalsOpt {}); });
         }
 
-        // Overloads for group-specific symbol lookups
+        // Overload for lookup of global constants only
         [[nodiscard]] auto lookup_symbol(const std::string& symbol, [[maybe_unused]] FindGlobalConstsOpt opt) -> std::optional<Arg> {
             if (auto global_consts_opt = m_global_consts_map.find(symbol); global_consts_opt != m_global_consts_map.end()) {
                 return global_consts_opt->second;
@@ -119,14 +120,16 @@ export namespace DerkJS {
             return {};
         }
 
-        [[nodiscard]] auto lookup_symbol(const std::string& symbol, [[maybe_unused]] FindGlobalNamesOpt opt) -> std::optional<Arg> {
-            if (auto top_local_opt = m_globals_map.find(symbol); top_local_opt != m_globals_map.end()) {
-                return top_local_opt->second;
+        // Overload for lookup of property name strings only
+        [[nodiscard]] auto lookup_symbol(const std::string& symbol, [[maybe_unused]] FindKeyConstOpt opt) -> std::optional<Arg> {
+            if (auto global_key_str_opt = m_key_consts_map.find(symbol); global_key_str_opt != m_key_consts_map.end()) {
+                return global_key_str_opt->second;
             }
 
             return {};
         }
 
+        // Overload for lookup of locals only
         [[nodiscard]] auto lookup_symbol(const std::string& symbol, [[maybe_unused]] FindLocalsOpt opt) -> std::optional<Arg> {
             if (auto fn_local_opt = m_local_maps.back().locals.find(symbol); fn_local_opt != m_local_maps.back().locals.end()) {
                 return fn_local_opt->second;
@@ -135,58 +138,58 @@ export namespace DerkJS {
             return {};
         }
 
-        template <typename Item>
-        [[maybe_unused]] auto record_valued_symbol(const std::string& symbol, Item&& item) -> std::optional<Arg> {
-            using plain_item_type = std::remove_cvref_t<Item>;
-
-            if (auto existing_arg = lookup_symbol(symbol); existing_arg) {
-                return existing_arg;
+        [[nodiscard]] auto lookup_symbol(const std::string& symbol, [[maybe_unused]] FindCaptureOpt opt) -> std::optional<Arg> {
+            if (auto fn_local_opt = m_local_maps.back().locals.find(symbol); fn_local_opt != m_local_maps.back().locals.end()) {
+                return Arg {
+                    .n = fn_local_opt->second.n,
+                    .tag = fn_local_opt->second.tag,
+                    .is_str_literal = fn_local_opt->second.is_str_literal,
+                    .from_closure = true
+                };
             }
 
-            if constexpr (std::is_same_v<plain_item_type, Value>) {
-                // 1a. For global primitive constants:
+            return {};
+        }
+
+        template <typename Item, typename RecordOpt>
+        [[maybe_unused]] auto record_symbol(const std::string& symbol, Item&& item, [[maybe_unused]] RecordOpt opt) -> std::optional<Arg> {
+            using plain_item_type = std::remove_cvref_t<Item>;
+
+            if (auto existing_symbol_mapping = lookup_symbol(symbol, opt); existing_symbol_mapping) {
+                return existing_symbol_mapping;
+            }
+
+            if constexpr (std::is_same_v<plain_item_type, Value> && std::is_same_v<RecordOpt, FindGlobalConstsOpt>) {
+                // 1a. global primitive case
                 const int16_t next_global_const_id = m_consts.size();
                 Arg next_global_loc {
                     .n = next_global_const_id,
-                    .tag = Location::constant
+                    .tag = Location::constant,
+                    .is_str_literal = false,
+                    .from_closure = false
                 };
 
                 m_consts.emplace_back(std::forward<Item>(item));
                 m_global_consts_map[symbol] = next_global_loc;
 
                 return next_global_loc;
-            } else if constexpr (std::is_same_v<plain_item_type, std::unique_ptr<ObjectBase<Value>>>) {
-                // 1a, 1b. For global & interned string references as constants:
+            } else if constexpr (std::is_same_v<plain_item_type, std::string> && std::is_same_v<RecordOpt, FindGlobalConstsOpt>) {
+                // 2. global string literal case
                 const int16_t next_global_ref_const_id = m_consts.size();
                 Arg next_global_ref_loc {
                     .n = next_global_ref_const_id,
-                    .tag = Location::constant
-                };
-
-                if (auto heap_static_str_p = m_heap.add_item(m_heap.get_next_id(), std::move(item)); heap_static_str_p) {
-                    m_consts.emplace_back(Value {heap_static_str_p});
-                    m_global_consts_map[symbol] = next_global_ref_loc;
-                    m_heap.update_tenure_count();
-                } else {
-                    return {};
-                }
-
-                return next_global_ref_loc;
-            } else if constexpr (std::is_same_v<plain_item_type, std::string>) {
-                // 1c. For std::string as DynamicString-reference constants:
-                const int16_t next_global_ref_const_id = m_consts.size();
-                Arg next_global_ref_loc {
-                    .n = next_global_ref_const_id,
-                    .tag = Location::constant
+                    .tag = Location::constant,
+                    .is_str_literal = true,
+                    .from_closure = false,
                 };
 
                 auto string_prototype_const_id = lookup_symbol("String", FindGlobalConstsOpt {})->n;
 
-                if (auto heap_static_str_p = m_heap.add_item(m_heap.get_next_id(), std::make_unique<DynamicString>(
+                if (auto heap_dyn_str_p = m_heap.add_item(m_heap.get_next_id(), std::make_unique<DynamicString>(
                     m_consts.at(string_prototype_const_id).to_object(),
-                    std::forward<Item>(item))
-                ); heap_static_str_p) {
-                    m_consts.emplace_back(Value {heap_static_str_p});
+                    std::forward<Item>(item)
+                )); heap_dyn_str_p) {
+                    m_consts.emplace_back(Value {heap_dyn_str_p});
                     m_global_consts_map[symbol] = next_global_ref_loc;
                     m_heap.update_tenure_count();
                 } else {
@@ -194,8 +197,60 @@ export namespace DerkJS {
                 }
 
                 return next_global_ref_loc;
-            } else if constexpr (std::is_same_v<plain_item_type, RecordLocalOpt>) {
-                // 3. For named locals in functions:
+            } else if constexpr (std::is_same_v<plain_item_type, std::string> && std::is_same_v<RecordOpt, FindKeyConstOpt>) {
+                // 3. property key string case
+                const int16_t next_global_ref_const_id = m_consts.size();
+                Arg next_global_ref_loc {
+                    .n = next_global_ref_const_id,
+                    .tag = Location::constant,
+                    .is_str_literal = true,
+                    .from_closure = false,
+                };
+
+                auto string_prototype_const_id = lookup_symbol("String", FindGlobalConstsOpt {})->n;
+
+                if (auto heap_dyn_str_p = m_heap.add_item(m_heap.get_next_id(), std::make_unique<DynamicString>(
+                    m_consts.at(string_prototype_const_id).to_object(),
+                    std::forward<Item>(item)
+                )); heap_dyn_str_p) {
+                    m_consts.emplace_back(Value {heap_dyn_str_p});
+                    m_key_consts_map[symbol] = next_global_ref_loc;
+                    m_heap.update_tenure_count();
+                } else {
+                    return {};
+                }
+
+                return next_global_ref_loc;
+            } else if constexpr (std::is_same_v<plain_item_type, std::string> && std::is_same_v<RecordOpt, FindCaptureOpt>) {
+                // function captured variable-name case
+                const int16_t next_global_ref_const_id = m_consts.size();
+                auto string_prototype_const_id = lookup_symbol("String", FindGlobalConstsOpt {})->n;
+
+                if (auto existing_capture_key_loc = lookup_symbol(symbol, FindKeyConstOpt {}); existing_capture_key_loc) {
+                    existing_capture_key_loc->from_closure = true;
+                    return existing_capture_key_loc;
+                } else if (auto heap_dyn_str_p = m_heap.add_item(m_heap.get_next_id(), std::make_unique<DynamicString>(
+                    m_consts.at(string_prototype_const_id).to_object(),
+                    std::forward<Item>(item)
+                )); heap_dyn_str_p) {
+                    m_consts.emplace_back(Value {heap_dyn_str_p});
+                    m_key_consts_map[symbol] = Arg {
+                        .n = next_global_ref_const_id,
+                        .tag = Location::constant,
+                        .is_str_literal = true,
+                        .from_closure = false, // the variable name may also mirror a string literal, so keep the actual symbol's flag false!
+                    };
+                    m_heap.update_tenure_count();
+
+                    auto temp_as_capture_key = m_key_consts_map.at(symbol);
+                    temp_as_capture_key.from_closure = true;
+
+                    return temp_as_capture_key;
+                }
+
+                return {};
+            } else if constexpr (std::is_same_v<plain_item_type, RecordLocalOpt> && std::is_same_v<RecordOpt, FindLocalsOpt>) {
+                // 4. local variable name case
                 const int16_t next_local_id = m_local_maps.back().next_local_id;
                 Arg next_local_loc {
                     .n = next_local_id,
@@ -206,35 +261,28 @@ export namespace DerkJS {
                 ++m_local_maps.back().next_local_id;
 
                 return next_local_loc;
-            } else if constexpr (std::is_same_v<plain_item_type, RecordSpecialThisOpt>) {
-                Arg temp_this_special_loc {
-                    .n = -2,
-                    .tag = Location::heap_obj
-                };
-
-                m_global_consts_map[symbol] = temp_this_special_loc;
-
-                return temp_this_special_loc;
             }
 
             return {};
         }
-    
-        [[nodiscard]] auto record_function_begin(const std::string& func_name) -> int {
-            const int next_fn_id = m_chunk_offsets.size();
-            int abs_code_offset = m_code_blobs.front().size();
 
-            if (m_globals_map.contains(func_name)) {
-                return -1;
-            }
-
-            m_chunk_offsets.emplace_back(abs_code_offset);
-            m_globals_map[func_name] = Arg {
-                .n = static_cast<int16_t>(next_fn_id),
-                .tag = Location::code_chunk
+        [[maybe_unused]] auto pre_record_object(const std::string& symbol, std::unique_ptr<ObjectBase<Value>> object_p) -> bool {
+            // 1a, 1b. For global & interned string references as constants:
+            const int16_t next_global_ref_const_id = m_consts.size();
+            Arg next_global_ref_loc {
+                .n = next_global_ref_const_id,
+                .tag = Location::constant
             };
 
-            return next_fn_id;
+            if (auto heap_native_object_p = m_heap.add_item(m_heap.get_next_id(), std::move(object_p)); heap_native_object_p) {
+                m_consts.emplace_back(Value {heap_native_object_p});
+                m_global_consts_map[symbol] = next_global_ref_loc;
+                m_heap.update_tenure_count();
+
+                return true;
+            }
+
+            return false;
         }
 
         /// NOTE: This overload is for no-argument opcodes
@@ -262,71 +310,80 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto emit_primitive(const Primitive& expr, const std::string& source) -> bool {
-            std::string atom_lexeme = expr.token.as_string(source);
-            const TokenTag expr_token_tag = expr.token.tag;
+            const auto& [pmt_token, pmt_is_key] = expr;
+            std::string atom_lexeme = pmt_token.as_string(source);
+            const TokenTag expr_token_tag = pmt_token.tag;
 
             auto primitive_locator = ([&, this] () -> std::optional<Arg> {
                 switch (expr_token_tag) {
                 case TokenTag::keyword_this:
                     m_has_string_ops = false;
-                    return record_valued_symbol("this", RecordSpecialThisOpt {});
+                    return Arg { .n = -2, .tag = Location::heap_obj, .is_str_literal = false, .from_closure = false };
                 case TokenTag::keyword_undefined:
                     m_has_string_ops = false;
                     m_accessing_property = false;
-                    return record_valued_symbol("undefined", Value {});
+                    return lookup_symbol("undefined", FindGlobalConstsOpt {});
                 case TokenTag::keyword_null:
                     m_has_string_ops = false;
                     m_accessing_property = false;
-                    return record_valued_symbol("null", Value {JSNullOpt {}});
+                    return lookup_symbol("null", FindGlobalConstsOpt {});
                 case TokenTag::keyword_true: case TokenTag::keyword_false:
                     m_has_string_ops = false;
                     m_accessing_property = false;
-                    return record_valued_symbol(atom_lexeme, Value {atom_lexeme == "true"});
+                    return lookup_symbol(atom_lexeme, FindGlobalConstsOpt {});
                 case TokenTag::literal_int:
                     m_has_string_ops = false;
                     m_accessing_property = false;
-                    return record_valued_symbol(atom_lexeme, Value {std::stoi(atom_lexeme)});
+                    return record_symbol(atom_lexeme, Value {std::stoi(atom_lexeme)}, FindGlobalConstsOpt {});
                 case TokenTag::literal_real:
                     m_has_string_ops = false;
                     m_accessing_property = false;
-                    return record_valued_symbol(atom_lexeme, Value {std::stod(atom_lexeme)});
+                    return record_symbol(atom_lexeme, Value {std::stod(atom_lexeme)}, FindGlobalConstsOpt {});
                 case TokenTag::literal_string: {
                     m_has_string_ops = true;
-                    return record_valued_symbol(atom_lexeme, atom_lexeme);
+                    return record_symbol(atom_lexeme, atom_lexeme, FindGlobalConstsOpt {});
                 }
                 case TokenTag::keyword_prototype: {
                     m_has_string_ops = false;
-                    return Arg { .n = -3, .tag = Location::heap_obj };
+                    return Arg { .n = -3, .tag = Location::heap_obj, .is_str_literal = false, .from_closure = false };
                 }
                 case TokenTag::identifier: {
                     m_has_string_ops = false;
 
-                    if (m_accessing_property) {
-                        return record_valued_symbol(atom_lexeme, atom_lexeme);
+                    // Case 1: property keys are always constant strings.
+                    if (pmt_is_key) {
+                        return record_symbol(atom_lexeme, atom_lexeme, FindKeyConstOpt {});
                     } else {
-                        return lookup_symbol(atom_lexeme);
+                        // Case 2.1: The name is for a global native / local variable.
+                        return lookup_symbol(atom_lexeme)
+                        // Case 2.2: The name is a non-local variable BUT non-global.
+                        .or_else([&atom_lexeme, this] () {
+                            return record_symbol(atom_lexeme, atom_lexeme, FindCaptureOpt {});
+                        });
                     }
                 }
                 default: return {};
                 }
             })();
 
-            if (!primitive_locator && !m_has_call) {
+            if (!primitive_locator) {
                 return false;
-            } else if (!primitive_locator && m_has_call && atom_lexeme == m_self_callee) {
-                // patch self-recursive calls...
-                m_self_call_stubs.emplace_back(static_cast<int>(m_code_blobs.front().size()));
-                encode_instruction(Opcode::djs_put_const, Arg { .n = -1, .tag = Location::immediate });
             } else if (const auto primitive_locate_type = primitive_locator->tag; primitive_locate_type == Location::constant) {
                 encode_instruction(Opcode::djs_put_const, *primitive_locator);
-            } else if (const auto local_var_opcode = (m_access_as_lval && !m_accessing_property) ? Opcode::djs_ref_local : Opcode::djs_dup_local; primitive_locate_type == Location::local) {
+
+                if (primitive_locator->from_closure) {
+                    encode_instruction(Opcode::djs_ref_upval);
+
+                    if (!m_access_as_lval) {
+                        encode_instruction(Opcode::djs_deref);
+                    }
+                }
+            } else if (const auto local_var_opcode = (primitive_locate_type == m_access_as_lval && !m_accessing_property) ? Opcode::djs_ref_local : Opcode::djs_dup_local; primitive_locate_type == Location::local) {
                 encode_instruction(local_var_opcode, *primitive_locator);
             } else if (primitive_locate_type == Location::heap_obj && primitive_locator->n == -2) {
                 encode_instruction(Opcode::djs_put_this);
             } else if (primitive_locate_type == Location::heap_obj && primitive_locator->n == -3) {
                 encode_instruction(Opcode::djs_put_proto_key);
-            } else if (primitive_locate_type == Location::code_chunk) {
-                m_immediate_inline_fn_id = primitive_locator->n;
             }
 
             return true;
@@ -339,7 +396,7 @@ export namespace DerkJS {
             for (const auto& [prop_name_token, prop_init_expr] : object.fields) {
                 std::string prop_name = prop_name_token.as_string(source);
 
-                auto prop_name_locator = record_valued_symbol(prop_name, prop_name);
+                auto prop_name_locator = record_symbol(prop_name, prop_name, FindKeyConstOpt {});
 
                 if (!prop_name_locator) {
                     return false;
@@ -372,9 +429,9 @@ export namespace DerkJS {
             }
 
             // 2. Call the equivalent of Array.prototype.constructor(args...)
-            encode_instruction(Opcode::djs_put_const, lookup_symbol("Array").value()); // prototype to bind
-            encode_instruction(Opcode::djs_put_const, lookup_symbol("Array").value()); // for Array.prototype.constructor()
-            encode_instruction(Opcode::djs_put_const, lookup_symbol("constructor").value());
+            encode_instruction(Opcode::djs_put_const, lookup_symbol("Array", FindGlobalConstsOpt {}).value()); // prototype to bind
+            encode_instruction(Opcode::djs_put_const, lookup_symbol("Array", FindGlobalConstsOpt {}).value()); // for Array.prototype.constructor()
+            encode_instruction(Opcode::djs_put_const, lookup_symbol("constructor", FindGlobalConstsOpt {}).value());
             encode_instruction(Opcode::djs_get_prop);
 
             // 3. Invoke the construction of the array with all arguments & the Array prototype reference just above the temporaries. Now there's a new array for use. :)
@@ -401,7 +458,7 @@ export namespace DerkJS {
             for (const auto& param_token : lambda_params) {
                 std::string param_name = param_token.as_string(source);
 
-                if (!record_valued_symbol(param_name, RecordLocalOpt {})) {
+                if (!record_symbol(param_name, RecordLocalOpt {}, FindLocalsOpt {})) {
                     return false;
                 }
             }
@@ -683,14 +740,7 @@ export namespace DerkJS {
             m_access_as_lval = false;
             m_member_depth = 0;
 
-            if (m_immediate_inline_fn_id != -1) {
-                encode_instruction(
-                    Opcode::djs_call,
-                    Arg {.n = static_cast<int16_t>(m_immediate_inline_fn_id), .tag = Location::code_chunk},
-                    Arg {.n = static_cast<int16_t>(call_argc), .tag = Location::immediate}
-                );
-                m_immediate_inline_fn_id = -1;
-            } else if (!m_has_new_applied) {
+            if (!m_has_new_applied) {
                 encode_instruction(
                     Opcode::djs_object_call,
                     Arg {.n = static_cast<int16_t>(call_argc), .tag = Location::immediate},
@@ -748,12 +798,12 @@ export namespace DerkJS {
             std::string var_name = var_name_token.as_string(source);
             m_self_callee = var_name;
             
-            auto var_local_slot = record_valued_symbol(var_name, RecordLocalOpt {});
+            auto var_local_slot = record_symbol(var_name, RecordLocalOpt {}, FindLocalsOpt {});
             
             // 1. When hoisting the var declaration, just set it to undefined 1st.
-            if (const auto placeholder_undefined = record_valued_symbol("undefined", Value {}).value(); m_prepass_vars) {
+            if (const auto placeholder_undefined = lookup_symbol("undefined", FindGlobalConstsOpt {}).value(); m_prepass_vars) {
                 encode_instruction(Opcode::djs_put_const, placeholder_undefined);
-                m_globals_map[var_name] = *var_local_slot;
+                m_local_maps.back().locals[var_name] = *var_local_slot;
                 return true;
             }
 
@@ -763,6 +813,10 @@ export namespace DerkJS {
             if (!emit_expr(*var_init_expr, source)) {
                 return false;
             }
+
+            // 2b. Capture variable in environment in case its used as a closure.
+            encode_instruction(Opcode::djs_put_const, record_symbol(var_name, var_name, FindKeyConstOpt {}).value()); // variable name is the capturing Object key!
+            encode_instruction(Opcode::djs_store_upval);
             m_member_depth = 0;
 
             encode_instruction(Opcode::djs_emplace);
@@ -975,17 +1029,18 @@ export namespace DerkJS {
 
     public:
         BytecodeGenPass(std::vector<PreloadItem> preloadables, int heap_object_capacity)
-        : m_global_consts_map {}, m_globals_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code_blobs {}, m_chunk_offsets {}, m_self_call_stubs {}, m_immediate_inline_fn_id {-1}, m_member_depth {0}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_has_call {false}, m_prepass_vars {true} {
-            m_local_maps.emplace_back(CodeGenScope {
-                .locals = {},
-                .next_local_id = 0
-            });
-            m_code_blobs.emplace_front();
+        : m_global_consts_map {}, m_key_consts_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code_blobs {}, m_chunk_offsets {}, m_self_call_stubs {}, m_immediate_inline_fn_id {-1}, m_member_depth {0}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_has_call {false}, m_prepass_vars {true} {
+            // 1. Record fundamental primitive constants once to avoid extra work.
+            record_symbol("undefined", Value {}, FindGlobalConstsOpt {});
+            record_symbol("null", Value {JSNullOpt {}}, FindGlobalConstsOpt {});
+            record_symbol("true", Value {true}, FindGlobalConstsOpt {});
+            record_symbol("false", Value {false}, FindGlobalConstsOpt {});
 
+            // 2. Record global native objects to avoid extra hassle later.
             for (auto& [pre_name, pre_entity, pre_location] : preloadables) {
                 switch (pre_location) {
                 case Location::constant: {
-                    record_valued_symbol(pre_name, std::move(std::get<Value>(pre_entity)));
+                    record_symbol(pre_name, std::move(std::get<Value>(pre_entity)), FindGlobalConstsOpt {});
                 } break;
                 case Location::heap_obj: {
                     auto& js_object_p = std::get<std::unique_ptr<ObjectBase<Value>>>(pre_entity);
@@ -993,17 +1048,24 @@ export namespace DerkJS {
                         m_heap.add_item(m_heap.get_next_id(), std::move(js_object_p));
                         m_heap.update_tenure_count();
                     } else {
-                        record_valued_symbol(pre_name, std::move(js_object_p));
+                        pre_record_object(pre_name, std::move(js_object_p));
                     }
                 } break;
                 default: break;
                 }
             }
+
+            // 3. Prepare initial mapping of symbols & code buffer to build.
+            m_local_maps.emplace_back(CodeGenScope {
+                .locals = {},
+                .next_local_id = 0
+            });
+            m_code_blobs.emplace_front();
         }
 
         [[nodiscard]] auto operator()([[maybe_unused]] const ASTUnit& tu, [[maybe_unused]] const std::vector<std::string>& source_map) -> std::optional<Program> {
             /// 1. emit all top-level non-function statements as an implicit function that's called right away.
-            auto global_func_id = record_function_begin("__js_global__");
+            constexpr auto global_func_id = 0; // implicit main function begins at offset 0
 
             /// 2. emit all vars (especially function declaration syntax sugar) FIRST as per JS hoisting.
             for (const auto& [src_filename, decl, src_id] : tu) {
