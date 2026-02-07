@@ -100,6 +100,9 @@ export namespace DerkJS {
 
         bool m_has_call;
 
+        // Whether to emit any `var a = ...;` declaration as an undefined stub first. Otherwise, the `var a = ...;` declarations are treated as assignments.
+        bool m_prepass_vars;
+
         // Overload for universal lookup via priorities 1, 2, 3
         [[nodiscard]] auto lookup_symbol(const std::string& symbol) -> std::optional<Arg> {
             return lookup_symbol(symbol, FindGlobalConstsOpt {})
@@ -403,6 +406,15 @@ export namespace DerkJS {
                 }
             }
 
+            const auto old_prepass_vars_flag = m_prepass_vars;
+            m_prepass_vars = true;
+
+            if (!emit_stmt(*lambda_body, source)) {
+                return false;
+            }
+
+            m_prepass_vars = false;
+
             if (!emit_stmt(*lambda_body, source)) {
                 return false;
             }
@@ -435,6 +447,7 @@ export namespace DerkJS {
             m_local_maps.pop_back();
             m_self_call_stubs.clear();
             m_self_callee.clear();
+            m_prepass_vars = old_prepass_vars_flag;
 
             encode_instruction(
                 Opcode::djs_put_const,
@@ -722,6 +735,10 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto emit_expr_stmt(const ExprStmt& stmt, const std::string& source) -> bool {
+            if (m_prepass_vars) {
+                return true;
+            }
+
             const auto& [wrapped_expr] = stmt;
             return emit_expr(*wrapped_expr, source);
         }
@@ -731,25 +748,26 @@ export namespace DerkJS {
             std::string var_name = var_name_token.as_string(source);
             m_self_callee = var_name;
             
-            if (m_local_maps.back().locals.contains(var_name)) {
-                return false;
+            auto var_local_slot = record_valued_symbol(var_name, RecordLocalOpt {});
+            
+            // 1. When hoisting the var declaration, just set it to undefined 1st.
+            if (const auto placeholder_undefined = record_valued_symbol("undefined", Value {}).value(); m_prepass_vars) {
+                encode_instruction(Opcode::djs_put_const, placeholder_undefined);
+                m_globals_map[var_name] = *var_local_slot;
+                return true;
             }
 
-            auto var_local_slot = record_valued_symbol(var_name, RecordLocalOpt {});
+            // 2. In the 2nd pass, define the filler var in function scope. Although this is a var decl, it's been defined as undefined before, so treat the initialization as a var-assignment.
+            encode_instruction(Opcode::djs_ref_local, *var_local_slot);
 
             if (!emit_expr(*var_init_expr, source)) {
                 return false;
             }
+            m_member_depth = 0;
 
-            if (m_local_maps.size() < 2) {
-                m_globals_map[var_name] = *var_local_slot;
-                return true;
-            } else {
-                m_local_maps.back().locals[var_name] = *var_local_slot;
-                return true;
-            }
+            encode_instruction(Opcode::djs_emplace);
 
-            return false;
+            return true;
         }
 
         [[nodiscard]] auto emit_variables(const Variables& stmt, const std::string& source) -> bool {
@@ -764,6 +782,19 @@ export namespace DerkJS {
 
         [[nodiscard]] auto emit_if(const If& stmt_if, const std::string& source) -> bool {
             const auto& [check, truthy_body, falsy_body] = stmt_if;
+
+            /// NOTE: emit all var decls in these bodies
+            if (m_prepass_vars) {
+                if (!emit_stmt(*truthy_body, source)) {
+                    return false;
+                }
+
+                if (falsy_body && !emit_stmt(*falsy_body, source)) {
+                    return false;
+                }
+
+                return true;
+            }
 
             if (!emit_expr(*check, source)) {
                 return false;
@@ -808,6 +839,10 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto emit_return(const Return& stmt, const std::string& source) -> bool {
+            if (m_prepass_vars) {
+                return true;
+            }
+
             const auto& [result_expr] = stmt;
 
             m_access_as_lval = false;
@@ -823,6 +858,15 @@ export namespace DerkJS {
 
         [[nodiscard]] auto emit_while(const While& loop_by_while, const std::string& source) -> bool {
             const auto& [loop_check, loop_body] = loop_by_while;
+
+            if (m_prepass_vars) {
+                if (!emit_stmt(*loop_body, source)) {
+                    return false;
+                }
+
+                return true;
+            }
+
             const int loop_begin_pos = m_code_blobs.front().size();
 
             m_active_loops.push_front(ActiveLoop {
@@ -866,6 +910,10 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto emit_break() -> bool {
+            if (m_prepass_vars) {
+                return true;
+            }
+
             const int current_code_pos = m_code_blobs.front().size();
 
             encode_instruction(Opcode::djs_jump, Arg {
@@ -878,6 +926,10 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto emit_continue() -> bool {
+            if (m_prepass_vars) {
+                return true;
+            }
+
             const int current_code_pos = m_code_blobs.front().size();
 
             encode_instruction(Opcode::djs_jump, Arg {
@@ -899,35 +951,6 @@ export namespace DerkJS {
             return true;
         }
 
-        [[nodiscard]] auto emit_function_decl(const FunctionDecl& stmt, const std::string& source) -> bool {
-            const auto& [fn_params, fn_name, fn_body] = stmt;
-
-            m_local_maps.emplace_back(CodeGenScope {
-                .locals = {},
-                .next_local_id = 0
-            });
-
-            if (record_function_begin(fn_name.as_string(source)) == -1) {
-                return false;
-            }
-
-            for (const auto& param_token : fn_params) {
-                std::string param_name = param_token.as_string(source);
-
-                if (!record_valued_symbol(param_name, RecordLocalOpt {})) {
-                    return false;
-                }
-            }
-
-            if (!emit_stmt(*fn_body, source)) {
-                return false;
-            }
-
-            m_local_maps.pop_back();
-
-            return true;
-        }
-
         [[nodiscard]] auto emit_stmt(const Stmt& stmt, const std::string& source) -> bool {
             if (auto expr_stmt_p = std::get_if<ExprStmt>(&stmt.data); expr_stmt_p) {
                 return emit_expr_stmt(*expr_stmt_p, source);
@@ -945,8 +968,6 @@ export namespace DerkJS {
                 return emit_continue();
             } else if (auto block_p = std::get_if<Block>(&stmt.data); block_p) {
                 return emit_block(*block_p, source);
-            } else if (auto func_p = std::get_if<FunctionDecl>(&stmt.data); func_p) {
-                return emit_function_decl(*func_p, source);
             }
 
             return false;
@@ -954,7 +975,7 @@ export namespace DerkJS {
 
     public:
         BytecodeGenPass(std::vector<PreloadItem> preloadables, int heap_object_capacity)
-        : m_global_consts_map {}, m_globals_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code_blobs {}, m_chunk_offsets {}, m_self_call_stubs {}, m_immediate_inline_fn_id {-1}, m_member_depth {0}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_has_call {false} {
+        : m_global_consts_map {}, m_globals_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code_blobs {}, m_chunk_offsets {}, m_self_call_stubs {}, m_immediate_inline_fn_id {-1}, m_member_depth {0}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_has_call {false}, m_prepass_vars {true} {
             m_local_maps.emplace_back(CodeGenScope {
                 .locals = {},
                 .next_local_id = 0
@@ -986,20 +1007,18 @@ export namespace DerkJS {
 
             /// 2. emit all vars (especially function declaration syntax sugar) FIRST as per JS hoisting.
             for (const auto& [src_filename, decl, src_id] : tu) {
-                if (std::holds_alternative<Variables>(decl->data)) {
-                    if (!emit_stmt(*decl, source_map.at(src_id))) {
-                        std::println(std::cerr, "Compile Error at source '{}' around '{}': unsupported JS construct :(\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length));
-                        return {};
-                    }
+                if (!emit_stmt(*decl, source_map.at(src_id))) {
+                    std::println(std::cerr, "Compile Error at source '{}' around '{}': unsupported JS construct :(\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length));
+                    return {};
                 }
             }
 
+            m_prepass_vars = false;
+
             for (const auto& [src_filename, decl, src_id] : tu) {
-                if (!std::holds_alternative<Variables>(decl->data)) {
-                    if (!emit_stmt(*decl, source_map.at(src_id))) {
-                        std::println(std::cerr, "Compile Error at source '{}' around '{}': unsupported JS construct :(\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length));
-                        return {};
-                    }
+                if (!emit_stmt(*decl, source_map.at(src_id))) {
+                    std::println(std::cerr, "Compile Error at source '{}' around '{}': unsupported JS construct :(\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length));
+                    return {};
                 }
             }
 
