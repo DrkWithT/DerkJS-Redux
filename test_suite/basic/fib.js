@@ -1,12 +1,13 @@
-function fib_r(n) {
+function fib_r(n, self_fn) {
     if (n < 2) {
         return n;
     }
 
-    return fib_r(n - 1) + fib_r(n - 2);
+    return self_fn(n - 1, self_fn) + self_fn(n - 2, self_fn);
 }
 
-var ans = fib_r(35);
+/* temporary hack before closure support */
+var ans = fib_r(30, fib_r);
 
 console.log(ans);
 
