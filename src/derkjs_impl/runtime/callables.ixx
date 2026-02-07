@@ -75,9 +75,12 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto call(void* opaque_ctx_p, int argc, [[maybe_unused]] bool has_this_arg) -> bool override {
-            /// NOTE: On usage, the `opaque_ctx_p` argument MUST point to an `ExternVMCtx` and MUST NOT own the context.
+            /// 1.1: Prepare the `opaque_ctx_p` argument, which MUST point to an `ExternVMCtx` and MUST NOT own the context.
             auto vm_context_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
             ObjectBase<Value>* this_arg_p = (has_this_arg) ? vm_context_p->stack[vm_context_p->rsp - 1].to_object() : nullptr;
+
+            // 1.2: Just get the captures from the previous caller. This is a native function that's NOT a regular JS Function.
+            ObjectBase<Value>* caller_capture_p = vm_context_p->frames.back().capture_p;
 
             if (has_this_arg) {
                 --vm_context_p->rsp;
@@ -90,12 +93,14 @@ export namespace DerkJS {
 
             vm_context_p->frames.emplace_back(tco_call_frame_type {
                 /// NOTE: Just put nullptr- the native callee will handle its own return of control back to the interpreter.
-                vm_context_p->rip_p + 1,
+                .m_caller_ret_ip = vm_context_p->rip_p + 1,
                 /// NOTE: Take the `this` argument of the object passed in case the native callee needs it via the C++ API.
-                this_arg_p,
+                .m_this_p = this_arg_p,
+                .caller_addr = this,
+                .capture_p = caller_capture_p,
                 /// NOTE: Put unused dud values for bytecode RBP, etc. because the native callee handles its own return.
-                -1,
-                -1
+                .m_callee_sbp = -1,
+                .m_caller_sbp = -1
             });
 
             // 2. Make native call
@@ -152,6 +157,8 @@ export namespace DerkJS {
             "djs_dup",
             "djs_dup_local",
             "djs_ref_local",
+            "djs_store_upval",
+            "djs_ref_upval",
             "djs_put_const",
             "djs_deref",
             "djs_pop",
@@ -265,8 +272,12 @@ export namespace DerkJS {
         [[maybe_unused]] auto call(void* opaque_ctx_p, int argc, bool has_this_arg) -> bool override {
             auto vm_context_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
 
-            /// NOTE: consume `this` argument (if needed) before the call to avoid garbage results.
+            // 1.1: After accessing the VM context, consume `this` argument (if needed) before the call to avoid garbage results.
             ObjectBase<Value>* this_arg_p = (has_this_arg) ? vm_context_p->stack[vm_context_p->rsp - 1].to_object() : nullptr;
+
+            // 1.2: Only allocate a capture Object for different callee vs. caller Functions.
+            ObjectBase<Value>* caller_capture_p = vm_context_p->frames.back().capture_p;
+            auto capture_obj_p = (vm_context_p->frames.back().caller_addr == this) ? caller_capture_p : vm_context_p->heap.add_item(vm_context_p->heap.get_next_id(), std::make_unique<Object>(caller_capture_p));
 
             const auto caller_ret_ip = vm_context_p->rip_p + 1;
             const int16_t old_caller_sbp = vm_context_p->rsbp;
@@ -277,10 +288,12 @@ export namespace DerkJS {
             vm_context_p->rsp = new_callee_sbp + argc - 1;
 
             vm_context_p->frames.emplace_back(tco_call_frame_type {
-                caller_ret_ip,
-                this_arg_p,
-                new_callee_sbp,
-                old_caller_sbp
+                .m_caller_ret_ip = caller_ret_ip,
+                .m_this_p = this_arg_p,
+                .caller_addr = this,
+                .capture_p = capture_obj_p,
+                .m_new_callee_sbp = new_callee_sbp,
+                .m_new_caller_sbp = old_caller_sbp
             });
 
             return true;
@@ -288,26 +301,32 @@ export namespace DerkJS {
 
         /// TODO: support passing of `this` arguments to ctors which may be methods of an object!
         [[nodiscard]] auto call_as_ctor(void* opaque_ctx_p, int argc) -> bool override {
-            auto vm_ctx_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
-            // All constructor result objects have the function prototype.
-            auto this_arg_p = vm_ctx_p->heap.add_item(
-                vm_ctx_p->heap.get_next_id(),
+            // 1.1: After access of the VM context, all constructor result objects have the function prototype.
+            auto vm_context_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
+            auto this_arg_p = vm_context_p->heap.add_item(
+                vm_context_p->heap.get_next_id(),
                 std::make_unique<Object>(m_prototype.to_object())
             );
 
-            const auto caller_ret_ip = vm_ctx_p->rip_p + 1;
-            const int16_t new_callee_sbp = vm_ctx_p->rsp - argc;
-            const int16_t old_caller_sbp = vm_ctx_p->rsbp;
+            // 1.2: Only allocate a capture Object for different callee vs. caller Functions.
+            ObjectBase<Value>* caller_capture_p = vm_context_p->frames.back().capture_p;
+            auto capture_obj_p = (vm_context_p->frames.back().caller_addr == this) ? caller_capture_p : vm_context_p->heap.add_item(vm_context_p->heap.get_next_id(), std::make_unique<Object>(caller_capture_p));
 
-            vm_ctx_p->rip_p = m_code.data();
-            vm_ctx_p->rsbp = new_callee_sbp; // 0, Sequence
-            vm_ctx_p->rsp = new_callee_sbp;
+            const auto caller_ret_ip = vm_context_p->rip_p + 1;
+            const int16_t new_callee_sbp = vm_context_p->rsp - argc;
+            const int16_t old_caller_sbp = vm_context_p->rsbp;
 
-            vm_ctx_p->frames.emplace_back(tco_call_frame_type {
-                caller_ret_ip,
-                this_arg_p,
-                new_callee_sbp,
-                old_caller_sbp
+            vm_context_p->rip_p = m_code.data();
+            vm_context_p->rsbp = new_callee_sbp; // 0, Sequence
+            vm_context_p->rsp = new_callee_sbp;
+
+            vm_context_p->frames.emplace_back(tco_call_frame_type {
+                .m_caller_ret_ip = caller_ret_ip,
+                .m_this_p = this_arg_p,
+                .caller_addr = this,
+                .capture_p = capture_obj_p,
+                .m_callee_sbp = new_callee_sbp,
+                .m_caller_sbp = old_caller_sbp
             });
 
             return this_arg_p != nullptr;

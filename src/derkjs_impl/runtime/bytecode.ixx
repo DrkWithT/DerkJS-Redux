@@ -23,6 +23,8 @@ export namespace DerkJS {
         djs_dup, // Duplicates the top stack value.
         djs_dup_local, // Duplicates a local relative to the callee's RBP.
         djs_ref_local, // Pushes a reference to a local, offset from the callee's RBP.
+        djs_store_upval, // Stores a CLONED variable to the "capture" object that may be used by a callee; Stack: <temp-value> <string-key> -> <temp-value> ---  closure[key] = <temp-value>)
+        djs_ref_upval, // Gets an upvalue reference from the "capture" object that was created by the caller earlier. Stack: <string-key> -> <up-value-ref>
         djs_put_const, // Pushes a global constant.
         djs_deref, // Args: Replaces the top value with its fully-dereferenced Value.
         djs_pop, // Lazy pops by N given <pop-n>.
@@ -63,7 +65,7 @@ export namespace DerkJS {
         code_chunk,
         immediate,
         constant,
-        heap_obj, // -2: this
+        heap_obj, // -2: this, -3: prototype
         local,
         end,
     };
@@ -71,6 +73,8 @@ export namespace DerkJS {
     struct Arg {
         int16_t n;
         Location tag;
+        bool is_str_literal;
+        bool from_closure;
     };
 
     struct Instruction {
@@ -94,6 +98,8 @@ export namespace DerkJS {
             "djs_dup",
             "djs_dup_local",
             "djs_ref_local",
+            "djs_store_upval",
+            "djs_ref_upval",
             "djs_put_const",
             "djs_deref",
             "djs_pop",
