@@ -1,9 +1,7 @@
 module;
 
 #include <cstdint>
-#include <type_traits>
 #include <utility>
-
 #include <algorithm>
 #include <vector>
 
@@ -60,7 +58,9 @@ namespace DerkJS {
     template <>
     struct CallFrame<DispatchPolicy::tco> {
         const Instruction* m_caller_ret_ip;
-        ObjectBase<Value>* m_this_p;
+        ObjectBase<Value>* this_p;
+        ObjectBase<Value>* caller_addr;
+        ObjectBase<Value>* capture_p;
         int m_callee_sbp;
         int m_caller_sbp;
     };
@@ -125,7 +125,9 @@ namespace DerkJS {
             } else {
                 frames.emplace_back(call_frame_type {
                     .m_caller_ret_ip = nullptr,
-                    .m_this_p = global_this_p, // TODO: add globalThis & working global prop assignments...
+                    .this_p = global_this_p, // TODO: add globalThis & working global prop assignments...
+                    .caller_addr = nullptr,
+                    .capture_p = heap.add_item(heap.get_next_id(), std::make_unique<Object>(nullptr)),
                     .m_callee_sbp = 0,
                     .m_caller_sbp = 0,
                 });
@@ -175,348 +177,16 @@ namespace DerkJS {
         /// NOTE: indicates an error condition during execution, returning from the VM invocation
         ExitStatus m_status;
 
-        void op_dup(int16_t temp_offset) noexcept {
-            const auto& src_value = m_stack[m_rsbp + temp_offset];
-
-            ++m_rsp;
-            m_stack[m_rsp] = src_value;
-
-            ++m_rip_p;
-        }
-
-        void op_push_const(int16_t const_id) noexcept {
-            ++m_rsp;
-            m_stack[m_rsp] = m_consts_view[const_id];
-
-            ++m_rip_p;
-        }
-
-        void op_pop(int16_t pop_n) noexcept {
-            lazy_pop_values(pop_n);
-            ++m_rip_p;
-        }
-
-        void op_emplace(int16_t local_n) noexcept {
-            m_stack[m_rsbp + local_n] = m_stack[m_rsp];
-            --m_rsp;
-            ++m_rip_p;
-        }
-
-        void op_dup() noexcept {
-            m_status = ExitStatus::opcode_err;
-        }
-
-        void op_mod() noexcept {
-            m_stack[m_rsp] %= m_stack[m_rsp - 1];
-            std::swap(m_stack[m_rsp - 1], m_stack[m_rsp]);
-            --m_rsp;
-
-            ++m_rip_p;
-        }
-
-        void op_mul() noexcept {
-            m_stack[m_rsp] *= m_stack[m_rsp - 1];
-            std::swap(m_stack[m_rsp - 1], m_stack[m_rsp]);
-            --m_rsp;
-
-            ++m_rip_p;
-        }
-
-        void op_div() noexcept {
-            // E: 4 / 2: --> 4 / 2: 
-            // T: LHS: 10    LHS: 5
-            // B: RHS: 2     RHS: (bubble down LHS here)
-            m_stack[m_rsp] /= m_stack[m_rsp - 1];
-            std::swap(m_stack[m_rsp - 1], m_stack[m_rsp]);
-            --m_rsp;
-
-            ++m_rip_p;
-        }
-
-        void op_add() noexcept {
-            m_stack[m_rsp] += m_stack[m_rsp - 1];
-            std::swap(m_stack[m_rsp - 1], m_stack[m_rsp]);
-            --m_rsp;
-
-            ++m_rip_p;
-        }
-
-        void op_sub() noexcept {
-            m_stack[m_rsp] -= m_stack[m_rsp - 1];
-            std::swap(m_stack[m_rsp - 1],  m_stack[m_rsp]);
-            --m_rsp;
-
-            ++m_rip_p;
-        }
-
-        void op_test_falsy() noexcept {
-            const auto& tested_value = m_stack[m_rsp];
-
-            ++m_rsp;
-            m_stack[m_rsp] = tested_value.is_falsy();
-            ++m_rip_p;
-        }
-
-        void op_test_strict_eq() noexcept {
-            const auto& lhs = m_stack[m_rsp];
-
-            --m_rsp;
-            m_stack[m_rsp] = lhs == m_stack[m_rsp];
-            ++m_rip_p;
-        }
-
-        void op_test_strict_ne() noexcept {
-            const auto& lhs = m_stack[m_rsp];
-            
-            --m_rsp;
-            m_stack[m_rsp] = lhs != m_stack[m_rsp];
-            ++m_rip_p;
-        }
-
-        void op_test_lt() {
-            const auto& lhs = m_stack[m_rsp];
-            
-            --m_rsp;
-            m_stack[m_rsp] = lhs < m_stack[m_rsp];
-            ++m_rip_p;
-        }
-
-        void op_test_lte() {
-            const auto& lhs = m_stack[m_rsp];
-
-            --m_rsp;
-            m_stack[m_rsp] = lhs <= m_stack[m_rsp];
-            ++m_rip_p;
-        }
-
-        void op_test_gt() {
-            const auto& lhs = m_stack[m_rsp];
-
-            --m_rsp;
-            m_stack[m_rsp] = lhs < m_stack[m_rsp];
-            ++m_rip_p;
-        }
-
-        void op_test_gte() {
-            const auto& lhs = m_stack[m_rsp];
-
-            --m_rsp;
-            m_stack[m_rsp] = lhs >= m_stack[m_rsp];
-            ++m_rip_p;
-        }
-
-        void op_jump_else(int16_t jmp_offset, int16_t on_truthy_pop_n) noexcept {
-            if (!m_stack[m_rsp]) {
-                m_rip_p += jmp_offset;
-            } else {
-                m_rsp -= on_truthy_pop_n;
-                ++m_rip_p;
-            }
-        }
-
-        void op_jump_if(int16_t jmp_offset, int16_t on_falsy_pop_n) noexcept {
-            if (m_stack[m_rsp]) {
-                m_rip_p += jmp_offset;
-            } else {
-                m_rsp -= on_falsy_pop_n;
-                ++m_rip_p;
-            }
-        }
-
-        void op_jump(int16_t jmp_offset) noexcept {
-            m_rip_p += jmp_offset;
-        }
-
-        void op_call(int16_t chunk_id, int16_t argc) {
-            const int16_t new_callee_sbp = m_rsp - argc + 1;
-            const int16_t old_caller_sbp = m_rsbp;
-            const int16_t old_caller_id = m_rcid;
-            const int16_t old_caller_ret_ip = m_rip_p - m_code_bp + 1;
-
-            m_rsbp = new_callee_sbp;
-            m_rcid = chunk_id;
-            m_rip_p = m_code_bp + m_fn_table_bp[chunk_id];
-
-            m_frames.emplace_back(call_frame_type {
-                new_callee_sbp,
-                old_caller_sbp,
-                old_caller_id,
-                old_caller_ret_ip
-            });
-            --m_frames_free;
-        }
-
-        void op_ret() {
-            const auto [callee_sbp, caller_sbp, caller_id, caller_ret_ip] = m_frames.back();
-
-            m_frames.pop_back();
-            ++m_frames_free;
-
-            m_stack[callee_sbp] = m_stack[m_rsp];
-
-            m_rsbp = caller_sbp;
-            m_rsp = callee_sbp;
-            m_rcid = caller_id;
-            m_rip_p = m_code_bp + caller_ret_ip;
-        }
-
-        void op_halt(int16_t exit_code) noexcept {
-            m_status = static_cast<ExitStatus>(exit_code);
-            ++m_rip_p;
-        }
-
-    public:
-        explicit VM(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit)
-        : m_stack {}, m_frames {}, m_consts_view {}, m_code_bp {}, m_fn_table_bp {}, m_rip_p {}, m_frames_free {call_frame_limit}, m_rsbp {}, m_rsp {}, m_rcid {-1}, m_status {ExitStatus::ok} {
-            m_stack.reserve(stack_length_limit);
-            m_stack.resize(stack_length_limit);
-
-            m_consts_view = prgm.consts.data();
-            m_code_bp = prgm.code.data();
-            m_fn_table_bp = prgm.offsets.data();
-
-            m_rsbp = 0;
-            m_rsp = -1;
-            m_rcid = prgm.entry_func_id;
-            
-            m_frames.emplace_back(call_frame_type {
-                0,
-                0,
-                -1,
-                -1
-            });
-            --m_frames_free;
-
-            if (m_rcid >= 0) {
-                m_rip_p = m_code_bp + m_fn_table_bp[m_rcid];
-                m_status = ExitStatus::ok;
-            } else {
-                m_rip_p = nullptr;
-                m_status = ExitStatus::setup_err;
-            }
-        }
-
-        template <typename V> requires (std::is_same_v<std::remove_cvref_t<V>, Value>)
-        void push_value(V&& value) {
-            ++m_rsp;
-            m_stack[m_rsp] = std::forward<V>(value); // 30 profile cost
-        }
-
-        void lazy_pop_values(int16_t n) noexcept {
-            m_rsp -= n;
-
-            if (m_rsp < 0) {
-                m_status = ExitStatus::stack_err;
-            }
-        }
-
-        [[nodiscard]] auto peek_local_value(int offset) noexcept -> Value& {
-            return m_stack[m_rsbp + offset];
-        }
-
-        [[nodiscard]] auto operator()() -> ExitStatus {
-            while (!m_frames.empty() && m_status == ExitStatus::ok) {
-                const auto& [next_argv, next_opcode] = *m_rip_p;
-
-                switch (next_opcode) {
-                case Opcode::djs_nop:
-                    ++m_rip_p;
-                    break;
-                case Opcode::djs_dup:
-                    op_dup(next_argv[0]);
-                    break;
-                case Opcode::djs_put_const:
-                    op_push_const(next_argv[0]);
-                    break;
-                case Opcode::djs_deref:
-                    m_status = ExitStatus::opcode_err;
-                    break;
-                case Opcode::djs_pop:
-                    op_pop(next_argv[0]);
-                    break;
-                case Opcode::djs_emplace:
-                    op_emplace(next_argv[0]);
-                    break;
-                case Opcode::djs_put_obj_dud:
-                    m_status = ExitStatus::opcode_err;
-                    break;
-                case Opcode::djs_get_prop:
-                    m_status = ExitStatus::opcode_err;
-                    break;
-                case Opcode::djs_put_prop:
-                    m_status = ExitStatus::opcode_err;
-                    break;
-                case Opcode::djs_del_prop:
-                    m_status = ExitStatus::opcode_err;
-                    break;
-                case Opcode::djs_mod:
-                    op_mod();
-                    break;
-                case Opcode::djs_mul:
-                    op_mul();
-                    break;
-                case Opcode::djs_div:
-                    op_div();
-                    break;
-                case Opcode::djs_add:
-                    op_add();
-                    break;
-                case Opcode::djs_sub:
-                    op_sub();
-                    break;
-                case Opcode::djs_test_falsy:
-                    op_test_falsy();
-                    break;
-                case Opcode::djs_test_strict_eq:
-                    op_test_strict_eq();
-                    break;
-                case Opcode::djs_test_strict_ne:
-                    op_test_strict_ne();
-                    break;
-                case Opcode::djs_test_lt:
-                    op_test_lt();
-                    break;
-                case Opcode::djs_test_lte:
-                    op_test_lte();
-                    break;
-                case Opcode::djs_test_gt:
-                    op_test_gt();
-                    break;
-                case Opcode::djs_test_gte:
-                    op_test_gte();
-                    break;
-                case Opcode::djs_jump_else:
-                    op_jump_else(next_argv[0], next_argv[1]);
-                    break;
-                case Opcode::djs_jump_if:
-                    op_jump_if(next_argv[0], next_argv[1]);
-                    break;
-                case Opcode::djs_jump:
-                    op_jump(next_argv[0]);
-                    break;
-                case djs_call:
-                    op_call(next_argv[0], next_argv[1]);
-                    break;
-                case djs_ret:
-                    op_ret();
-                    break;
-                case djs_halt:
-                default:
-                    op_halt(next_argv[0]);
-                    break;
-                }
-            }
-
-            return m_status;
-        }
+        // TODO!
     };
-
 
 
     [[nodiscard]] inline auto op_nop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_dup(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_dup_local(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_ref_local(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_store_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    [[nodiscard]] inline auto op_ref_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_put_const(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_deref(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_pop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
@@ -556,7 +226,7 @@ namespace DerkJS {
     using tco_opcode_fn = bool(*)(ExternVMCtx&, int16_t, int16_t);
     constexpr tco_opcode_fn tco_opcodes[static_cast<std::size_t>(Opcode::last)] = {
         op_nop,
-        op_dup, op_dup_local, op_ref_local, op_put_const, op_deref, op_pop, op_emplace,
+        op_dup, op_dup_local, op_ref_local, op_store_upval, op_ref_upval, op_put_const, op_deref, op_pop, op_emplace,
         op_put_this, op_put_obj_dud, op_put_arr_dud, op_put_proto_key, op_get_prop, op_put_prop, op_del_prop,
         op_numify, op_strcat,
         op_mod, op_mul, op_div, op_add, op_sub,
@@ -567,23 +237,23 @@ namespace DerkJS {
     };
 
     [[nodiscard]] inline auto op_nop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ++ctx.rip_p;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_dup(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         ctx.stack[ctx.rsp + 1] = ctx.stack[ctx.rsp];
-        ++ctx.rsp;
-        ++ctx.rip_p;
+        ctx.rsp++;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_dup_local(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         ctx.stack[ctx.rsp + 1] = ctx.stack[ctx.rsbp + a0];
-        ++ctx.rsp;
-        ++ctx.rip_p;
+        ctx.rsp++;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
@@ -597,16 +267,51 @@ namespace DerkJS {
             ctx.stack[ctx.rsp + 1] = Value {&ctx.stack[ctx.rsbp + a0]};
         }
 
-        ++ctx.rsp;
-        ++ctx.rip_p;
+        ctx.rsp++;
+        ctx.rip_p++;
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_store_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        const auto& temp_value = ctx.stack[ctx.rsp - 1];
+        const auto& key_value = ctx.stack[ctx.rsp];
+
+        if (!ctx.frames.back().capture_p->set_property_value(PropertyHandle<Value> {
+            key_value,
+            PropertyHandleTag::key,
+            static_cast<uint8_t>(PropertyHandleFlag::writable)
+        }, temp_value)) {
+            ctx.status = VMErrcode::bad_property_access;
+        } else {
+            ctx.rip_p++;
+            ctx.rsp--;
+        }
+
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    [[nodiscard]] inline auto op_ref_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+        const auto& key_value = ctx.stack[ctx.rsp];
+
+        if (auto upval_ref_p = ctx.frames.back().capture_p->get_property_value(PropertyHandle<Value> {
+            key_value,
+            PropertyHandleTag::key,
+            static_cast<uint8_t>(PropertyHandleFlag::writable)
+        }, false); upval_ref_p) {
+            ctx.stack[ctx.rsp] = Value {upval_ref_p};
+            ctx.rip_p++;
+        } else {
+            ctx.status = VMErrcode::bad_property_access;
+        }
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_put_const(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool  {
         ctx.stack[ctx.rsp + 1] = ctx.consts_view[a0];
-        ++ctx.rsp;
-        ++ctx.rip_p;
+        ctx.rsp++;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
@@ -618,14 +323,14 @@ namespace DerkJS {
             return false; // DEBUG??
         }
 
-        ++ctx.rip_p;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_pop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         ctx.rsp -= a0;
-        ++ctx.rip_p;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
@@ -634,19 +339,18 @@ namespace DerkJS {
         auto& dest_val_ref = ctx.stack[ctx.rsp - 1];
 
         ctx.status = (dest_val_ref.get_tag() != ValueTag::val_ref) ? VMErrcode::bad_operation : VMErrcode::ok;
-        dest_val_ref.get_value_ref()[0] = ctx.stack[ctx.rsp];
+        *dest_val_ref.get_value_ref() = ctx.stack[ctx.rsp];
 
-        --ctx.rsp;
-        --ctx.rsp;
-        ++ctx.rip_p;
+        ctx.rsp -= 2;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_put_this(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ctx.stack[ctx.rsp + 1] = Value {ctx.frames.back().m_this_p};
-        ++ctx.rsp;
-        ++ctx.rip_p;
+        ctx.stack[ctx.rsp + 1] = Value {ctx.frames.back().this_p};
+        ctx.rsp++;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
@@ -656,11 +360,13 @@ namespace DerkJS {
 
         auto obj_ref_p = ctx.heap.add_item(ctx.heap.get_next_id(), Object {nullptr});
 
-        ctx.status = (!obj_ref_p) ? VMErrcode::bad_heap_alloc : VMErrcode::ok;
-        ctx.stack[ctx.rsp + 1] = Value {obj_ref_p};
-
-        ++ctx.rsp;
-        ++ctx.rip_p;
+        if (obj_ref_p) {
+            ctx.stack[ctx.rsp + 1] = Value {obj_ref_p};
+            ctx.rsp++;
+            ctx.rip_p++;
+        } else {
+            ctx.status = VMErrcode::bad_heap_alloc;
+        }
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
@@ -671,10 +377,12 @@ namespace DerkJS {
         auto array_prototype_p = ctx.stack[ctx.rsp].to_object();
         auto array_ref_p = ctx.heap.add_item(ctx.heap.get_next_id(), Array {array_prototype_p});
 
-        ctx.status = (!array_ref_p) ? VMErrcode::bad_heap_alloc : VMErrcode::ok;
-        ctx.stack[ctx.rsp] = Value {array_ref_p};
-
-        ++ctx.rip_p;
+        if (array_ref_p) {
+            ctx.stack[ctx.rsp] = Value {array_ref_p};
+            ctx.rip_p++;
+        } else {
+            ctx.status = VMErrcode::bad_heap_alloc;
+        }
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
@@ -684,8 +392,8 @@ namespace DerkJS {
         ctx.stack[ctx.rsp + 1] = Value {};
         ctx.rpk = true;
 
-        ++ctx.rsp;
-        ++ctx.rip_p;
+        ctx.rsp++;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
@@ -711,8 +419,8 @@ namespace DerkJS {
         }
 
         ctx.rpk = false;
-        --ctx.rsp;
-        ++ctx.rip_p;
+        ctx.rsp--;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
@@ -737,7 +445,7 @@ namespace DerkJS {
         ctx.rpk = false;
 
         ctx.rsp -= 2;
-        ++ctx.rip_p;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
@@ -753,7 +461,7 @@ namespace DerkJS {
             ctx.stack[ctx.rsp] = Value {JSNaNOpt {}};
         }
 
-        ++ctx.rip_p;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
@@ -765,11 +473,11 @@ namespace DerkJS {
         result.append_back(ctx.stack[ctx.rsp - 1].to_string().value());
 
         if (auto temp_str_p = ctx.heap.add_item(ctx.heap.get_next_id(), std::move(result)); !temp_str_p) {
-            return false;
+            ctx.status = VMErrcode::bad_heap_alloc;
         } else {
             ctx.stack[ctx.rsp - 1] = Value {temp_str_p};
-            --ctx.rsp;
-            ++ctx.rip_p;
+            ctx.rsp--;
+            ctx.rip_p++;
         }
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
@@ -778,16 +486,16 @@ namespace DerkJS {
     [[nodiscard]] inline auto op_mod(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         std::swap_ranges(reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp) + sizeof(Value), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp - 1));
         ctx.stack[ctx.rsp - 1] %= ctx.stack[ctx.rsp];
-        --ctx.rsp;
-        ++ctx.rip_p;
+        ctx.rsp--;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_mul(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         ctx.stack[ctx.rsp - 1] *= ctx.stack[ctx.rsp]; // commutativity of the TIMES operator allows avoidance of std::swap
-        --ctx.rsp;
-        ++ctx.rip_p;
+        ctx.rsp--;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
@@ -795,16 +503,16 @@ namespace DerkJS {
     [[nodiscard]] inline auto op_div(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         std::swap_ranges(reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp) + sizeof(Value), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp - 1));
         ctx.stack[ctx.rsp - 1] /= ctx.stack[ctx.rsp];
-        --ctx.rsp;
-        ++ctx.rip_p;
+        ctx.rsp--;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_add(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         ctx.stack[ctx.rsp - 1] += ctx.stack[ctx.rsp]; // commutativity of the PLUS operator allows avoidance of std::swap
-        --ctx.rsp;
-        ++ctx.rip_p;
+        ctx.rsp--;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
@@ -812,64 +520,64 @@ namespace DerkJS {
     [[nodiscard]] inline auto op_sub(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         std::swap_ranges(reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp) + sizeof(Value), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp - 1));
         ctx.stack[ctx.rsp - 1] -= ctx.stack[ctx.rsp];
-        --ctx.rsp;
-        ++ctx.rip_p;
+        ctx.rsp--;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_test_falsy(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         ctx.stack[ctx.rsp + 1] = ctx.stack[ctx.rsp].is_falsy();
-        ++ctx.rsp;
-        ++ctx.rip_p;
+        ctx.rsp++;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_test_strict_eq(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] == ctx.stack[ctx.rsp];
-        --ctx.rsp;
-        ++ctx.rip_p;
+        ctx.rsp--;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_test_strict_ne(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] != ctx.stack[ctx.rsp];
-        --ctx.rsp;
-        ++ctx.rip_p;
+        ctx.rsp--;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_test_lt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] > ctx.stack[ctx.rsp]; // IF x < y THEN y > x
-        --ctx.rsp;
-        ++ctx.rip_p;
+        ctx.rsp--;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_test_lte(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] >= ctx.stack[ctx.rsp]; // IF x <= y THEN y >= x
-        --ctx.rsp;
-        ++ctx.rip_p;
+        ctx.rsp--;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_test_gt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] < ctx.stack[ctx.rsp]; // IF x > y THEN y < x
-        --ctx.rsp;
-        ++ctx.rip_p;
+        ctx.rsp--;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_test_gte(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] <= ctx.stack[ctx.rsp]; // IF x >= y THEN y <= x
-        --ctx.rsp;
-        ++ctx.rip_p;
+        ctx.rsp--;
+        ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
@@ -878,8 +586,8 @@ namespace DerkJS {
         if (!ctx.stack[ctx.rsp]) {
             ctx.rip_p += a0;
         } else {
-            --ctx.rsp;
-            ++ctx.rip_p;
+            ctx.rsp--;
+            ctx.rip_p++;
         }
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
@@ -889,8 +597,8 @@ namespace DerkJS {
         if (ctx.stack[ctx.rsp]) {
             ctx.rip_p += a0;
         } else {
-            --ctx.rsp;
-            ++ctx.rip_p;
+            ctx.rsp--;
+            ctx.rip_p++;
         }
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
@@ -903,22 +611,8 @@ namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        auto caller_this_p = ctx.frames.back().m_this_p;
-        const int16_t new_callee_sbp = ctx.rsp - a1 + 1;
-        const int16_t old_caller_sbp = ctx.rsbp;
-        const auto caller_ret_ip = ctx.rip_p + 1;
-
-        ctx.rip_p = ctx.code_bp + ctx.fn_table_bp[a0];
-        ctx.rsbp = new_callee_sbp;
-
-        ctx.frames.emplace_back(tco_call_frame_type {
-            caller_ret_ip,
-            caller_this_p,
-            new_callee_sbp,
-            old_caller_sbp,
-        });
-
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        ctx.status = VMErrcode::bad_operation;
+        return false;
     }
 
     [[nodiscard]] inline auto op_object_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
@@ -986,7 +680,7 @@ namespace DerkJS {
     export template <>
     class VM<DispatchPolicy::tco> {
     public:
-        static_assert(is_tco_enabled_v, "TCO is not enabled for this compiler toolchain (version).");
+        static_assert(is_tco_enabled_v, "TCO is not enabled for this compiler toolchain.");
 
         /// NOTE: This SHOULD NOT be modified directly!
         ExternVMCtx m_ctx;
