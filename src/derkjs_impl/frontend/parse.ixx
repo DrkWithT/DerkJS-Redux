@@ -69,6 +69,7 @@ export namespace DerkJS {
         Token m_current;
         int m_error_count;
         SyntaxTag m_syntax;
+        bool m_primitive_as_key;
 
         void report_syntax_error(const std::string& source, std::string msg, Token culprit) noexcept(false) {
             const auto [culprit_tag, culprit_start, culprit_length, culprit_line, culprit_column] = culprit;
@@ -146,7 +147,7 @@ export namespace DerkJS {
                 consume_any(lexer, source);
 
                 return std::make_unique<Expr>(
-                    Primitive { .token = current_token_copy, },
+                    Primitive { .token = current_token_copy, .is_key = m_primitive_as_key },
                     0, // NOTE: `src_id` is 0 since I'll only support single-file JS programs for now.
                     snippet_begin,
                     primary_txt_length
@@ -300,9 +301,11 @@ export namespace DerkJS {
 
         [[nodiscard]] auto parse_member(Lexer& lexer, const std::string& source) -> ExprPtr {
             m_syntax = SyntaxTag::expr_member;
-
+            
             const auto snippet_begin = m_current.start;
             auto lhs_primary = parse_primary(lexer, source);
+            
+            m_primitive_as_key = true;
 
             while (!at_eof()) {
                 if (const auto member_mark = m_current.tag; member_mark == TokenTag::dot) {
@@ -313,7 +316,7 @@ export namespace DerkJS {
                         MemberAccess {
                             .target = std::move(lhs_primary),
                             .key = std::make_unique<Expr>(
-                                Primitive { .token = m_previous },
+                                Primitive { .token = m_previous, .is_key = true },
                                 0,
                                 m_previous.start,
                                 m_previous.start + m_previous.length
@@ -343,6 +346,8 @@ export namespace DerkJS {
                     break;
                 }
             }
+
+            m_primitive_as_key = false;
 
             return lhs_primary;
         }
@@ -684,7 +689,8 @@ export namespace DerkJS {
                     .name = name_token,
                     .rhs = std::make_unique<Expr>(
                         Primitive {
-                            .token = Token {TokenTag::keyword_undefined, 0, 0, name_token.line, name_token.column + name_token.length}
+                            .token = Token {TokenTag::keyword_undefined, 0, 0, name_token.line, name_token.column + name_token.length},
+                            .is_key = false
                         },
                         0,
                         snippet_begin,
@@ -981,7 +987,7 @@ export namespace DerkJS {
 
     public:
         Parser() noexcept
-        : m_previous {}, m_current {}, m_error_count {0}, m_syntax {SyntaxTag::program_top} {}
+        : m_previous {}, m_current {}, m_error_count {0}, m_syntax {SyntaxTag::program_top}, m_primitive_as_key {false} {}
 
         /// TODO: add source mapping IDs here when requires are added.
         [[nodiscard]] auto operator()(Lexer& lexer, std::string file_name, const std::string& source) -> std::optional<ASTUnit> {

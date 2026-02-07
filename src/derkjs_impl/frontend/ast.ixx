@@ -85,6 +85,7 @@ export namespace DerkJS {
 
     struct Primitive {
         Token token;
+        bool is_key; // is the name an accessed property?
     };
 
     struct ObjectField {
