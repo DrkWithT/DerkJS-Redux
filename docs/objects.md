@@ -13,6 +13,7 @@
 
 ### Property Lookup
  - An object's own properties are searched 1st, but prototypes are searched as the next resort.
+    - NOTE: This also applies to function capture Objects, which are crude closures here: If something is not found, the search bubbles up the capture object and then its parent capture objects (prototype-chain).
  - A property can be looked up as a primitive or object reference value. Checks on being callable, etc. are at runtime.
  - In the stack VM, the object reference is pushed before a key value / reference on top. Then both are "popped" off and the lower slot is filled with the property's value reference.
 
