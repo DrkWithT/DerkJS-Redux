@@ -146,6 +146,10 @@ export namespace DerkJS {
             return new Array {*this};
         }
 
+        [[nodiscard]] auto opaque_iter() const noexcept -> OpaqueIterator override {
+            return OpaqueIterator {reinterpret_cast<const std::byte*>(m_items.data()), m_items.size() * sizeof(decltype(*m_items.data()))};
+        }
+
         /// NOTE: For default printing of objects, etc. to the console (stdout). 
         [[nodiscard]] auto as_string() const -> std::string override {
             std::ostringstream sout {};
@@ -169,27 +173,28 @@ export namespace DerkJS {
         }
 
         /// TODO: Add ordered Object / Array iterators via `get_property_iterator(PropSearchPolicy p)` for this, avoiding a dynamic_cast.
-        /// TODO: Add non-numeric property testing.
         [[nodiscard]] auto operator==(const ObjectBase& other) const noexcept -> bool override {
-            if (other.get_class_name() != "Array") {
-                return false;
-            }
-
-            const auto& other_as_array = dynamic_cast<const Array&>(other);
-            const std::vector<Value>& self_items = m_items;
-            const std::vector<Value>& other_items = other_as_array.m_items;
-
-            if (int self_size = self_items.size(); self_size == other_items.size()) {
-                for (int check_index = 0; check_index < self_size; ++check_index) {
-                    if (self_items.at(check_index) != other_items.at(check_index)) {
-                        return false;
-                    }
-                }
-
+            if (&other == this) {
                 return true;
             }
 
-            return false;
+            auto self_iter = OpaqueIterator {reinterpret_cast<const std::byte*>(m_items.data()), m_items.size() * sizeof(decltype(*m_items.data()))};
+            auto other_iter = other.opaque_iter();
+
+            if (self_iter.count() != other_iter.count()) {
+                return false;
+            }
+
+            while (self_iter.alive()) {
+                if (self_iter != other_iter) {
+                    return false;
+                }
+
+                ++self_iter;
+                ++other_iter;
+            }
+
+            return true;
         }
 
         [[nodiscard]] auto operator<(const ObjectBase& other) const noexcept -> bool override {

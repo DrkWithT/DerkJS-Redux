@@ -43,7 +43,7 @@ export namespace DerkJS::Core {
 
     class Driver {
     public:
-        static constexpr std::size_t default_stack_size = 4096;
+        static constexpr std::size_t default_stack_size = 8192;
         static constexpr std::size_t default_call_depth_limit = 384;
         static constexpr std::array<std::string_view, static_cast<std::size_t>(VMErrcode::last)> error_code_msgs = {
             "OK",

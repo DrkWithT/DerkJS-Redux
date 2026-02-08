@@ -1,12 +1,12 @@
-function fib(n, self) {
+function fib(n) {
     if (n < 2) {
         return n;
     }
 
-    return self(n - 1, self) + self(n - 2, self);
+    return fib(n - 1) + fib(n - 2);
 }
 
-var ans = fib(30, fib);
+var ans = fib(30);
 
 console.log(ans);
 

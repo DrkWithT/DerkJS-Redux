@@ -239,6 +239,7 @@ namespace DerkJS {
     [[nodiscard]] inline auto op_nop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -247,6 +248,7 @@ namespace DerkJS {
         ctx.rsp++;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -255,6 +257,7 @@ namespace DerkJS {
         ctx.rsp++;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -270,33 +273,30 @@ namespace DerkJS {
         ctx.rsp++;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_store_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        const auto& temp_value = ctx.stack[ctx.rsp - 1];
-        const auto& key_value = ctx.stack[ctx.rsp];
-
         if (auto new_upval_p = ctx.frames.back().capture_p->get_property_value(PropertyHandle<Value> {
-            key_value,
+            ctx.stack[ctx.rsp],
             PropertyHandleTag::key,
             static_cast<uint8_t>(PropertyHandleFlag::writable)
         }, true); new_upval_p) {
-            *new_upval_p = temp_value;
+            *new_upval_p = ctx.stack[ctx.rsp - 1];
             ctx.rip_p++;
             ctx.rsp--;
         } else {
             ctx.status = VMErrcode::bad_property_access;
         }
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_ref_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        const auto& key_value = ctx.stack[ctx.rsp];
-
         if (auto upval_ref_p = ctx.frames.back().capture_p->get_property_value(PropertyHandle<Value> {
-            key_value,
+            ctx.stack[ctx.rsp],
             PropertyHandleTag::key,
             static_cast<uint8_t>(PropertyHandleFlag::writable)
         }, false); upval_ref_p) {
@@ -306,6 +306,7 @@ namespace DerkJS {
             ctx.status = VMErrcode::bad_property_access;
         }
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -314,6 +315,7 @@ namespace DerkJS {
         ctx.rsp++;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -326,6 +328,7 @@ namespace DerkJS {
 
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -333,6 +336,7 @@ namespace DerkJS {
         ctx.rsp -= a0;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -346,6 +350,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -354,6 +359,7 @@ namespace DerkJS {
         ctx.rsp++;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -370,6 +376,7 @@ namespace DerkJS {
             ctx.status = VMErrcode::bad_heap_alloc;
         }
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -386,6 +393,7 @@ namespace DerkJS {
             ctx.status = VMErrcode::bad_heap_alloc;
         }
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -397,6 +405,7 @@ namespace DerkJS {
         ctx.rsp++;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -424,6 +433,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -449,6 +459,7 @@ namespace DerkJS {
         ctx.rsp -= 2;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -465,16 +476,18 @@ namespace DerkJS {
 
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_strcat(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         ctx.gc(ctx.heap, ctx.stack, ctx.rsp);
 
-        DynamicString result {ctx.stack[ctx.rsp].to_object()->get_prototype(), ctx.stack[ctx.rsp].to_string().value()};
-        result.append_back(ctx.stack[ctx.rsp - 1].to_string().value());
+        /// NOTE: For making TCO possible, just allocate the new string on the heap via raw ptr to avoid non-trivial destructor problems. The heap will manage that anyways.
+        auto result_p = new DynamicString {ctx.stack[ctx.rsp].to_object()->get_prototype(), ctx.stack[ctx.rsp].to_string().value()};
+        result_p->append_back(ctx.stack[ctx.rsp - 1].to_string().value());
 
-        if (auto temp_str_p = ctx.heap.add_item(ctx.heap.get_next_id(), std::move(result)); !temp_str_p) {
+        if (auto temp_str_p = ctx.heap.add_item(ctx.heap.get_next_id(), result_p); !temp_str_p) {
             ctx.status = VMErrcode::bad_heap_alloc;
         } else {
             ctx.stack[ctx.rsp - 1] = Value {temp_str_p};
@@ -482,6 +495,7 @@ namespace DerkJS {
             ctx.rip_p++;
         }
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -491,6 +505,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -499,6 +514,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -508,6 +524,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -516,6 +533,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -525,6 +543,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -533,6 +552,7 @@ namespace DerkJS {
         ctx.rsp++;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -541,6 +561,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -549,6 +570,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -557,6 +579,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -565,6 +588,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -573,6 +597,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -581,6 +606,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -592,6 +618,7 @@ namespace DerkJS {
             ctx.rip_p++;
         }
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -603,12 +630,14 @@ namespace DerkJS {
             ctx.rip_p++;
         }
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_jump(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         ctx.rip_p += a0;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -628,6 +657,7 @@ namespace DerkJS {
             return false;
         }
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -642,6 +672,7 @@ namespace DerkJS {
             return false;
         }
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -661,21 +692,23 @@ namespace DerkJS {
             return ctx.status == VMErrcode::ok;
         }
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         ctx.status = VMErrcode::vm_abort;
 
+        [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     [[nodiscard]] inline auto dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        constexpr auto ok_errcode = static_cast<uint8_t>(VMErrcode::ok);
         if (const auto errcode = static_cast<uint8_t>(ctx.status); errcode + ctx.frames.empty()) {
-            return errcode ^ ok_errcode;
+            return errcode ^ 0;
         }
 
+        [[clang::musttail]]
         return tco_opcodes[ctx.rip_p->op](ctx, a0, a1);
     }
 
@@ -698,7 +731,7 @@ namespace DerkJS {
             return self.m_ctx.status;
         }
 
-        [[nodiscard]] auto operator()() -> bool {
+        [[nodiscard]] inline auto operator()() -> bool {
             return dispatch_op(m_ctx, m_ctx.rip_p->args[0], m_ctx.rip_p->args[1]);
         }
     };

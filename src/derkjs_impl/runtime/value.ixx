@@ -4,7 +4,6 @@ module;
 #include <utility>
 #include <optional>
 #include <string>
-#include <print>
 
 export module runtime.value;
 
@@ -122,7 +121,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] constexpr auto is_nan() const noexcept -> bool {
-            return m_tag == ValueTag::num_nan && (m_data.dud & 0x1) == 1;
+            return m_tag == ValueTag::num_nan;
         }
 
         [[nodiscard]] constexpr auto operator==(const Value& other) const noexcept -> bool {
@@ -139,9 +138,9 @@ export namespace DerkJS {
                 return (m_data.b ^ other.m_data.b) == 0;
             } else if (lhs_tag == ValueTag::object) {
                 /// TODO: add object comparison algorithm!
-                return m_data.obj_p == other.m_data.obj_p || m_data.obj_p->as_string() == other.m_data.obj_p->as_string();
+                return m_data.obj_p->operator==(*other.m_data.obj_p);
             } else if (lhs_tag == ValueTag::val_ref) {
-                return (m_data.ref_p) ? m_data.ref_p->operator==(other.deep_clone()) : false;
+                return m_data.ref_p->operator==(other.deep_clone());
             } else {
                 return false;
             }
@@ -153,7 +152,7 @@ export namespace DerkJS {
             if (const auto lhs_tag = get_tag(); lhs_tag == ValueTag::num_f64) {
                 return to_num_f64().value_or(0.0) < other.to_num_f64().value_or(0.0);
             } else if (m_tag == ValueTag::val_ref) {
-                return (m_data.ref_p) ? m_data.ref_p->operator<(other) : false;
+                return m_data.ref_p->operator<(other);
             } else {
                 return to_num_i32().value_or(0) < other.to_num_i32().value_or(0);
             }
@@ -165,17 +164,17 @@ export namespace DerkJS {
             if (const auto lhs_tag = get_tag(); lhs_tag == ValueTag::num_f64) {
                 return to_num_f64().value_or(0.0) > other.to_num_f64().value_or(0.0);
             } else if (m_tag == ValueTag::val_ref) {
-                return (m_data.ref_p) ? m_data.ref_p->operator>(other) : false;
+                return m_data.ref_p->operator>(other);
             } else {
                 return to_num_i32().value_or(0) > other.to_num_i32().value_or(0);
             }
         }
 
-        [[nodiscard]] auto operator<=(const Value& other) const noexcept -> bool {
+        [[nodiscard]] constexpr auto operator<=(const Value& other) const noexcept -> bool {
             return !this->operator>(other);
         }
 
-        [[nodiscard]] auto operator>=(const Value& other) const noexcept -> bool {
+        [[nodiscard]] constexpr auto operator>=(const Value& other) const noexcept -> bool {
             return !this->operator<(other);
         }
 
@@ -191,7 +190,7 @@ export namespace DerkJS {
                     return Value {JSNaNOpt {}};
                 } else if (*rhs_i32_v == 0) {
                     return Value {JSNaNOpt {}};
-                } else {   
+                } else {
                     return Value {to_num_i32().value() % rhs_i32_v.value()};
                 }
             } else {
@@ -248,7 +247,7 @@ export namespace DerkJS {
             }
         }
 
-        [[maybe_unused]] auto operator*=(const Value& other) noexcept -> Value& {
+        [[maybe_unused]] constexpr auto operator*=(const Value& other) noexcept -> Value& {
             const auto lhs_tag = get_tag();
             const auto rhs_tag = other.get_tag();
 
@@ -298,7 +297,7 @@ export namespace DerkJS {
             }
         }
 
-        [[maybe_unused]] auto operator/=(const Value& other) noexcept -> Value& {
+        [[maybe_unused]] constexpr auto operator/=(const Value& other) noexcept -> Value& {
             const auto lhs_tag = get_tag();
             const auto rhs_tag = other.get_tag();
 
@@ -352,7 +351,7 @@ export namespace DerkJS {
             }
         }
 
-        [[maybe_unused]] auto operator+=(const Value& other) noexcept -> Value& {
+        [[maybe_unused]] constexpr auto operator+=(const Value& other) noexcept -> Value& {
             const auto lhs_tag = get_tag();
             const auto rhs_tag = other.get_tag();
             
@@ -390,7 +389,7 @@ export namespace DerkJS {
             }
         }
 
-        [[maybe_unused]] auto operator-=(const Value& other) noexcept -> Value& {
+        [[maybe_unused]] constexpr auto operator-=(const Value& other) noexcept -> Value& {
             const auto lhs_tag = get_tag();
             const auto rhs_tag = other.get_tag();
             
@@ -411,11 +410,11 @@ export namespace DerkJS {
             return *this;
         }
 
-        [[nodiscard]] auto to_boolean() const noexcept -> std::optional<bool> {
+        [[nodiscard]] constexpr auto to_boolean() const noexcept -> std::optional<bool> {
             return is_truthy();
         }
 
-        [[nodiscard]] auto to_num_i32() const noexcept -> std::optional<int> {
+        [[nodiscard]] constexpr auto to_num_i32() const noexcept -> std::optional<int> {
             switch (m_tag) {
             case ValueTag::null: return 0;
             case ValueTag::boolean: return static_cast<int>(m_data.b);
@@ -602,18 +601,16 @@ export namespace DerkJS {
             return "[object Object]";
         }
 
+        [[nodiscard]] auto opaque_iter() const noexcept -> OpaqueIterator override {
+            return OpaqueIterator {};
+        }
+
         [[nodiscard]] auto operator==(const ObjectBase& other) const noexcept -> bool override {
             if (this == &other) {
                 return true;
             }
 
-            if (get_class_name() != other.get_class_name()) {
-                return false;
-            }
-
-            // TODO
-
-            return true;
+            return false;
         }
 
         [[nodiscard]] auto operator<(const ObjectBase& other) const noexcept -> bool override {
