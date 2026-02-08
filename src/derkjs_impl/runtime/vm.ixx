@@ -274,15 +274,12 @@ namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_store_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        const auto& temp_value = ctx.stack[ctx.rsp - 1];
-        const auto& key_value = ctx.stack[ctx.rsp];
-
         if (auto new_upval_p = ctx.frames.back().capture_p->get_property_value(PropertyHandle<Value> {
-            key_value,
+            ctx.stack[ctx.rsp],
             PropertyHandleTag::key,
             static_cast<uint8_t>(PropertyHandleFlag::writable)
         }, true); new_upval_p) {
-            *new_upval_p = temp_value;
+            *new_upval_p = ctx.stack[ctx.rsp - 1];
             ctx.rip_p++;
             ctx.rsp--;
         } else {
@@ -293,10 +290,8 @@ namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_ref_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        const auto& key_value = ctx.stack[ctx.rsp];
-
         if (auto upval_ref_p = ctx.frames.back().capture_p->get_property_value(PropertyHandle<Value> {
-            key_value,
+            ctx.stack[ctx.rsp],
             PropertyHandleTag::key,
             static_cast<uint8_t>(PropertyHandleFlag::writable)
         }, false); upval_ref_p) {

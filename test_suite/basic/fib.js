@@ -6,7 +6,7 @@ function fib(n, self) {
     return self(n - 1, self) + self(n - 2, self);
 }
 
-var ans = fib(30, fib);
+var ans = fib(25, fib);
 
 console.log(ans);
 

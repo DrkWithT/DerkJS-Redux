@@ -127,6 +127,10 @@ export namespace DerkJS {
             return copied_native_fn_p;
         }
 
+        [[nodiscard]] auto opaque_iter() const noexcept -> OpaqueIterator override {
+            return OpaqueIterator {};
+        }
+
         /// NOTE: unlike standard ECMAScript, this just prints `[NativeFunction <function-address>]`
         [[nodiscard]] auto as_string() const -> std::string override {
             return std::format("[{} native-fn-ptr({})]", get_class_name(), reinterpret_cast<void*>(m_native_ptr)); // cast to void* needed here to use a valid std::formatter
@@ -342,6 +346,10 @@ export namespace DerkJS {
         /// For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!
         [[nodiscard]] auto clone() -> ObjectBase<Value>* override {
             return new Lambda {m_code, m_prototype.to_object()};
+        }
+
+        [[nodiscard]] auto opaque_iter() const noexcept -> OpaqueIterator override {
+            return OpaqueIterator {};
         }
 
         /// NOTE: For disassembling lambda bytecode for debugging.

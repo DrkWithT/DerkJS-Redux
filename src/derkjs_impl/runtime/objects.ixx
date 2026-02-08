@@ -23,6 +23,68 @@ export namespace DerkJS {
     template <typename H, typename V>
     using PropPool = std::vector<std::pair<H, V>>;
 
+    // template <typename H, typename V>
+    // class FieldIterator {
+    // private:
+    //     using entry_ptr = const std::pair<H, V>*;
+    //     entry_ptr m_current;
+    //     entry_ptr m_end;
+
+    // public:
+    //     // Dud iterator for non-iterables
+    //     constexpr FieldIterator() noexcept
+    //     : m_current {nullptr}, m_end {nullptr} {}
+
+    //     [[nodiscard]] constexpr auto next() noexcept -> V {
+    //         if (m_current < m_end) {
+    //             auto temp = V {&m_current->second};
+    //             m_current++;
+    //             return temp;
+    //         }
+
+    //         return nullptr;
+    //     }
+    // };
+
+    /**
+     * @brief For comparing bytes of opaque data. Useful for JS String comparisons??
+     * 
+     */
+    class OpaqueIterator {
+    private:
+        using byte_ptr = const std::byte*;
+
+        byte_ptr m_current;
+        byte_ptr m_end;
+
+    public:
+        constexpr OpaqueIterator() noexcept
+        : m_current {nullptr}, m_end {nullptr} {}
+
+        explicit constexpr OpaqueIterator(byte_ptr start, std::size_t end_offset) noexcept
+        : m_current {start}, m_end {start + end_offset} {}
+
+        constexpr auto alive() const noexcept -> bool {
+            return m_current != m_end;
+        }
+
+        constexpr auto count() const noexcept -> std::size_t {
+            return m_end - m_current;
+        }
+
+        constexpr auto operator==(const OpaqueIterator& other) const noexcept -> bool {
+            return *m_current == *other.m_current;
+        }
+
+        [[maybe_unused]] auto operator++() noexcept -> OpaqueIterator& {
+            if (alive()) {
+                m_current++;
+            }
+
+            return *this;
+        }
+    };
+
     /**
      * @brief This virtual base class is an interface for all "objects" in DerkJS. Concrete sub-types from `ObjectBase` include `Object`s. Though all objects have a "template" object with the default values to properties of their type-structure- The prototype! For now, let's assume instances are clones of the prototype's "template".
      */
@@ -52,6 +114,9 @@ export namespace DerkJS {
 
         /// NOTE: For default printing of objects, etc. to the console (stdout). 
         virtual auto as_string() const -> std::string = 0;
+
+        // virtual auto field_iter() noexcept -> FieldIterator<PropertyHandle<V>, V> = 0;
+        virtual auto opaque_iter() const noexcept -> OpaqueIterator = 0;
 
         virtual auto operator==(const ObjectBase& other) const noexcept -> bool = 0;
         virtual auto operator<(const ObjectBase& other) const noexcept -> bool = 0;

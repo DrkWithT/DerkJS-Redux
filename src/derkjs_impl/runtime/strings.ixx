@@ -117,8 +117,32 @@ export namespace DerkJS {
             return m_data;
         }
 
+        [[nodiscard]] auto opaque_iter() const noexcept -> OpaqueIterator override {
+            return OpaqueIterator {reinterpret_cast<const std::byte*>(m_data.data()), m_data.size() * sizeof(decltype(*m_data.data()))};
+        }
+
         [[nodiscard]] auto operator==(const ObjectBase& other) const noexcept -> bool override {
-            return this == &other || m_data == other.as_string();
+            if (this == &other) {
+                return true;
+            }
+
+            OpaqueIterator self_it {reinterpret_cast<const std::byte*>(m_data.data()), m_data.length() * sizeof(decltype(*m_data.data()))};
+            OpaqueIterator other_it = other.opaque_iter();
+
+            if (self_it.count() != other_it.count()) {
+                return false;
+            }
+
+            while (self_it.alive()) {
+                if (other_it != self_it) {
+                    return false;
+                }
+
+                ++self_it;
+                ++other_it;
+            }
+
+            return true;
         }
 
         [[nodiscard]] auto operator<(const ObjectBase& other) const noexcept -> bool override {
