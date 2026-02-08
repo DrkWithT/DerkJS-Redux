@@ -2,9 +2,8 @@
 
 var x = 10;
 var y = 0;
-var z = null;
 
-var ans_2 = z || y || x * x;
+var ans_2 = y || x * x;
 
 /* ans_2 MUST be 100 */
 console.log(ans_2);

@@ -1,13 +1,12 @@
-function fib_r(n, self_fn) {
+function fib(n, self) {
     if (n < 2) {
         return n;
     }
 
-    return self_fn(n - 1, self_fn) + self_fn(n - 2, self_fn);
+    return self(n - 1, self) + self(n - 2, self);
 }
 
-/* temporary hack before closure support */
-var ans = fib_r(30, fib_r);
+var ans = fib(30, fib);
 
 console.log(ans);
 

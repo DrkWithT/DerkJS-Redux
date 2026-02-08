@@ -20,7 +20,7 @@
    - ~~Modify the codegen to handle callable objects.~~
  14. ~~Add support for `this` in functions & objects.~~
    - Implement `Object.create(), Object.getPrototype()`.
- 15. Add Arrays:
+ 15. ~~Add Arrays:~~
    - ~~Create `Array` subclass of `ObjectBase<Value>`.~~
       - ~~Remove need for parent object pointers for property-handles.~~
    - ~~Add `Array` native object (not an actual function) to provide helper methods & be the 'interface" prototype of `[]` objects.~~
@@ -28,11 +28,12 @@
  16. ~~Add mark and sweep GC.~~
  17. ~~Add `break` and `continue`.~~
  18. ~~Parse function decls differently: `function name() {}` is like `var name = function() {...}`.~~
- 19. Hoist `var` decls per scope.
-    - Refactor bytecode gen to stub-define all recursively present `var`s as `undefined`. The 2nd pass over `var`s will assign their "initializers" to them.
+ 19. ~~Hoist `var` decls per scope.~~
+    - ~~Refactor bytecode gen to stub-define all recursively present `var`s as `undefined`. The 2nd pass over `var`s will assign their "initializers" to them.~~
  20. Add support for scoped symbol resolution in bytecode generation.
     - Add closure object managing opcodes: `closure_enter <new-flag = 0, 1>`
         - `new-flag`: if a new closure object should be allocated: callee != caller
     - Add flag to `ret` opcode to store closure objects into functions as `this`.
+    - **FIX GC to track DEAD CAPTURE OBJECTS**!!
  21. Add support for immutable properties, configurability, etc.
  22. Add `+=, -=, *=, /=, %=` operators.
