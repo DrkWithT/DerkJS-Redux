@@ -4,6 +4,7 @@ module;
 #include <utility>
 #include <optional>
 #include <string>
+#include <print>
 
 export module runtime.value;
 
@@ -508,7 +509,8 @@ export namespace DerkJS {
     public:
         /// NOTE: Creates mutable instances of anonymous objects. Pass the `flag_prototype_v | flag_extensible_v` if needed for Foo.prototype!
         Object(ObjectBase<Value>* proto_p, uint8_t flags = flag_extensible_v)
-        : m_own_props {}, m_proto {}, m_flags {flags} {}
+        : m_own_props {}, m_proto {(proto_p) ? proto_p : Value {}}, m_flags {flags} {
+        }
 
         [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
             return this;

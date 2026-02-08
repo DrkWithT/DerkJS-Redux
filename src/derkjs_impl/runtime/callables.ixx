@@ -5,6 +5,7 @@ module;
 #include <format>
 #include <string>
 #include <sstream>
+// #include <print>
 
 export module runtime.callables;
 
@@ -95,7 +96,7 @@ export namespace DerkJS {
                 /// NOTE: Just put nullptr- the native callee will handle its own return of control back to the interpreter.
                 .m_caller_ret_ip = vm_context_p->rip_p + 1,
                 /// NOTE: Take the `this` argument of the object passed in case the native callee needs it via the C++ API.
-                .m_this_p = this_arg_p,
+                .this_p = this_arg_p,
                 .caller_addr = this,
                 .capture_p = caller_capture_p,
                 /// NOTE: Put unused dud values for bytecode RBP, etc. because the native callee handles its own return.
@@ -279,6 +280,12 @@ export namespace DerkJS {
             ObjectBase<Value>* caller_capture_p = vm_context_p->frames.back().capture_p;
             auto capture_obj_p = (vm_context_p->frames.back().caller_addr == this) ? caller_capture_p : vm_context_p->heap.add_item(vm_context_p->heap.get_next_id(), std::make_unique<Object>(caller_capture_p));
 
+            // if (vm_context_p->frames.back().caller_addr == this) {
+            //     std::println("Captures: Object(this = {})", reinterpret_cast<void*>(capture_obj_p));
+            // } else {
+            //     std::println("Captures: Object(this = {}, prototype = {})", reinterpret_cast<void*>(capture_obj_p), reinterpret_cast<void*>(caller_capture_p));
+            // }
+
             const auto caller_ret_ip = vm_context_p->rip_p + 1;
             const int16_t old_caller_sbp = vm_context_p->rsbp;
             int16_t new_callee_sbp = vm_context_p->rsp - (argc + static_cast<int16_t>(has_this_arg));
@@ -289,11 +296,11 @@ export namespace DerkJS {
 
             vm_context_p->frames.emplace_back(tco_call_frame_type {
                 .m_caller_ret_ip = caller_ret_ip,
-                .m_this_p = this_arg_p,
+                .this_p = this_arg_p,
                 .caller_addr = this,
                 .capture_p = capture_obj_p,
-                .m_new_callee_sbp = new_callee_sbp,
-                .m_new_caller_sbp = old_caller_sbp
+                .m_callee_sbp = new_callee_sbp,
+                .m_caller_sbp = old_caller_sbp
             });
 
             return true;
@@ -322,7 +329,7 @@ export namespace DerkJS {
 
             vm_context_p->frames.emplace_back(tco_call_frame_type {
                 .m_caller_ret_ip = caller_ret_ip,
-                .m_this_p = this_arg_p,
+                .this_p = this_arg_p,
                 .caller_addr = this,
                 .capture_p = capture_obj_p,
                 .m_callee_sbp = new_callee_sbp,

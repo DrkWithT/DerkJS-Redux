@@ -80,10 +80,6 @@ export namespace DerkJS {
         // filled with global function IDs -> absolute offsets into the bytecode blob
         std::vector<int> m_chunk_offsets;
 
-        /// NOTE: temporary fields to handle self-recursive function declaration sugar: `var name = function() {...}` must define name as self!
-        std::vector<int> m_self_call_stubs;
-        std::string m_self_callee;
-
         int m_immediate_inline_fn_id;
 
         int m_member_depth;
@@ -378,7 +374,7 @@ export namespace DerkJS {
                         encode_instruction(Opcode::djs_deref);
                     }
                 }
-            } else if (const auto local_var_opcode = (primitive_locate_type == m_access_as_lval && !m_accessing_property) ? Opcode::djs_ref_local : Opcode::djs_dup_local; primitive_locate_type == Location::local) {
+            } else if (const auto local_var_opcode = (m_access_as_lval && !m_accessing_property) ? Opcode::djs_ref_local : Opcode::djs_dup_local; primitive_locate_type == Location::local) {
                 encode_instruction(local_var_opcode, *primitive_locator);
             } else if (primitive_locate_type == Location::heap_obj && primitive_locator->n == -2) {
                 encode_instruction(Opcode::djs_put_this);
@@ -483,11 +479,6 @@ export namespace DerkJS {
                 .tag = Location::constant
             };
 
-            // NOTE: patch self-calls here from any unknown identifiers that matched the callee name itself!
-            for (const auto& stub_callee_loads : m_self_call_stubs) {
-                m_code_blobs.front().at(stub_callee_loads).args[0] = next_global_ref_const_id;
-            }
-
             Lambda temp_callable {
                 std::move(m_code_blobs.front()),
                 m_heap.add_item(m_heap.get_next_id(), std::make_unique<Object>(nullptr, Object::flag_prototype_v))
@@ -502,8 +493,6 @@ export namespace DerkJS {
 
             m_code_blobs.pop_front();
             m_local_maps.pop_back();
-            m_self_call_stubs.clear();
-            m_self_callee.clear();
             m_prepass_vars = old_prepass_vars_flag;
 
             encode_instruction(
@@ -796,7 +785,6 @@ export namespace DerkJS {
         [[nodiscard]] auto emit_var_decl(const VarDecl& stmt, const std::string& source) -> bool {
             const auto& [var_name_token, var_init_expr] = stmt;
             std::string var_name = var_name_token.as_string(source);
-            m_self_callee = var_name;
             
             auto var_local_slot = record_symbol(var_name, RecordLocalOpt {}, FindLocalsOpt {});
             
@@ -1029,7 +1017,7 @@ export namespace DerkJS {
 
     public:
         BytecodeGenPass(std::vector<PreloadItem> preloadables, int heap_object_capacity)
-        : m_global_consts_map {}, m_key_consts_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code_blobs {}, m_chunk_offsets {}, m_self_call_stubs {}, m_immediate_inline_fn_id {-1}, m_member_depth {0}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_has_call {false}, m_prepass_vars {true} {
+        : m_global_consts_map {}, m_key_consts_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code_blobs {}, m_chunk_offsets {}, m_immediate_inline_fn_id {-1}, m_member_depth {0}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_has_call {false}, m_prepass_vars {true} {
             // 1. Record fundamental primitive constants once to avoid extra work.
             record_symbol("undefined", Value {}, FindGlobalConstsOpt {});
             record_symbol("null", Value {JSNullOpt {}}, FindGlobalConstsOpt {});
@@ -1066,6 +1054,7 @@ export namespace DerkJS {
         [[nodiscard]] auto operator()([[maybe_unused]] const ASTUnit& tu, [[maybe_unused]] const std::vector<std::string>& source_map) -> std::optional<Program> {
             /// 1. emit all top-level non-function statements as an implicit function that's called right away.
             constexpr auto global_func_id = 0; // implicit main function begins at offset 0
+            m_chunk_offsets.emplace_back(0);
 
             /// 2. emit all vars (especially function declaration syntax sugar) FIRST as per JS hoisting.
             for (const auto& [src_filename, decl, src_id] : tu) {

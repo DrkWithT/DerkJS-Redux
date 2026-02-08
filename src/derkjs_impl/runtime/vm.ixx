@@ -277,15 +277,16 @@ namespace DerkJS {
         const auto& temp_value = ctx.stack[ctx.rsp - 1];
         const auto& key_value = ctx.stack[ctx.rsp];
 
-        if (!ctx.frames.back().capture_p->set_property_value(PropertyHandle<Value> {
+        if (auto new_upval_p = ctx.frames.back().capture_p->get_property_value(PropertyHandle<Value> {
             key_value,
             PropertyHandleTag::key,
             static_cast<uint8_t>(PropertyHandleFlag::writable)
-        }, temp_value)) {
-            ctx.status = VMErrcode::bad_property_access;
-        } else {
+        }, true); new_upval_p) {
+            *new_upval_p = temp_value;
             ctx.rip_p++;
             ctx.rsp--;
+        } else {
+            ctx.status = VMErrcode::bad_property_access;
         }
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
@@ -341,7 +342,8 @@ namespace DerkJS {
         ctx.status = (dest_val_ref.get_tag() != ValueTag::val_ref) ? VMErrcode::bad_operation : VMErrcode::ok;
         *dest_val_ref.get_value_ref() = ctx.stack[ctx.rsp];
 
-        ctx.rsp -= 2;
+        ctx.rsp--;
+        ctx.rsp--;
         ctx.rip_p++;
 
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
@@ -644,7 +646,7 @@ namespace DerkJS {
     }
 
     [[nodiscard]] inline auto op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        const auto& [caller_ret_ip, caller_this_p, callee_sbp, caller_sbp] = ctx.frames.back();
+        const auto& [caller_ret_ip, caller_this_p, caller_addr, caller_capture_p, callee_sbp, caller_sbp] = ctx.frames.back();
 
         ctx.stack[callee_sbp] = ctx.stack[ctx.rsp];
 
@@ -670,7 +672,7 @@ namespace DerkJS {
 
     [[nodiscard]] inline auto dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
         constexpr auto ok_errcode = static_cast<uint8_t>(VMErrcode::ok);
-        if (const auto errcode = static_cast<uint8_t>(ctx.status) + ctx.frames.empty()) {
+        if (const auto errcode = static_cast<uint8_t>(ctx.status); errcode + ctx.frames.empty()) {
             return errcode ^ ok_errcode;
         }
 
