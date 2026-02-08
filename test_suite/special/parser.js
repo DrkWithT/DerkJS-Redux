@@ -43,15 +43,14 @@ var Lexer = {
     },
     lexSpaces: function() {
         var begin = this.pos;
-        var eaten = false;
         var count = 0;
         var c = undefined;
 
-        while (!this.done() && !eaten) {
+        while (!this.done()) {
             c = this.src.charCodeAt(this.pos);
 
             if (c != 32) {
-                eaten = true;
+                break;
             } else {
                 count = count + 1;
                 this.pos = this.pos + 1;
@@ -66,15 +65,14 @@ var Lexer = {
     },
     lexNumber: function() {
         var begin = this.pos;
-        var eaten = false;
         var count = 0;
         var c = undefined;
 
-        while (!this.done() && !eaten) {
+        while (!this.done()) {
             c = this.src.charCodeAt(this.pos);
 
             if (!this.matchDigit(c)) {
-                eaten = true;
+                break;
             } else {
                 count = count + 1;
                 this.pos = this.pos + 1;
@@ -113,7 +111,6 @@ var Lexer = {
         }
 
         if (peek == 32) {
-            console.log("spaces");
             return this.lexSpaces();
         } else if (this.matchDigit(peek)) {
             return this.lexNumber();

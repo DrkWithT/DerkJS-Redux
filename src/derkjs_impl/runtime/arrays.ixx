@@ -8,7 +8,6 @@ module;
 
 export module runtime.arrays;
 
-import runtime.objects;
 import runtime.value;
 
 export namespace DerkJS {

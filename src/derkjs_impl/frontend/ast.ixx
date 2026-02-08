@@ -6,7 +6,7 @@ module;
 
 export module frontend.ast;
 
-import frontend.lexicals;
+export import frontend.lexicals;
 
 export namespace DerkJS {
     enum class AstOp : uint8_t {
@@ -56,9 +56,8 @@ export namespace DerkJS {
     struct Break;
     struct Continue;
     struct Block;
-    struct FunctionDecl;
 
-    using Stmt = StmtNode<ExprStmt, Variables, If, Return, While, Break, Continue, Block, FunctionDecl>;
+    using Stmt = StmtNode<ExprStmt, Variables, If, Return, While, Break, Continue, Block>;
     using StmtPtr = std::unique_ptr<Stmt>;
 
     template <typename ... ExprKind>
@@ -86,6 +85,7 @@ export namespace DerkJS {
 
     struct Primitive {
         Token token;
+        bool is_key; // is the name an accessed property?
     };
 
     struct ObjectField {
@@ -167,12 +167,6 @@ export namespace DerkJS {
 
     struct Block {
         std::vector<StmtPtr> items;
-    };
-
-    struct FunctionDecl {
-        std::vector<Token> params;
-        Token name;
-        StmtPtr body;
     };
 
     /// BEGIN AST WRAPPER ///

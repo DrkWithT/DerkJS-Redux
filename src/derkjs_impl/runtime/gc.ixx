@@ -7,7 +7,6 @@ module;
 
 export module runtime.gc;
 
-import runtime.objects;
 import runtime.value;
 
 namespace DerkJS {

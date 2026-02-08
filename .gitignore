@@ -47,4 +47,4 @@ compile_commands.json
 .vscode/
 *.zip
 prof_*.json
-bc_dump_*.txt
+bc_dump*.txt

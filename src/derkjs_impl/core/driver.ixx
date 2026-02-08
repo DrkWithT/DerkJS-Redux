@@ -18,10 +18,8 @@ module;
 
 export module core.driver;
 
-import frontend.lexicals;
-import frontend.ast;
+export import frontend.ast;
 import frontend.parse;
-import runtime.objects;
 import runtime.value;
 import runtime.callables;
 import runtime.strings;
@@ -45,8 +43,8 @@ export namespace DerkJS::Core {
 
     class Driver {
     public:
-        static constexpr std::size_t default_stack_size = 2048;
-        static constexpr std::size_t default_call_depth_limit = 208;
+        static constexpr std::size_t default_stack_size = 4096;
+        static constexpr std::size_t default_call_depth_limit = 384;
         static constexpr std::array<std::string_view, static_cast<std::size_t>(VMErrcode::last)> error_code_msgs = {
             "OK",
             "ERROR: cannot access undefined property.",
@@ -336,7 +334,8 @@ export namespace DerkJS::Core {
                 disassemble_program(prgm.value());
             }
 
-            DerkJS::VM<Dp> vm {prgm.value(), default_stack_size, default_call_depth_limit, gc_threshold};
+            auto& prgm_ref = prgm.value();
+            DerkJS::VM<Dp> vm {prgm_ref, default_stack_size, default_call_depth_limit, gc_threshold};
 
             auto derkjs_start_time = std::chrono::steady_clock::now();
             const auto derkjs_had_error = !vm();
