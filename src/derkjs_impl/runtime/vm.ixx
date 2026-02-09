@@ -14,12 +14,6 @@ import runtime.gc;
 import runtime.bytecode;
 
 namespace DerkJS {
-    /// NOTE: This scoped enum enables instantiation of a specialized VM that either does loop-switch or tail-call-friendly control flow when running opcodes.
-    export enum class DispatchPolicy : uint8_t {
-        loop_switch,
-        tco,
-    };
-
     export enum class VMErrcode : uint8_t {
         pending,
         bad_property_access,
@@ -35,29 +29,7 @@ namespace DerkJS {
      * @see `DispatchPolicy` for more information about how opcodes would be dispatched.
      * @tparam Dp 
      */
-    template <DispatchPolicy Dp>
-    struct CallFrame;
-
-    template <>
-    struct CallFrame<DispatchPolicy::loop_switch> {
-        int m_callee_sbp;
-        int m_caller_sbp;
-        int m_caller_id;
-        int m_caller_ret_ip;
-
-        constexpr CallFrame() noexcept
-        : m_callee_sbp {0}, m_caller_sbp {0}, m_caller_id {-1}, m_caller_ret_ip {-1} {}
-
-        constexpr CallFrame(int16_t callee_sbp, int16_t caller_sbp, int16_t caller_id, int16_t caller_ret_ip) noexcept
-        : m_callee_sbp {callee_sbp}, m_caller_sbp {caller_sbp}, m_caller_id {caller_id}, m_caller_ret_ip {caller_ret_ip} {}
-
-        explicit operator bool(this auto&& self) noexcept {
-            return self.m_caller_ip < 0 || self.m_caller_ret_ip < 0;
-        }
-    };
-
-    template <>
-    struct CallFrame<DispatchPolicy::tco> {
+    struct CallFrame {
         const Instruction* m_caller_ret_ip;
         ObjectBase<Value>* this_p;
         ObjectBase<Value>* caller_addr;
@@ -86,12 +58,12 @@ namespace DerkJS {
 
     /// NOTE: This type decouples the internal state of the bytecode VM. It's used when the `DispatchPolicy::tco` specialization is used with a opcode dispatch table and dispatch TCO'd function internally apply in `VM<DispatchPolicy::tco>`. However, this is only enabled on LLVM Clang 20+ to be safe.
     export struct ExternVMCtx {
-        using call_frame_type = CallFrame<DispatchPolicy::tco>;
+        using call_frame_type = CallFrame;
 
         GC gc;
         PolyPool<ObjectBase<Value>> heap;
         std::vector<Value> stack;
-        std::vector<call_frame_type> frames;
+        std::vector<CallFrame> frames;
 
         Value* consts_view;
 
@@ -124,7 +96,7 @@ namespace DerkJS {
             if (auto global_this_p = heap.add_item(heap.get_next_id(), std::make_unique<Object>(nullptr)); !global_this_p) {
                 status = VMErrcode::bad_heap_alloc;
             } else {
-                frames.emplace_back(call_frame_type {
+                frames.emplace_back(CallFrame {
                     .m_caller_ret_ip = nullptr,
                     .this_p = global_this_p, // TODO: add globalThis & working global prop assignments...
                     .caller_addr = nullptr,
@@ -135,52 +107,6 @@ namespace DerkJS {
             }
         }
     };
-
-    /**
-     * @brief Provides the general bytecode VM type. Actual specializations via DispatchPolicy are meant to be used.
-     * 
-     * @tparam Dp Determines how bytecode opcodes are dispatched, either by loop-switch or tail-call optimization-friendly recursion. Tail call optimization (TCO) allows a slight speedup in the VM over a typical switch-loop by avoiding some overhead of creating / unwinding call frames.
-     */
-    export template <DispatchPolicy Dp>
-    class VM;
-
-    export template <>
-    class VM<DispatchPolicy::loop_switch> {
-    private:
-        using call_frame_type = CallFrame<DispatchPolicy::loop_switch>;
-
-        // GCHeap<Object<Value>> m_heap;
-        std::vector<Value> m_stack;
-        std::vector<call_frame_type> m_frames;
-
-        Value* m_consts_view;
-
-        /// NOTE: holds base of bytecode blob, starts at position 0 to access offsets from.
-        const Instruction* m_code_bp;
-
-        /// NOTE: holds base of an index array mapping function IDs to their code starts.
-        const int* m_fn_table_bp;
-
-        /// NOTE: holds direct pointer to an `Instruction`.
-        const Instruction* m_rip_p;
-
-        std::size_t m_frames_free;
-
-        /// NOTE: holds stack base pointer for call locals
-        int16_t m_rsbp;
-
-        /// NOTE: holds stack top pointer
-        int16_t m_rsp;
-
-        /// NOTE: holds current bytecode chunk ID (caller's code)
-        int16_t m_rcid;
-
-        /// NOTE: indicates an error condition during execution, returning from the VM invocation
-        ExitStatus m_status;
-
-        // TODO!
-    };
-
 
     inline void op_nop(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_dup(ExternVMCtx& ctx, int16_t a0, int16_t a1);
@@ -222,7 +148,6 @@ namespace DerkJS {
     inline void op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1);
 
-    export using tco_call_frame_type = CallFrame<DispatchPolicy::tco>;
     using tco_opcode_fn = void(*)(ExternVMCtx&, int16_t, int16_t);
     constexpr tco_opcode_fn tco_opcodes[static_cast<std::size_t>(Opcode::last)] = {
         op_nop,
@@ -709,8 +634,12 @@ namespace DerkJS {
         return tco_opcodes[ctx.rip_p->op](ctx, a0, a1);
     }
 
-    export template <>
-    class VM<DispatchPolicy::tco> {
+    /**
+     * @brief Provides the general bytecode VM type. Actual specializations via DispatchPolicy are meant to be used.
+     * 
+     * @tparam Dp Determines how bytecode opcodes are dispatched, either by loop-switch or tail-call optimization-friendly recursion. Tail call optimization (TCO) allows a slight speedup in the VM over a typical switch-loop by avoiding some overhead of creating / unwinding call frames.
+     */
+    export class VM {
     public:
         static_assert(is_tco_enabled_v, "TCO is not enabled for this compiler toolchain.");
 

@@ -316,7 +316,6 @@ export namespace DerkJS::Core {
             return DriverInfo {m_app_name, m_app_author, m_version_major, m_version_minor, m_version_patch};
         }
 
-        template <DispatchPolicy Dp>
         [[nodiscard]] auto run(const std::string& file_path, std::size_t gc_threshold) -> int {
             auto script_ast = parse_script(file_path, read_script(file_path));
 
@@ -336,7 +335,7 @@ export namespace DerkJS::Core {
             }
 
             auto& prgm_ref = prgm.value();
-            DerkJS::VM<Dp> vm {prgm_ref, default_stack_size, default_call_depth_limit, gc_threshold};
+            DerkJS::VM vm {prgm_ref, default_stack_size, default_call_depth_limit, gc_threshold};
 
             auto derkjs_start_time = std::chrono::steady_clock::now();
             vm();
