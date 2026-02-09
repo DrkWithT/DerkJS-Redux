@@ -38,7 +38,7 @@
     - OR: the LHS is the result iff TRUTHY, but the RHS is taken iff the LHS is falsy
     - AND: the LHS is the result iff FALSY, but the RHS is taken otherwise
 
-### Symbol Lookups in Bytecode Generation
+### Symbol Lookups in Bytecode Generation (Pre-passes & emit pass)
  - Case 1: literal / globally scoped native object name...
     - Lookup from global consts mapping.
  - Case 2.1: name of local variable...
@@ -47,3 +47,6 @@
     - B: Otherwise, look up the variable name in the local scope.
  - Case 2.2: name of property access key when `Literal.is_key == true`...
     - Always treat this as a string constant.
+
+### Pass 1: emit pass
+ - Purpose: Generates bytecode using the context from the earlier pass(es).

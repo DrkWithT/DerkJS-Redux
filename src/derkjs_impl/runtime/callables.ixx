@@ -92,7 +92,7 @@ export namespace DerkJS {
             const int16_t caller_rsbp = vm_context_p->rsbp;
             vm_context_p->rsbp = callee_rsbp;
 
-            vm_context_p->frames.emplace_back(tco_call_frame_type {
+            vm_context_p->frames.emplace_back(ExternVMCtx::call_frame_type {
                 /// NOTE: Just put nullptr- the native callee will handle its own return of control back to the interpreter.
                 .m_caller_ret_ip = vm_context_p->rip_p + 1,
                 /// NOTE: Take the `this` argument of the object passed in case the native callee needs it via the C++ API.
@@ -192,7 +192,6 @@ export namespace DerkJS {
             "djs_jump_else",
             "djs_jump_if",
             "djs_jump",
-            "djs_call",
             "djs_object_call",
             "djs_ctor_call",
             "djs_ret",
@@ -298,7 +297,7 @@ export namespace DerkJS {
             vm_context_p->rsbp = new_callee_sbp;
             vm_context_p->rsp = new_callee_sbp + argc - 1;
 
-            vm_context_p->frames.emplace_back(tco_call_frame_type {
+            vm_context_p->frames.emplace_back(ExternVMCtx::call_frame_type {
                 .m_caller_ret_ip = caller_ret_ip,
                 .this_p = this_arg_p,
                 .caller_addr = this,
@@ -331,7 +330,7 @@ export namespace DerkJS {
             vm_context_p->rsbp = new_callee_sbp; // 0, Sequence
             vm_context_p->rsp = new_callee_sbp;
 
-            vm_context_p->frames.emplace_back(tco_call_frame_type {
+            vm_context_p->frames.emplace_back(ExternVMCtx::call_frame_type {
                 .m_caller_ret_ip = caller_ret_ip,
                 .this_p = this_arg_p,
                 .caller_addr = this,

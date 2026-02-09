@@ -188,5 +188,5 @@ int main(int argc, char* argv[]) {
 
     /// TODO: fix nullptr prototype in strings, causing strings_1.js to FAIL.
     // for some reason, callables.ixx:66:13 is reached: .len is the wrong prototype!
-    return driver.run<DispatchPolicy::tco>(source_path, derkjs_gc_threshold);
+    return driver.run(source_path, derkjs_gc_threshold);
 }

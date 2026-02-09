@@ -46,11 +46,12 @@ export namespace DerkJS::Core {
         static constexpr std::size_t default_stack_size = 8192;
         static constexpr std::size_t default_call_depth_limit = 384;
         static constexpr std::array<std::string_view, static_cast<std::size_t>(VMErrcode::last)> error_code_msgs = {
-            "OK",
+            "",
             "ERROR: cannot access undefined property.",
             "ERROR: bad Function call or assignment operation.",
             "ERROR: heap allocation failed.",
-            "ERROR: VM aborted via halt.",
+            "ERROR: VM aborted via halt."
+            "OK",
         };
 
     private:
@@ -315,7 +316,6 @@ export namespace DerkJS::Core {
             return DriverInfo {m_app_name, m_app_author, m_version_major, m_version_minor, m_version_patch};
         }
 
-        template <DispatchPolicy Dp>
         [[nodiscard]] auto run(const std::string& file_path, std::size_t gc_threshold) -> int {
             auto script_ast = parse_script(file_path, read_script(file_path));
 
@@ -335,27 +335,26 @@ export namespace DerkJS::Core {
             }
 
             auto& prgm_ref = prgm.value();
-            DerkJS::VM<Dp> vm {prgm_ref, default_stack_size, default_call_depth_limit, gc_threshold};
+            DerkJS::VM vm {prgm_ref, default_stack_size, default_call_depth_limit, gc_threshold};
 
             auto derkjs_start_time = std::chrono::steady_clock::now();
-            const auto derkjs_had_error = !vm();
+            vm();
             auto derkjs_running_time = std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::steady_clock::now() - derkjs_start_time);
 
             switch (const auto vm_status = vm.peek_status(); vm_status) {
+            case VMErrcode::pending:
             case VMErrcode::bad_property_access:
             case VMErrcode::bad_operation:
             case VMErrcode::bad_heap_alloc:
             case VMErrcode::vm_abort:
                 std::println(std::cerr, "{}", error_code_msgs.at(static_cast<int>(vm_status)));
-                break;
+                return 1;
             case VMErrcode::ok:
             default:
-                break;
+                std::println("DerkJS [Result]: \x1b[1;32m{}\x1b[0m\n\nFinished in \x1b[1;33m{}\x1b[0m", vm.peek_final_result().to_string().value(), derkjs_running_time);
+
+                return vm.peek_final_result().to_num_i32().value_or(1);
             }
-
-            std::println("DerkJS [Result]: \x1b[1;32m{}\x1b[0m\n\nFinished in \x1b[1;33m{}\x1b[0m", vm.peek_final_result().to_string().value(), derkjs_running_time);
-
-            return (derkjs_had_error) ? 1 : vm.peek_final_result().to_num_i32().value();
         }
     };
 }

@@ -41,8 +41,9 @@ export namespace DerkJS {
     };
 
     struct CodeGenScope {
-        std::flat_map<std::string, Arg> locals;  // Map names to variables.
-        int next_local_id;                       // Tracks next stack slot for a local variable value.
+        std::flat_map<std::string, Arg> locals; // Map names to variables.
+        std::vector<int> callee_self_refs;      // Positions of self-calls by name.
+        int next_local_id;                      // Tracks next stack slot for a local variable value.
     };
 
     struct ActiveLoop {
@@ -77,10 +78,14 @@ export namespace DerkJS {
         // stack of bytecode buffers, accounting for arbitrary nesting of lambdas
         std::forward_list<std::vector<Instruction>> m_code_blobs;
 
+        // Track currently emitting function by name & find any self-references here.
+        std::string m_callee_name;
+
         // filled with global function IDs -> absolute offsets into the bytecode blob
         std::vector<int> m_chunk_offsets;
 
-        int m_immediate_inline_fn_id;
+        /// SEE: `m_callee_name` is associated with this field.
+        int m_callee_lambda_id;
 
         int m_member_depth;
 
@@ -347,7 +352,9 @@ export namespace DerkJS {
                     m_has_string_ops = false;
 
                     // Case 1: property keys are always constant strings.
-                    if (pmt_is_key) {
+                    if (m_callee_name == atom_lexeme && m_has_call) {
+                        return Arg {.n = -1, .tag = Location::end, .is_str_literal = false, .from_closure = false};
+                    } else if (pmt_is_key) {
                         return record_symbol(atom_lexeme, atom_lexeme, FindKeyConstOpt {});
                     } else {
                         // Case 2.1: The name is for a global native / local variable.
@@ -380,6 +387,10 @@ export namespace DerkJS {
                 encode_instruction(Opcode::djs_put_this);
             } else if (primitive_locate_type == Location::heap_obj && primitive_locator->n == -3) {
                 encode_instruction(Opcode::djs_put_proto_key);
+            } else if (primitive_locate_type == Location::end && primitive_locator->n == -1) {
+                // Put dud instruction where self-load should be before a `djs_object_call`.
+                m_local_maps.back().callee_self_refs.emplace_back(static_cast<int>(m_code_blobs.front().size()));
+                encode_instruction(Opcode::djs_nop);
             }
 
             return true;
@@ -447,6 +458,7 @@ export namespace DerkJS {
             // 1. Begin lambda code emission, but let's note that this nested "code scope" place a new buffer as the currently filling one before it's done & craps out a Lambda object... Which gets moved into the bytecode `Program` later.
             m_local_maps.emplace_back(CodeGenScope {
                 .locals = {},
+                .callee_self_refs = {},
                 .next_local_id = 0
             });
             m_code_blobs.emplace_front();
@@ -479,6 +491,14 @@ export namespace DerkJS {
                 .tag = Location::constant
             };
 
+            // 3. Patch bytecode NOP stubs where self-calls should be.
+            for (const auto& dud_self_call_offsets = m_local_maps.back().callee_self_refs; const auto call_stub_pos : dud_self_call_offsets) {
+                m_code_blobs.front().at(call_stub_pos) = Instruction {
+                    .args = {next_global_ref_const_id, 0},
+                    .op = Opcode::djs_put_const
+                };
+            }
+
             Lambda temp_callable {
                 std::move(m_code_blobs.front()),
                 m_heap.add_item(m_heap.get_next_id(), std::make_unique<Object>(nullptr, Object::flag_prototype_v))
@@ -494,6 +514,7 @@ export namespace DerkJS {
             m_code_blobs.pop_front();
             m_local_maps.pop_back();
             m_prepass_vars = old_prepass_vars_flag;
+            m_callee_name.clear();
 
             encode_instruction(
                 Opcode::djs_put_const,
@@ -785,7 +806,8 @@ export namespace DerkJS {
         [[nodiscard]] auto emit_var_decl(const VarDecl& stmt, const std::string& source) -> bool {
             const auto& [var_name_token, var_init_expr] = stmt;
             std::string var_name = var_name_token.as_string(source);
-            
+            m_callee_name = var_name;
+
             auto var_local_slot = record_symbol(var_name, RecordLocalOpt {}, FindLocalsOpt {});
             
             // 1. When hoisting the var declaration, just set it to undefined 1st.
@@ -1017,7 +1039,7 @@ export namespace DerkJS {
 
     public:
         BytecodeGenPass(std::vector<PreloadItem> preloadables, int heap_object_capacity)
-        : m_global_consts_map {}, m_key_consts_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code_blobs {}, m_chunk_offsets {}, m_immediate_inline_fn_id {-1}, m_member_depth {0}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_has_call {false}, m_prepass_vars {true} {
+        : m_global_consts_map {}, m_key_consts_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code_blobs {}, m_callee_name {}, m_chunk_offsets {}, m_callee_lambda_id {-1}, m_member_depth {0}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_has_call {false}, m_prepass_vars {true} {
             // 1. Record fundamental primitive constants once to avoid extra work.
             record_symbol("undefined", Value {}, FindGlobalConstsOpt {});
             record_symbol("null", Value {JSNullOpt {}}, FindGlobalConstsOpt {});
@@ -1051,7 +1073,7 @@ export namespace DerkJS {
             m_code_blobs.emplace_front();
         }
 
-        [[nodiscard]] auto operator()([[maybe_unused]] const ASTUnit& tu, [[maybe_unused]] const std::vector<std::string>& source_map) -> std::optional<Program> {
+        [[nodiscard]] auto operator()(const ASTUnit& tu, const std::vector<std::string>& source_map) -> std::optional<Program> {
             /// 1. emit all top-level non-function statements as an implicit function that's called right away.
             constexpr auto global_func_id = 0; // implicit main function begins at offset 0
             m_chunk_offsets.emplace_back(0);
