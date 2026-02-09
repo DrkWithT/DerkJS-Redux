@@ -53,7 +53,6 @@ export namespace DerkJS {
         djs_jump_else, // Pops the LHS if it's truthy before incrementing RIP. Otherwise, the relative offset is applied to RIP.
         djs_jump_if, // Pops the LHS if it's falsy before incrementing RIP. Otherwise, the relative offset is applied to RIP.
         djs_jump,
-        djs_call, // Args: <optional-bytecode-offset> <arg-count>: IF the `optional-bytecode-offset` is `-1`, the call tries invoking the stack's top `Value`. There, the Value must have an `ObjectBase<Value>*` pointing to an object implementing `call()`.
         djs_object_call, // Args: <arg-count> <pass-this-flag>: Assumes the top stack value references a `ObjectBase<Value>` to invoke on <arg-count> temporaries below. NativeFunction objects don't need to affect `RSBP` and `RSP` for restoring caller stack state. The call() virtual method per function object can now take 'this' on `pass-this-flag == 1`: the caller object is 'this', laying on top of all other arguments as the consuming temporary. Stack: `<obj-ref> <obj-ref> <key-value> -> <result>`
         djs_ctor_call, // Args: <arg-count>; creates a this object to initialize and return via `var foo = new Foo()` where the function has `return this;`. Invokes the object's `call_as_ctor()` virtual method. If `opt-chunk-id >= 0`: invokes the bytecode function as a constructor. ONLY WORKS WITH FUNCTION OBJECTS!!
         djs_ret,
@@ -128,7 +127,6 @@ export namespace DerkJS {
             "djs_jump_else",
             "djs_jump_if",
             "djs_jump",
-            "djs_call",
             "djs_object_call",
             "djs_ctor_call",
             "djs_ret",

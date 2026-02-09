@@ -192,7 +192,6 @@ export namespace DerkJS {
             "djs_jump_else",
             "djs_jump_if",
             "djs_jump",
-            "djs_call",
             "djs_object_call",
             "djs_ctor_call",
             "djs_ret",

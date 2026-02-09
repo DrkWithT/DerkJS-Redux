@@ -215,7 +215,6 @@ namespace DerkJS {
     [[nodiscard]] inline auto op_jump_else(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_jump_if(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_jump(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_object_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_ctor_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
     [[nodiscard]] inline auto op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
@@ -231,8 +230,7 @@ namespace DerkJS {
         op_numify, op_strcat,
         op_mod, op_mul, op_div, op_add, op_sub,
         op_test_falsy, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte,
-        op_jump_else, op_jump_if, op_jump,
-        op_call, op_object_call, op_ctor_call, op_ret,
+        op_jump_else, op_jump_if, op_jump, op_object_call, op_ctor_call, op_ret,
         op_halt
     };
 
@@ -639,11 +637,6 @@ namespace DerkJS {
 
         [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
-    }
-
-    [[nodiscard]] inline auto op_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        ctx.status = VMErrcode::bad_operation;
-        return false;
     }
 
     [[nodiscard]] inline auto op_object_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
