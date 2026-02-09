@@ -21,11 +21,12 @@ namespace DerkJS {
     };
 
     export enum class VMErrcode : uint8_t {
-        ok,
+        pending,
         bad_property_access,
         bad_operation,
         bad_heap_alloc,
         vm_abort,
+        ok,
         last
     };
 
@@ -115,7 +116,7 @@ namespace DerkJS {
         VMErrcode status;
 
         ExternVMCtx(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit, std::size_t gc_heap_threshold)
-        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, rsbp {0}, rsp {-1}, rpk {false}, status {VMErrcode::ok} {
+        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, rsbp {0}, rsp {-1}, rpk {false}, status {VMErrcode::pending} {
             stack.reserve(stack_length_limit);
             stack.resize(stack_length_limit);
             frames.reserve(call_frame_limit);
@@ -181,48 +182,48 @@ namespace DerkJS {
     };
 
 
-    [[nodiscard]] inline auto op_nop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_dup(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_dup_local(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_ref_local(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_store_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_ref_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_put_const(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_deref(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_pop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_emplace(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_put_this(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_put_obj_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_put_arr_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_put_proto_key(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_get_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_put_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_del_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_numify(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_strcat(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_mod(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_mul(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_div(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_add(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_sub(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_test_falsy(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_test_strict_eq(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_test_strict_ne(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_test_lt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_test_lte(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_test_gt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_test_gte(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_jump_else(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_jump_if(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_jump(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_object_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_ctor_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
-    [[nodiscard]] inline auto dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool;
+    inline void op_nop(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_dup(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_dup_local(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_ref_local(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_store_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_ref_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_put_const(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_deref(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_pop(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_emplace(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_put_this(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_put_obj_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_put_arr_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_put_proto_key(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_get_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_put_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_del_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_numify(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_strcat(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_mod(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_mul(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_div(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_add(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_sub(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_test_falsy(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_test_strict_eq(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_test_strict_ne(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_test_lt(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_test_lte(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_test_gt(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_test_gte(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_jump_else(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_jump_if(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_jump(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_object_call(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_ctor_call(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1);
 
     export using tco_call_frame_type = CallFrame<DispatchPolicy::tco>;
-    using tco_opcode_fn = bool(*)(ExternVMCtx&, int16_t, int16_t);
+    using tco_opcode_fn = void(*)(ExternVMCtx&, int16_t, int16_t);
     constexpr tco_opcode_fn tco_opcodes[static_cast<std::size_t>(Opcode::last)] = {
         op_nop,
         op_dup, op_dup_local, op_ref_local, op_store_upval, op_ref_upval, op_put_const, op_deref, op_pop, op_emplace,
@@ -234,14 +235,14 @@ namespace DerkJS {
         op_halt
     };
 
-    [[nodiscard]] inline auto op_nop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_nop(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.rip_p++;
 
         [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_dup(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_dup(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.stack[ctx.rsp + 1] = ctx.stack[ctx.rsp];
         ctx.rsp++;
         ctx.rip_p++;
@@ -250,7 +251,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_dup_local(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_dup_local(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.stack[ctx.rsp + 1] = ctx.stack[ctx.rsbp + a0];
         ctx.rsp++;
         ctx.rip_p++;
@@ -259,7 +260,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_ref_local(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_ref_local(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         auto& target_local_ref = ctx.stack[ctx.rsbp + a0];
 
         if (const auto target_tag = target_local_ref.get_tag(); target_tag == ValueTag::val_ref/* || target_tag == ValueTag::object*/) {
@@ -275,7 +276,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_store_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_store_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         if (auto new_upval_p = ctx.frames.back().capture_p->get_property_value(PropertyHandle<Value> {
             ctx.stack[ctx.rsp],
             PropertyHandleTag::key,
@@ -292,7 +293,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_ref_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_ref_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         if (auto upval_ref_p = ctx.frames.back().capture_p->get_property_value(PropertyHandle<Value> {
             ctx.stack[ctx.rsp],
             PropertyHandleTag::key,
@@ -308,7 +309,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_put_const(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool  {
+    inline void op_put_const(ExternVMCtx& ctx, int16_t a0, int16_t a1)  {
         ctx.stack[ctx.rsp + 1] = ctx.consts_view[a0];
         ctx.rsp++;
         ctx.rip_p++;
@@ -317,20 +318,19 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_deref(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_deref(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         if (auto& ref_value_ref = ctx.stack[ctx.rsp]; ref_value_ref.get_tag() == ValueTag::val_ref) {
             ctx.stack[ctx.rsp] = ref_value_ref.deep_clone();
+            ctx.rip_p++;
         } else {
-            return false; // DEBUG??
+            ctx.status = VMErrcode::vm_abort;
         }
-
-        ctx.rip_p++;
 
         [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_pop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_pop(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.rsp -= a0;
         ctx.rip_p++;
 
@@ -338,21 +338,23 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_emplace(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_emplace(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         auto& dest_val_ref = ctx.stack[ctx.rsp - 1];
 
-        ctx.status = (dest_val_ref.get_tag() != ValueTag::val_ref) ? VMErrcode::bad_operation : VMErrcode::ok;
-        *dest_val_ref.get_value_ref() = ctx.stack[ctx.rsp];
-
-        ctx.rsp--;
-        ctx.rsp--;
-        ctx.rip_p++;
+        if (dest_val_ref.get_tag() == ValueTag::val_ref) {
+            *dest_val_ref.get_value_ref() = ctx.stack[ctx.rsp];
+            ctx.rsp--;
+            ctx.rsp--;
+            ctx.rip_p++;
+        } else {
+            ctx.status = VMErrcode::vm_abort;
+        }
 
         [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_put_this(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_put_this(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.stack[ctx.rsp + 1] = Value {ctx.frames.back().this_p};
         ctx.rsp++;
         ctx.rip_p++;
@@ -361,7 +363,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_put_obj_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_put_obj_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.gc(ctx.heap, ctx.stack, ctx.rsp);
 
         auto obj_ref_p = ctx.heap.add_item(ctx.heap.get_next_id(), Object {nullptr});
@@ -378,7 +380,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_put_arr_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_put_arr_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.gc(ctx.heap, ctx.stack, ctx.rsp);
 
         auto array_prototype_p = ctx.stack[ctx.rsp].to_object();
@@ -395,7 +397,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_put_proto_key(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_put_proto_key(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         /// NOTE: fake a prototype key Value with this VM flag & a dud key Value.
         ctx.stack[ctx.rsp + 1] = Value {};
         ctx.rpk = true;
@@ -407,7 +409,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_get_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_get_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         auto& target_ref = ctx.stack[ctx.rsp - 1];
         ObjectBase<Value>* target_obj_p = (target_ref.get_tag() == ValueTag::val_ref)
             ? target_ref.get_value_ref()->to_object()
@@ -435,7 +437,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_put_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_put_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         auto target_object_p = ctx.stack[ctx.rsp - 2].to_object();
 
         auto target_prop_key = (ctx.rpk)
@@ -445,27 +447,29 @@ namespace DerkJS {
             : PropertyHandle<Value> {ctx.stack[ctx.rsp - 1], PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)};
 
         if (!target_object_p) {
-            return false;
-        }
-
-        ctx.status = (!target_object_p->set_property_value(
+            ctx.status = VMErrcode::bad_property_access;
+        } else if (target_object_p->set_property_value(
             target_prop_key,
             ctx.stack[ctx.rsp]
-        )) ? VMErrcode::bad_property_access : VMErrcode::ok;
-        ctx.rpk = false;
-
-        ctx.rsp -= 2;
-        ctx.rip_p++;
+        )) {
+            ctx.rpk = false;
+            ctx.rsp--;
+            ctx.rsp--;
+            ctx.rip_p++;
+        } else {
+            ctx.status = VMErrcode::bad_property_access;
+        }
 
         [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_del_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        return false; // TODO!
+    inline void op_del_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+        ctx.status = VMErrcode::bad_operation; // TODO
+        return;
     }
 
-    [[nodiscard]] inline auto op_numify(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_numify(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         if (auto num_temp = ctx.stack[ctx.rsp].to_num_f64(); num_temp) {
             ctx.stack[ctx.rsp] = Value {*num_temp};
         } else {
@@ -478,7 +482,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_strcat(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_strcat(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.gc(ctx.heap, ctx.stack, ctx.rsp);
 
         /// NOTE: For making TCO possible, just allocate the new string on the heap via raw ptr to avoid non-trivial destructor problems. The heap will manage that anyways.
@@ -497,7 +501,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_mod(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_mod(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         std::swap_ranges(reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp) + sizeof(Value), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp - 1));
         ctx.stack[ctx.rsp - 1] %= ctx.stack[ctx.rsp];
         ctx.rsp--;
@@ -507,7 +511,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_mul(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_mul(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.stack[ctx.rsp - 1] *= ctx.stack[ctx.rsp]; // commutativity of the TIMES operator allows avoidance of std::swap
         ctx.rsp--;
         ctx.rip_p++;
@@ -516,7 +520,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_div(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_div(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         std::swap_ranges(reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp) + sizeof(Value), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp - 1));
         ctx.stack[ctx.rsp - 1] /= ctx.stack[ctx.rsp];
         ctx.rsp--;
@@ -526,7 +530,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_add(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_add(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.stack[ctx.rsp - 1] += ctx.stack[ctx.rsp]; // commutativity of the PLUS operator allows avoidance of std::swap
         ctx.rsp--;
         ctx.rip_p++;
@@ -535,7 +539,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_sub(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_sub(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         std::swap_ranges(reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp) + sizeof(Value), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp - 1));
         ctx.stack[ctx.rsp - 1] -= ctx.stack[ctx.rsp];
         ctx.rsp--;
@@ -545,7 +549,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_test_falsy(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_test_falsy(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.stack[ctx.rsp + 1] = ctx.stack[ctx.rsp].is_falsy();
         ctx.rsp++;
         ctx.rip_p++;
@@ -554,7 +558,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_test_strict_eq(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_test_strict_eq(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] == ctx.stack[ctx.rsp];
         ctx.rsp--;
         ctx.rip_p++;
@@ -563,7 +567,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_test_strict_ne(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_test_strict_ne(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] != ctx.stack[ctx.rsp];
         ctx.rsp--;
         ctx.rip_p++;
@@ -572,7 +576,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_test_lt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_test_lt(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] > ctx.stack[ctx.rsp]; // IF x < y THEN y > x
         ctx.rsp--;
         ctx.rip_p++;
@@ -581,7 +585,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_test_lte(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_test_lte(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] >= ctx.stack[ctx.rsp]; // IF x <= y THEN y >= x
         ctx.rsp--;
         ctx.rip_p++;
@@ -590,7 +594,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_test_gt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_test_gt(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] < ctx.stack[ctx.rsp]; // IF x > y THEN y < x
         ctx.rsp--;
         ctx.rip_p++;
@@ -599,7 +603,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_test_gte(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_test_gte(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] <= ctx.stack[ctx.rsp]; // IF x >= y THEN y <= x
         ctx.rsp--;
         ctx.rip_p++;
@@ -608,7 +612,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_jump_else(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_jump_else(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         if (!ctx.stack[ctx.rsp]) {
             ctx.rip_p += a0;
         } else {
@@ -620,7 +624,7 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    inline auto op_jump_if(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_jump_if(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         if (ctx.stack[ctx.rsp]) {
             ctx.rip_p += a0;
         } else {
@@ -632,44 +636,44 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_jump(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_jump(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.rip_p += a0;
 
         [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_object_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_object_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         auto& callable_value = ctx.stack[ctx.rsp];
 
-        if (const auto val_tag = callable_value.get_tag(); val_tag == ValueTag::val_ref && callable_value.get_value_ref()->get_tag() == ValueTag::object) {
-            ctx.status = (!callable_value.get_value_ref()->to_object()->call(&ctx, a0, a1)) ? VMErrcode::bad_operation : VMErrcode::ok;
-        } else if (val_tag == ValueTag::object) {
-            ctx.status = (!callable_value.to_object()->call(&ctx, a0, a1)) ? VMErrcode::bad_operation : VMErrcode::ok;
+        if (const auto val_tag = callable_value.get_tag(); val_tag == ValueTag::val_ref && callable_value.get_value_ref()->get_tag() == ValueTag::object && callable_value.get_value_ref()->to_object()->call(&ctx, a0, a1)) {
+            ; // ok
+        } else if (val_tag == ValueTag::object && callable_value.to_object()->call(&ctx, a0, a1)) {
+            ; // ok
         } else {
-            return false;
+            ctx.status = VMErrcode::bad_operation;
         }
 
         [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_ctor_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_ctor_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         auto& callable_value = ctx.stack[ctx.rsp];
 
-        if (const auto val_tag = callable_value.get_tag(); val_tag == ValueTag::val_ref && callable_value.get_value_ref()->get_tag() == ValueTag::object) {
-            ctx.status = (!callable_value.get_value_ref()->to_object()->call_as_ctor(&ctx, a0)) ? VMErrcode::bad_operation : VMErrcode::ok;
-        } else if (val_tag == ValueTag::object) {
-            ctx.status = (!callable_value.to_object()->call_as_ctor(&ctx, a0)) ? VMErrcode::bad_operation : VMErrcode::ok;
+        if (const auto val_tag = callable_value.get_tag(); val_tag == ValueTag::val_ref && callable_value.get_value_ref()->get_tag() == ValueTag::object && callable_value.get_value_ref()->to_object()->call_as_ctor(&ctx, a0)) {
+            ; // ok
+        } else if (val_tag == ValueTag::object && callable_value.to_object()->call_as_ctor(&ctx, a0)) {
+            ; // ok
         } else {
-            return false;
+            ctx.status = VMErrcode::bad_operation;
         }
 
         [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         const auto& [caller_ret_ip, caller_this_p, caller_addr, caller_capture_p, callee_sbp, caller_sbp] = ctx.frames.back();
 
         ctx.stack[callee_sbp] = ctx.stack[ctx.rsp];
@@ -682,23 +686,23 @@ namespace DerkJS {
 
         if (ctx.frames.empty()) {
             ctx.status = VMErrcode::ok;
-            return ctx.status == VMErrcode::ok;
+            return;
         }
 
         [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
+    inline void op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.status = VMErrcode::vm_abort;
 
         [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    [[nodiscard]] inline auto dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1) -> bool {
-        if (const auto errcode = static_cast<uint8_t>(ctx.status); errcode + ctx.frames.empty()) {
-            return errcode ^ 0;
+    inline void dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+        if (ctx.status != VMErrcode::pending) {
+            return;
         }
 
         [[clang::musttail]]
@@ -724,7 +728,7 @@ namespace DerkJS {
             return self.m_ctx.status;
         }
 
-        [[nodiscard]] inline auto operator()() -> bool {
+        inline void operator()() {
             return dispatch_op(m_ctx, m_ctx.rip_p->args[0], m_ctx.rip_p->args[1]);
         }
     };
