@@ -32,8 +32,8 @@
     - ~~Refactor bytecode gen to stub-define all recursively present `var`s as `undefined`. The 2nd pass over `var`s will assign their "initializers" to them.~~
  20. ~~Add support for scoped symbol resolution in bytecode generation.~~
     - **FIX GC to track DEAD CAPTURE OBJECTS**!!
- 21. Add support for _Property Descriptors_.
-    - Implement `PropertyDescriptor`.
-    - Replace property handle keys with `Value` keys.
-    - Update VM opcodes to use `PropertyDescriptor`s in property accesses.
+ 21. ~~Add support for _Property Descriptors_.~~
+    - ~~Implement `PropertyDescriptor`.~~
+    - ~~Replace property handle keys with `Value` keys.~~
+    - ~~Update VM opcodes to use `PropertyDescriptor`s in property accesses.~~
  22. Add `+=, -=, *=, /=, %=` operators.

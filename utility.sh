@@ -1,7 +1,7 @@
 argc=$#
 
 usage_exit() {
-    echo "Usage: utility.sh [help | build | unittest | profile | sloc]\n\tutility.sh (re)build [debug | release] <has-tco>[1 | 0]\n\tutility.sh unittest\n\tutility.sh profile <JS file path>\n";
+    echo "Usage: utility.sh [help | build | unittest | profile | sloc]\n\tutility.sh (re)build [debug | profile | release]\n\tutility.sh unittest\n\tutility.sh profile <JS file path>\n";
     exit $1;
 }
 
@@ -14,15 +14,15 @@ build_status=0
 
 if [[ $action = "help" ]]; then
     usage_exit 0;
-elif [[ $action = "build" && $argc -eq 3 ]]; then
+elif [[ $action = "build" ]]; then
     rm -rf ./.cache;
     rm -f ./compile_commands.json;
     rm -f ./build/derkjs;
-    cmake -S . -B build --preset "local-$2-build" -DUSE_TCO_WITH_BC_VM:BOOL=$3 && cmake --build build && mv ./build/compile_commands.json .;
-elif [[ $action = "rebuild" && $argc -eq 3 ]]; then
+    cmake -S . -B build --preset "local-$2-build" && cmake --build build && mv ./build/compile_commands.json .;
+elif [[ $action = "rebuild" ]]; then
     rm -rf ./.cache;
     rm -rf ./build/;
-    cmake -S . -B build --preset "local-$2-build" -DUSE_TCO_WITH_BC_VM:BOOL=$3 && cmake --build build && mv ./build/compile_commands.json .;
+    cmake --fresh -S . -B build --preset "local-$2-build" && cmake --build build && mv ./build/compile_commands.json .;
 elif [[ $action = "unittest" && $argc -eq 1 ]]; then
     # touch ./test_logs.txt;
     # ctest --test-dir build --timeout 2 -V 1> ./test_logs.txt;
