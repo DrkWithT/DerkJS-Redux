@@ -19,6 +19,7 @@ export namespace DerkJS {
         std::vector<Value> m_items;
         // Holds a prototype reference.
         Value m_prototype;
+        uint8_t m_flags;
 
         void fill_gap_to_n(int index, bool should_default) {
             int item_count = m_items.size();
@@ -53,7 +54,7 @@ export namespace DerkJS {
         }
     public:
         Array(ObjectBase<Value>* prototype_p) noexcept (std::is_nothrow_default_constructible_v<Value>)
-        : m_props {}, m_items {}, m_prototype {prototype_p} {}
+        : m_props {}, m_items {}, m_prototype {prototype_p}, m_flags {} {}
 
         [[nodiscard]] auto items() noexcept -> std::vector<Value>& {
             return m_items;
@@ -93,25 +94,27 @@ export namespace DerkJS {
 
         [[nodiscard]] auto get_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
             if (key.is_prototype_key()) {
-                return PropertyDescriptor<Value> {&key, &m_proto};
+                return PropertyDescriptor<Value> {&key, &m_prototype, false};
             } else if (key.get_tag() == ValueTag::num_i32) {
-                return PropertyDescriptor<Value> {&key, get_item(key.to_num_i32().value())};
-            } else if (auto property_entry_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&key](const auto& descriptor) -> bool {
-                return descriptor.get_key() == key;
-            }); property_entry_it != m_own_props.end()) {
-                return PropertyDescriptor<Value> {*property_entry_it};
+                return PropertyDescriptor<Value> {&key, get_item(key.to_num_i32().value(), true), false}; // TODO: maybe make the frozen argument checked to `m_flags`? Can arrays be frozen for their items?
+            } else if (auto property_entry_it = std::find_if(m_props.begin(), m_props.end(), [&key](const auto& prop) -> bool {
+                return prop.key == key;
+            }); property_entry_it != m_props.end()) {
+                return PropertyDescriptor<Value> {&key, &property_entry_it->item, ((m_flags & flag_frozen_v) >> 1) == 1};
             } else if (allow_filler) {
                 return PropertyDescriptor<Value> {
-                    m_own_props.emplace_back(
+                    &key,
+                    &m_props.emplace_back(
                         key, Value {},
                         static_cast<uint8_t>(AttrMask::writable) | static_cast<uint8_t>(AttrMask::configurable)
-                    )
+                    ).item,
+                    ((m_flags & flag_frozen_v) >> 1) == 1
                 };
-            } else if (auto prototype_p = m_proto.to_object(); prototype_p) {
+            } else if (auto prototype_p = m_prototype.to_object(); prototype_p) {
                 return prototype_p->get_property_value(key, allow_filler);
             }
 
-            return PropertyDescriptor {};
+            return PropertyDescriptor<Value> {};
         }
 
         void freeze() noexcept override {
@@ -119,7 +122,7 @@ export namespace DerkJS {
         }
 
         [[maybe_unused]] auto set_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] const Value& value) -> Value* override {
-            auto property_desc = get_property_value(key, m_flags != flag_frozen_v);
+            auto property_desc = get_property_value(key, true);
 
             return &(property_desc = value);
         }

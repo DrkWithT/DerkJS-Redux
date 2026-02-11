@@ -160,8 +160,9 @@ export namespace DerkJS::Core {
         }
 
         template <typename ObjectSubType, typename ... CtorArgs> requires (std::is_base_of_v<ObjectBase<Value>, ObjectSubType> && std::is_constructible_v<ObjectSubType, CtorArgs...>)
-        [[maybe_unused]] auto add_native_global(std::string name, CtorArgs&& ... ctor_args) -> bool {
+        [[maybe_unused]] auto add_native_global(std::string name, CtorArgs&& ... ctor_args) -> ObjectBase<Value>* {
             auto object_p = std::make_unique<ObjectSubType>(std::forward<CtorArgs>(ctor_args)...);
+            auto object_raw_p = object_p.get();
 
             m_preloads.emplace_back(PreloadItem {
                 .lexeme = name,
@@ -175,13 +176,14 @@ export namespace DerkJS::Core {
                 .location = Location::heap_obj
             });
 
-            return true;
+            return object_raw_p;
         }
 
         /// NOTE: takes the native object's name & a StaticString <-> "item" list to preload. The item is a primitive Value OR ObjectBase<Value>.
         template <typename ObjectSubType, std::size_t N, typename ... CtorArgs> requires (std::is_base_of_v<ObjectBase<Value>, ObjectSubType> && std::is_constructible_v<ObjectSubType, CtorArgs...>)
-        [[maybe_unused]] auto add_native_object(ObjectBase<Value>* string_proto, std::string name, std::array<NativePropertyStub, N> prop_list, CtorArgs&& ... ctor_args) -> bool {
+        [[maybe_unused]] auto add_native_object(ObjectBase<Value>* string_proto, std::string name, std::array<NativePropertyStub, N> prop_list, CtorArgs&& ... ctor_args) -> ObjectBase<Value>* {
             auto object_p = std::make_unique<ObjectSubType>(std::forward<CtorArgs>(ctor_args)...);
+            auto object_raw_p = object_p.get();
 
             for (auto& [stub_name, item] : prop_list) {
                 auto prop_name_p = std::make_unique<DynamicString>(string_proto, stub_name);
@@ -201,13 +203,13 @@ export namespace DerkJS::Core {
 
                 if (auto item_as_primitive_p = std::get_if<Value>(&item); item_as_primitive_p) {
                     if (!object_p->set_property_value(prop_name_value, *item_as_primitive_p)) {
-                        return false;
+                        return nullptr;
                     }
                 } else {
                     auto item_as_object_p = std::get_if<std::unique_ptr<ObjectBase<Value>>>(&item);
 
                     if (!object_p->set_property_value(prop_name_value, Value {item_as_object_p->get()})) {
-                        return false;
+                        return nullptr;
                     } else {
                         /// NOTE: Here, prepare an anonymous JS Object value to be inserted into the heap, likely referenced by this object.
                         m_preloads.emplace_back(PreloadItem {
@@ -231,7 +233,7 @@ export namespace DerkJS::Core {
                 .location = Location::heap_obj
             });
 
-            return true;
+            return object_raw_p;
         }
 
         template <std::size_t N>

@@ -495,25 +495,22 @@ export namespace DerkJS {
 
         [[nodiscard]] auto deep_clone() const -> Value {
             switch (m_tag) {
+            // copy object reference for avoiding ownership problems
+            case ValueTag::object: return m_data.obj_p;
+            case ValueTag::val_ref: return m_data.ref_p->deep_clone();
             case ValueTag::undefined:
             case ValueTag::null:
             case ValueTag::boolean:
             case ValueTag::num_nan: 
             case ValueTag::num_i32:
-            case ValueTag::num_f64: return *this;
-            // copy object reference for avoiding ownership problems
-            case ValueTag::object: return m_data.obj_p;
-            case ValueTag::val_ref: return m_data.ref_p->deep_clone();
+            case ValueTag::num_f64:
+            default:
+                return *this;
             }
         }
     };
 
     class Object : public ObjectBase<Value> {
-    public:
-        static constexpr auto flag_extensible_v = 0b00000001;
-        static constexpr auto flag_frozen_v = 0b00000010;
-        static constexpr auto flag_prototype_v = 0b10000000;
-
     private:
         PropPool<Value, Value> m_own_props;
         Value m_proto;
@@ -554,17 +551,19 @@ export namespace DerkJS {
 
         [[nodiscard]] auto get_property_value(const Value& key, bool allow_filler) -> PropertyDescriptor<Value> override {
             if (key.is_prototype_key()) {
-                return PropertyDescriptor<Value> {&key, &m_proto};
-            } else if (auto property_entry_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&key](const auto& descriptor) -> bool {
-                return descriptor.get_key() == key;
+                return PropertyDescriptor<Value> {&key, &m_proto, false};
+            } else if (auto property_entry_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&key](const auto& prop) -> bool {
+                return prop.key == key;
             }); property_entry_it != m_own_props.end()) {
-                return PropertyDescriptor<Value> {*property_entry_it};
+                return PropertyDescriptor<Value> {&key, &property_entry_it->item, ((m_flags & flag_frozen_v) >> 1) == 1};
             } else if (allow_filler) {
                 return PropertyDescriptor<Value> {
-                    m_own_props.emplace_back(
+                    &key,
+                    &m_own_props.emplace_back(
                         key, Value {},
                         static_cast<uint8_t>(AttrMask::writable) | static_cast<uint8_t>(AttrMask::configurable)
-                    )
+                    ).item,
+                    ((m_flags & flag_frozen_v) >> 1) == 1
                 };
             } else if (auto prototype_p = m_proto.to_object(); prototype_p) {
                 return prototype_p->get_property_value(key, allow_filler);
@@ -578,7 +577,7 @@ export namespace DerkJS {
         }
 
         [[maybe_unused]] auto set_property_value(const Value& key, const Value& value) -> Value* override {
-            auto property_desc = get_property_value(key, m_flags != flag_frozen_v);
+            auto property_desc = get_property_value(key, true);
 
             return &(property_desc = value);
         }
@@ -599,9 +598,7 @@ export namespace DerkJS {
             // Due to the Value repr needing an ObjectBase<Value>* ptr, the Value clone method returns a Value vs. `std::unique_ptr<Value>`, and the VM only stores Value-s on its stack, having a raw pointer is unavoidable. This may not be so bad since the PolyPool<ObjectBase<Value>> in the VM can quickly own it via `add_item()`.
             auto self_clone = new Object {m_proto.to_object()};
 
-            for (const auto& [prop_key, prop_value] : m_own_props) {
-                self_clone->set_property_value(prop_key, prop_value.deep_clone());
-            }
+            self_clone->get_own_prop_pool() = m_own_props;
 
             return self_clone;
         }

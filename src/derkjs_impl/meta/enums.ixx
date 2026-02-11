@@ -14,6 +14,6 @@ export namespace DerkJS::Meta {
     [[nodiscard]] constexpr auto mask_enum_vals(EnFirst val, EnRest ... rest) noexcept {
         using mask_v = std::underlying_type_t<E>;
 
-        return ((static_cast<mask_v>(val)) | ...);
+        return ((static_cast<mask_v>(val)) | ... | (static_cast<mask_v>(rest)));
     }
 }

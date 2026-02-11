@@ -60,19 +60,21 @@ export namespace DerkJS {
 
         [[nodiscard]] auto get_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
             if (key.is_prototype_key()) {
-                return PropertyDescriptor<Value> {&key, &m_proto};
-            } else if (auto property_entry_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&key](const auto& descriptor) -> bool {
-                return descriptor.get_key() == key;
+                return PropertyDescriptor<Value> {&key, &m_prototype, false};
+            } else if (auto property_entry_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&key](const auto& prop) -> bool {
+                return prop.key == key;
             }); property_entry_it != m_own_props.end()) {
-                return PropertyDescriptor<Value> {*property_entry_it};
+                return PropertyDescriptor<Value> {&key, &property_entry_it->item, ((m_flags & flag_frozen_v) >> 1) == 1};
             } else if (allow_filler) {
                 return PropertyDescriptor<Value> {
-                    m_own_props.emplace_back(
+                    &key,
+                    &m_own_props.emplace_back(
                         key, Value {},
                         static_cast<uint8_t>(AttrMask::writable) | static_cast<uint8_t>(AttrMask::configurable)
-                    )
+                    ).item,
+                    ((m_flags & flag_frozen_v) >> 1) == 1
                 };
-            } else if (auto prototype_p = m_proto.to_object(); prototype_p) {
+            } else if (auto prototype_p = m_prototype.to_object(); prototype_p) {
                 return prototype_p->get_property_value(key, allow_filler);
             }
 
@@ -84,7 +86,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto set_property_value([[maybe_unused]] const Value& key, const Value& value) -> Value* override {
-            auto property_desc = get_property_value(key, m_flags != flag_frozen_v);
+            auto property_desc = get_property_value(key, true);
 
             return &(property_desc = value);
         }

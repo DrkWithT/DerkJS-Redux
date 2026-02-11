@@ -3,6 +3,8 @@ module;
 #include <cstdint>
 #include <type_traits>
 #include <utility>
+#include <memory>
+#include <vector>
 #include <string>
 #include <string_view>
 
@@ -33,6 +35,7 @@ export namespace DerkJS {
         configurable = 0b00000010,
         enumerable = 0b00000100,
         is_data_desc = 0b00001000,
+        is_parent_frozen = 0b00010000
     };
 
     /**
@@ -58,15 +61,23 @@ export namespace DerkJS {
         explicit constexpr PropertyDescriptor() noexcept
         : key_p {nullptr}, item_p {nullptr}, flags {std::to_underlying(AttrMask::dead)} {}
 
-        explicit constexpr PropertyDescriptor(const V* key_p_, V* item_p_) noexcept
-        : key_p {&property.key}, item_p {&property.item}, flags {mask_enum_vals(AttrMask::writable, AttrMask::configurable)} {
+        constexpr PropertyDescriptor(const V* key_p_, V* item_p_, bool parent_frozen) noexcept
+        : key_p {key_p_}, item_p {item_p_}, flags {Meta::mask_enum_vals<AttrMask>(AttrMask::writable, AttrMask::configurable)} {
             if (!item_p) {
                 flags = std::to_underlying(AttrMask::dead);
             }
+
+            if (parent_frozen) {
+                flags |= std::to_underlying(AttrMask::is_parent_frozen);
+            }
         }
 
-        explicit constexpr PropertyDescriptor(PropEntry<V, V>& property) noexcept
-        : key_p {&property.key}, item_p {&property.item}, flags {property.flags} {}
+        constexpr PropertyDescriptor(PropEntry<V, V>& property, bool parent_frozen) noexcept
+        : key_p {&property.key}, item_p {&property.item}, flags {property.flags} {
+            if (parent_frozen) {
+                flags |= std::to_underlying(AttrMask::is_parent_frozen);
+            }
+        }
 
         [[nodiscard]] constexpr auto get_key() const noexcept -> const V& {
             return *key_p;
@@ -80,12 +91,12 @@ export namespace DerkJS {
             return item_p;
         }
 
-        [[nodiscard]] constexpr auto operator*() const noexcept -> const V& {
+        [[nodiscard]] constexpr auto operator*() const noexcept -> V {
             if (!has_item()) {
                 return dud_item;
             }
 
-            return *item_p;
+            return V {item_p};
         }
 
         /**
@@ -95,7 +106,7 @@ export namespace DerkJS {
          * @return PropertyDescriptor& 
          */
         [[nodiscard]] auto operator=(const V& value) noexcept -> PropertyDescriptor& {
-            if (has_item() && get_flag<AttrMask::writable>()) {
+            if (!get_flag<AttrMask::is_parent_frozen>() && has_item() && get_flag<AttrMask::writable>()) {
                 *item_p = value;
             }
 
@@ -105,13 +116,15 @@ export namespace DerkJS {
         template <AttrMask M>
         [[nodiscard]] constexpr auto get_flag() const noexcept -> bool {
             if constexpr (M == AttrMask::writable) {
-                return flags & M;
+                return flags & static_cast<uint8_t>(M);
             } else if constexpr (M == AttrMask::configurable) {
-                return (flags & M) >> 1;
+                return (flags & static_cast<uint8_t>(M)) >> 1;
             } else if constexpr (M == AttrMask::enumerable) {
-                return (flags & M) >> 2;
+                return (flags & static_cast<uint8_t>(M)) >> 2;
             } else if constexpr (M == AttrMask::is_data_desc) {
-                return (flags & M) >> 3;
+                return (flags & static_cast<uint8_t>(M)) >> 3;
+            } else if constexpr (M == AttrMask::is_parent_frozen) {
+                return (flags & static_cast<uint8_t>(M)) >> 4;
             }
 
             return flags == 0x00;
@@ -162,6 +175,10 @@ export namespace DerkJS {
     template <typename V>
     class ObjectBase {
     public:
+        static constexpr auto flag_extensible_v = 0b00000001;
+        static constexpr auto flag_frozen_v = 0b00000010;
+        static constexpr auto flag_prototype_v = 0b10000000;
+
         virtual ~ObjectBase() = default;
 
         virtual auto get_unique_addr() noexcept -> void* = 0;
@@ -219,7 +236,7 @@ export namespace DerkJS {
     class PolyPool {
     public:
         // ObjectOverhead ~= sizeof(decltype(PropPool<V, V>::at(0))) + sizeof(Value) + <possible-metadata> = 32 + 16 + 8;
-        static constexpr std::size_t object_overhead = 32UL + 16UL + 8UL;
+        static constexpr std::size_t object_overhead = 32UL + 24UL + 16UL + 8UL;
         static constexpr int max_id = 32767;
 
     private:

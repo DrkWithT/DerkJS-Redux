@@ -152,7 +152,7 @@ int main(int argc, char* argv[]) {
     driver.add_native_global<NativeFunction>(
         "parseInt",
         DerkJS::native_parse_int
-    )->freeze();
+    );
 
     auto string_prototype_p = driver.setup_string_prototype(std::to_array(std::move(str_props)));
 
@@ -188,7 +188,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    array_prototype_p->freeze();
+    array_prototype_object_p->freeze();
 
     driver.add_native_global<Array>(
         "Array",
