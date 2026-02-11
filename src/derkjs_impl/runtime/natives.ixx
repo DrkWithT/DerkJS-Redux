@@ -75,7 +75,7 @@ export namespace DerkJS {
         auto str_as_obj_p = ctx->stack[passed_rsbp + argc].to_object();
         const auto str_this_p = dynamic_cast<const StringBase*>(str_as_obj_p);
         const int substr_begin = ctx->stack[passed_rsbp].to_num_i32().value_or(0);
-        const int substr_len = ctx->stack[passed_rsbp].to_num_i32().value_or(0);
+        const int substr_len = ctx->stack[passed_rsbp + 1].to_num_i32().value_or(0);
 
         std::string_view chars_view = str_this_p->as_str_view().substr(substr_begin, substr_len);
         std::string temp_substr;
