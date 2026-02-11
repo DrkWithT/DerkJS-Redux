@@ -4,51 +4,125 @@ module;
 #include <type_traits>
 #include <utility>
 #include <memory>
-
 #include <vector>
 #include <string>
 #include <string_view>
 
 export module runtime.objects;
 
+import meta.enums;
+
 export namespace DerkJS {
-    template <typename ValueType>
-    struct PropertyHandle;
+    template <typename K, typename V>
+    struct PropEntry {
+        K key;
+        V item;
+        uint8_t flags;
+    };
 
     /**
-     * @brief Alias for any object's property pool. Note that a prototype object has its own pool that instances duplicate their structure from.
+     * @brief Alias for any object's property pool. Note that a prototype object has its own pool that instances refer to.
      * 
-     * @tparam V This parameter must be a `Value` wrapper from `derkjs_impl/runtime/value.ixx`.
+     * @tparam K property key as Value
+     * @tparam V property item as Value
      */
-    template <typename H, typename V>
-    using PropPool = std::vector<std::pair<H, V>>;
+    template <typename K, typename V>
+    using PropPool = std::vector<PropEntry<K, V>>;
 
-    // template <typename H, typename V>
-    // class FieldIterator {
-    // private:
-    //     using entry_ptr = const std::pair<H, V>*;
-    //     entry_ptr m_current;
-    //     entry_ptr m_end;
+    enum class AttrMask : uint8_t {
+        dead = 0x00,
+        writable = 0b00000001,
+        configurable = 0b00000010,
+        enumerable = 0b00000100,
+        is_data_desc = 0b00001000,
+        is_parent_frozen = 0b00010000,
+        unused = 0b00000011
+    };
 
-    // public:
-    //     // Dud iterator for non-iterables
-    //     constexpr FieldIterator() noexcept
-    //     : m_current {nullptr}, m_end {nullptr} {}
+    /**
+     * @brief Implementation of the data JS property descriptor needed for proper member access semantics as per https://262.ecma-international.org/5.1/#sec-8.10.
+     * @note No accessor semantics are implemented for simplicity.
+     * @tparam V See `DerkJS::Value` in `./src/derkjs_impl/runtime/value.ixx`.
+     */
+    template <typename V>
+    class PropertyDescriptor {
+    private:
+        static constexpr auto dud_item = V {};
 
-    //     [[nodiscard]] constexpr auto next() noexcept -> V {
-    //         if (m_current < m_end) {
-    //             auto temp = V {&m_current->second};
-    //             m_current++;
-    //             return temp;
-    //         }
+        const V* key_p; // Views the PropPool entry's key member.
+        V* item_p;      // Refers to the property value.
+        uint8_t flags;  // By the ES5 spec, this determines how properties allow some operations, but they're taken from the parent object if so.
 
-    //         return nullptr;
-    //     }
-    // };
+        [[nodiscard]] constexpr auto has_item(this auto&& self) noexcept -> bool {
+            return self.flags != std::to_underlying(AttrMask::dead);
+        }
+
+    public:
+        /// NOTE: For dud property descriptors, likely from an invalid property name.
+        explicit constexpr PropertyDescriptor() noexcept
+        : key_p {nullptr}, item_p {nullptr}, flags {std::to_underlying(AttrMask::dead)} {}
+
+        constexpr PropertyDescriptor(const V* key_p_, V* item_p_, uint8_t parent_object_flags) noexcept
+        : key_p {key_p_}, item_p {item_p_}, flags {parent_object_flags} {
+            if (!item_p) {
+                flags = std::to_underlying(AttrMask::dead);
+            }
+        }
+
+        [[nodiscard]] constexpr auto get_key() const noexcept -> const V& {
+            return *key_p;
+        }
+
+        explicit constexpr operator bool(this auto&& self) noexcept {
+            return self.has_item();
+        }
+
+        [[nodiscard]] constexpr auto operator&() noexcept -> V* {
+            return item_p;
+        }
+
+        [[nodiscard]] constexpr auto operator*() const noexcept -> V {
+            if (!has_item()) {
+                return dud_item;
+            }
+
+            return V {item_p, flags};
+        }
+
+        /**
+         * @brief Very roughly follows the ES5 specification, 8.12.1:
+         * @note The assignment to the referenced V (Value) only works if the property was present AND it's marked as writable.
+         * @param value 
+         * @return PropertyDescriptor& 
+         */
+        [[nodiscard]] auto operator=(const V& value) noexcept -> PropertyDescriptor& {
+            if (get_flag<AttrMask::writable>()) {
+                *item_p = value;
+            }
+
+            return *this;
+        }
+
+        template <AttrMask M>
+        [[nodiscard]] constexpr auto get_flag() const noexcept -> bool {
+            if constexpr (M == AttrMask::writable || M == AttrMask::unused) {
+                return flags & static_cast<uint8_t>(M);
+            } else if constexpr (M == AttrMask::configurable) {
+                return (flags & static_cast<uint8_t>(M)) >> 1;
+            } else if constexpr (M == AttrMask::enumerable) {
+                return (flags & static_cast<uint8_t>(M)) >> 2;
+            } else if constexpr (M == AttrMask::is_data_desc) {
+                return (flags & static_cast<uint8_t>(M)) >> 3;
+            } else if constexpr (M == AttrMask::is_parent_frozen) {
+                return (flags & static_cast<uint8_t>(M)) >> 4;
+            }
+
+            return flags == 0x00;
+        }
+    };
 
     /**
      * @brief For comparing bytes of opaque data. Useful for JS String comparisons??
-     * 
      */
     class OpaqueIterator {
     private:
@@ -91,20 +165,26 @@ export namespace DerkJS {
     template <typename V>
     class ObjectBase {
     public:
+        static constexpr auto flag_extensible_v = 0b00000001;
+        static constexpr auto flag_frozen_v = 0b00000010;
+        static constexpr auto flag_prototype_v = 0b10000000;
+
         virtual ~ObjectBase() = default;
 
         virtual auto get_unique_addr() noexcept -> void* = 0;
         virtual auto get_class_name() const noexcept -> std::string = 0;
         virtual auto is_extensible() const noexcept -> bool = 0;
-        virtual auto is_frozen() const noexcept -> bool = 0;
         virtual auto is_prototype() const noexcept -> bool = 0;
 
         virtual auto get_prototype() noexcept -> ObjectBase<V>* = 0;
         virtual auto get_seq_items() noexcept -> std::vector<V>* = 0;
-        virtual auto get_own_prop_pool() noexcept -> PropPool<PropertyHandle<V>, V>& = 0;
-        virtual auto get_property_value(const PropertyHandle<V>& handle, bool allow_filler) -> V* = 0;
-        virtual auto set_property_value(const PropertyHandle<V>& handle, const V& value) -> V* = 0;
-        virtual auto del_property_value(const PropertyHandle<V>& handle) -> bool = 0;
+        virtual auto get_own_prop_pool() noexcept -> PropPool<V, V>& = 0;
+        virtual auto get_property_value(const V& key, bool allow_filler) -> PropertyDescriptor<V> = 0;
+
+        virtual void freeze() noexcept = 0;
+
+        virtual auto set_property_value(const V& key, const V& value) -> V* = 0;
+        virtual auto del_property_value(const V& key) -> bool = 0;
 
         virtual auto call(void* opaque_ctx_p, int argc, bool has_this_arg) -> bool = 0;
         virtual auto call_as_ctor(void* opaque_ctx_p, int argc) -> bool = 0;
@@ -115,7 +195,7 @@ export namespace DerkJS {
         /// NOTE: For default printing of objects, etc. to the console (stdout). 
         virtual auto as_string() const -> std::string = 0;
 
-        // virtual auto field_iter() noexcept -> FieldIterator<PropertyHandle<V>, V> = 0;
+        // virtual auto field_iter() noexcept -> FieldIterator<PropertyDescriptor<V>> = 0;
         virtual auto opaque_iter() const noexcept -> OpaqueIterator = 0;
 
         virtual auto operator==(const ObjectBase& other) const noexcept -> bool = 0;
@@ -145,8 +225,8 @@ export namespace DerkJS {
     template <typename ItemBase> requires (std::is_polymorphic_v<ItemBase>)
     class PolyPool {
     public:
-        // ObjectOverhead ~= sizeof(PropPool<...>) + sizeof(Value) + <possible-metadata> = 24 + 16 + 8;
-        static constexpr std::size_t object_overhead = 48UL + 16UL + 8UL;
+        // ObjectOverhead ~= sizeof(decltype(PropPool<V, V>::at(0))) + sizeof(Value) + <possible-metadata> = 32 + 16 + 8;
+        static constexpr std::size_t object_overhead = 32UL + 24UL + 16UL + 8UL;
         static constexpr int max_id = 32767;
 
     private:
@@ -301,71 +381,6 @@ export namespace DerkJS {
             m_overhead -= object_overhead;
 
             return true;
-        }
-    };
-
-    enum class PropertyHandleTag : uint8_t {
-        nil, // dud handle
-        key, // Value copy -> compare values by operator== overload?
-        index, // number -> an Array's own properties -> int to Value
-        proto // special tag for prototype access
-    };
-
-    enum class PropertyHandleFlag : uint8_t {
-        configurable = 0b00000001,
-        writable = 0b00000010,
-        enumerable = 0b00000100
-    };
-
-    struct PrototypeAccessOpt {};
-
-    template <typename KeyType>
-    struct PropertyHandle {
-        KeyType key_value; // MUST be a `Value`, but this is templated to avoid circular type referencing
-        PropertyHandleTag tag; // discriminator for whether the property is an index (for own props. in Arrays) vs. a string (for any Object property)
-        uint8_t flags;
-
-        constexpr PropertyHandle() noexcept
-        : key_value {}, tag {PropertyHandleTag::nil}, flags {0x00} {}
-
-        /// NOTE: for special prototype key: no string key needed
-        constexpr PropertyHandle([[maybe_unused]] PrototypeAccessOpt opt) noexcept
-        : key_value {}, tag {PropertyHandleTag::proto}, flags {0x00} {}
-
-        constexpr PropertyHandle(KeyType key_value_, PropertyHandleTag tag_, uint8_t flags_) noexcept
-        : key_value {key_value_}, tag {tag_}, flags {flags_} {}
-
-        explicit constexpr operator bool(this auto&& self) noexcept {
-            return self.tag != PropertyHandleTag::nil;
-        }
-
-        template <PropertyHandleFlag Phf>
-        [[nodiscard]] constexpr auto get_flag_of() const noexcept {
-            if constexpr (Phf == PropertyHandleFlag::configurable || Phf == PropertyHandleFlag::writable || Phf == PropertyHandleFlag::enumerable) {
-                return flags & static_cast<uint8_t>(Phf);
-            }
-
-            return false;
-        }
-
-        [[nodiscard]] constexpr auto is_proto_key() const noexcept -> bool {
-            return tag == PropertyHandleTag::proto;
-        }
-
-        [[nodiscard]] constexpr auto get_key_value() const noexcept -> const KeyType& {
-            return key_value;
-        }
-
-        [[nodiscard]] constexpr auto operator==(const PropertyHandle& other) const noexcept -> bool {
-            return key_value == other.key_value;
-        }
-
-        [[nodiscard]] constexpr auto operator<(const PropertyHandle& other) const noexcept -> bool {
-            return key_value < other.key_value;
-        }
-
-        [[nodiscard]] constexpr auto operator>(const PropertyHandle& other) const noexcept -> bool {
-            return key_value > other.key_value;
         }
     };
 }

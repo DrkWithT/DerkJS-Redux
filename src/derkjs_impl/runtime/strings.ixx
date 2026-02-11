@@ -19,14 +19,16 @@ export namespace DerkJS {
         static constexpr auto flag_prototype_v = 0b10000000;
 
     private:
-        PropPool<PropertyHandle<Value>, Value> m_own_props;
+        PropPool<Value, Value> m_own_properties;
         std::string m_data;
         Value m_prototype;
         uint8_t m_flags;
 
     public:
         DynamicString(ObjectBase<Value>* prototype_p, const std::string& s)
-        : m_own_props {}, m_data {s}, m_prototype {prototype_p}, m_flags {0x00} {}
+        : m_own_properties {}, m_data {s}, m_prototype {prototype_p}, m_flags {std::to_underlying(AttrMask::unused)} {
+            m_prototype.update_parent_flags(m_flags);
+        }
 
         /// BEGIN ObjectBase overrides
 
@@ -42,10 +44,6 @@ export namespace DerkJS {
             return false;
         }
 
-        [[nodiscard]] auto is_frozen() const noexcept -> bool override {
-            return false;
-        }
-
         [[nodiscard]] auto is_prototype() const noexcept -> bool override {
             return false;
         }
@@ -58,42 +56,48 @@ export namespace DerkJS {
             return nullptr;
         }
 
-        [[nodiscard]] auto get_own_prop_pool() noexcept -> PropPool<PropertyHandle<Value>, Value>& override {
-            return m_own_props;
+        [[nodiscard]] auto get_own_prop_pool() noexcept -> PropPool<Value, Value>& override {
+            return m_own_properties;
         }
 
-        [[nodiscard]] auto get_property_value([[maybe_unused]] const PropertyHandle<Value>& handle, [[maybe_unused]] bool allow_filler) -> Value* override {
-            if (handle.is_proto_key()) {
-                return &m_prototype;
-            } else if (auto property_entry_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&handle](const auto& prop_pair) -> bool {
-                return prop_pair.first == handle;
-            }); property_entry_it != m_own_props.end()) {
-                return &property_entry_it->second;
+        [[nodiscard]] auto get_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
+            if (key.is_prototype_key()) {
+                return PropertyDescriptor<Value> {&key, &m_prototype, m_flags};
+            } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
+                return prop.key == key;
+            }); property_entry_it != m_own_properties.end()) {
+                return PropertyDescriptor<Value> {&key, &property_entry_it->item, m_flags};
             } else if (allow_filler) {
-                return &m_own_props.emplace_back(std::pair {handle, Value {}}).second;
+                return PropertyDescriptor<Value> {
+                    &key,
+                    &m_own_properties.emplace_back(
+                        key, Value {},
+                        static_cast<uint8_t>(AttrMask::writable) | static_cast<uint8_t>(AttrMask::configurable)
+                    ).item,
+                    m_flags
+                };
             } else if (auto prototype_p = m_prototype.to_object(); prototype_p) {
-                return prototype_p->get_property_value(handle, allow_filler);
+                return prototype_p->get_property_value(key, allow_filler);
             }
 
-            return nullptr;
+            return PropertyDescriptor<Value> {};
         }
 
-        [[nodiscard]] auto set_property_value([[maybe_unused]] const PropertyHandle<Value>& handle, const Value& value) -> Value* override {
-            if (handle.is_proto_key()) {
-                m_prototype = value;
-                return &m_prototype;
-            } else if (auto old_prop_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&handle](const auto& prop_pair) -> bool {
-                return prop_pair.first == handle;
-            }); old_prop_it == m_own_props.end()) {
-                m_own_props.emplace_back(handle, value);
-                return &m_own_props.back().second;
-            } else {
-                old_prop_it->second = value;
-                return &old_prop_it->second;
+        void freeze() noexcept override {
+            m_flags = std::to_underlying(AttrMask::is_parent_frozen);
+
+            for (auto& entry : m_own_properties) {
+                entry.item.update_parent_flags(m_flags);
             }
         }
 
-        [[nodiscard]] auto del_property_value([[maybe_unused]] const PropertyHandle<Value>& handle) -> bool override {
+        [[nodiscard]] auto set_property_value([[maybe_unused]] const Value& key, const Value& value) -> Value* override {
+            auto property_desc = get_property_value(key, true);
+
+            return &(property_desc = value);
+        }
+
+        [[nodiscard]] auto del_property_value([[maybe_unused]] const Value& key) -> bool override {
             return false;
         }
 

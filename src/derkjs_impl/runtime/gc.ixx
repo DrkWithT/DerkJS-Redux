@@ -81,7 +81,7 @@ namespace DerkJS {
                     }
                 }
 
-                for (auto& [prop_key, prop_v] : next_ptr->get_own_prop_pool()) {
+                for (auto& [prop_key, prop_v, prop_flags] : next_ptr->get_own_prop_pool()) {
                     /// TODO: add prop_key reachability checks!
                     if (auto neighbor_ptr = prop_v.to_object(); neighbor_ptr) {
                         frontier.push(neighbor_ptr);

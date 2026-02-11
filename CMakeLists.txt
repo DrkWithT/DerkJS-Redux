@@ -13,6 +13,7 @@ target_sources(
     src/derkjs_impl/frontend/parse.ixx
     src/derkjs_impl/backend/bc_generate.ixx
     src/derkjs_impl/core/driver.ixx
+    src/derkjs_impl/meta/enums.ixx
     src/derkjs_impl/runtime/objects.ixx
     src/derkjs_impl/runtime/arrays.ixx
     src/derkjs_impl/runtime/callables.ixx

@@ -352,7 +352,7 @@ export namespace DerkJS {
                     m_has_string_ops = false;
 
                     // Case 1: property keys are always constant strings.
-                    if (m_callee_name == atom_lexeme && m_has_call) {
+                    if (m_callee_name == atom_lexeme && !m_accessing_property &&  m_has_call) {
                         return Arg {.n = -1, .tag = Location::end, .is_str_literal = false, .from_closure = false};
                     } else if (pmt_is_key) {
                         return record_symbol(atom_lexeme, atom_lexeme, FindKeyConstOpt {});

@@ -82,13 +82,10 @@ namespace DerkJS {
         /// NOTE: holds stack top pointer
         int16_t rsp;
 
-        /// NOTE: indicates if `op_get_prop` should access an object's prototype, bypassing normal key-value lookup.
-        bool rpk;
-
         VMErrcode status;
 
         ExternVMCtx(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit, std::size_t gc_heap_threshold)
-        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, rsbp {0}, rsp {-1}, rpk {false}, status {VMErrcode::pending} {
+        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, rsbp {0}, rsp {-1}, status {VMErrcode::pending} {
             stack.reserve(stack_length_limit);
             stack.resize(stack_length_limit);
             frames.reserve(call_frame_limit);
@@ -202,11 +199,7 @@ namespace DerkJS {
     }
 
     inline void op_store_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        if (auto new_upval_p = ctx.frames.back().capture_p->get_property_value(PropertyHandle<Value> {
-            ctx.stack[ctx.rsp],
-            PropertyHandleTag::key,
-            static_cast<uint8_t>(PropertyHandleFlag::writable)
-        }, true); new_upval_p) {
+        if (auto new_upval_p = &ctx.frames.back().capture_p->get_property_value(ctx.stack[ctx.rsp], true); new_upval_p) {
             *new_upval_p = ctx.stack[ctx.rsp - 1];
             ctx.rip_p++;
             ctx.rsp--;
@@ -219,16 +212,13 @@ namespace DerkJS {
     }
 
     inline void op_ref_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        if (auto upval_ref_p = ctx.frames.back().capture_p->get_property_value(PropertyHandle<Value> {
-            ctx.stack[ctx.rsp],
-            PropertyHandleTag::key,
-            static_cast<uint8_t>(PropertyHandleFlag::writable)
-        }, false); upval_ref_p) {
-            ctx.stack[ctx.rsp] = Value {upval_ref_p};
-            ctx.rip_p++;
-        } else {
+        ctx.stack[ctx.rsp] = *ctx.frames.back().capture_p->get_property_value(ctx.stack[ctx.rsp], false);
+
+        if (ctx.stack[ctx.rsp].get_tag() == ValueTag::undefined) {
             ctx.status = VMErrcode::bad_property_access;
         }
+
+        ctx.rip_p++;
 
         [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
@@ -244,7 +234,7 @@ namespace DerkJS {
     }
 
     inline void op_deref(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        if (auto& ref_value_ref = ctx.stack[ctx.rsp]; ref_value_ref.get_tag() == ValueTag::val_ref) {
+        if (auto& ref_value_ref = ctx.stack[ctx.rsp]; ref_value_ref.get_tag() == ValueTag::val_ref || ref_value_ref.get_tag() == ValueTag::object) {
             ctx.stack[ctx.rsp] = ref_value_ref.deep_clone();
             ctx.rip_p++;
         } else {
@@ -266,14 +256,13 @@ namespace DerkJS {
     inline void op_emplace(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         auto& dest_val_ref = ctx.stack[ctx.rsp - 1];
 
-        if (dest_val_ref.get_tag() == ValueTag::val_ref) {
+        if (dest_val_ref.is_assignable_ref()) {
             *dest_val_ref.get_value_ref() = ctx.stack[ctx.rsp];
-            ctx.rsp--;
-            ctx.rsp--;
-            ctx.rip_p++;
-        } else {
-            ctx.status = VMErrcode::vm_abort;
         }
+
+        ctx.rsp--;
+        ctx.rsp--;
+        ctx.rip_p++;
 
         [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
@@ -323,9 +312,7 @@ namespace DerkJS {
     }
 
     inline void op_put_proto_key(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        /// NOTE: fake a prototype key Value with this VM flag & a dud key Value.
-        ctx.stack[ctx.rsp + 1] = Value {};
-        ctx.rpk = true;
+        ctx.stack[ctx.rsp + 1] = Value {JSProtoKeyOpt {}};
 
         ctx.rsp++;
         ctx.rip_p++;
@@ -336,48 +323,28 @@ namespace DerkJS {
 
     inline void op_get_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         auto& target_ref = ctx.stack[ctx.rsp - 1];
-        ObjectBase<Value>* target_obj_p = (target_ref.get_tag() == ValueTag::val_ref)
-            ? target_ref.get_value_ref()->to_object()
-            : target_ref.to_object();
 
-        auto target_prop_key = (ctx.rpk)
-            // prototype access
-            ? PropertyHandle<Value> {PrototypeAccessOpt {}}
-            // normal property access
-            : PropertyHandle<Value> {ctx.stack[ctx.rsp], PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)};
-
-        if (target_obj_p) { 
-            auto prop_ref_p = target_obj_p->get_property_value(target_prop_key, a0);
-            
-            ctx.stack[ctx.rsp - 1] = Value {prop_ref_p};
+        if (ObjectBase<Value>* target_obj_p = target_ref.to_object(); target_obj_p) {
+            ctx.stack[ctx.rsp - 1] = *target_obj_p->get_property_value(
+                ctx.stack[ctx.rsp], // special prototype key from previous opcode `put_proto_key`
+                a0
+            );
+            ctx.rsp--;
+            ctx.rip_p++;
         } else {
-            ctx.stack[ctx.rsp - 1] = Value {}; // "null" property ref -> undefined value
+            ctx.status = VMErrcode::bad_property_access;
         }
-
-        ctx.rpk = false;
-        ctx.rsp--;
-        ctx.rip_p++;
 
         [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     inline void op_put_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        auto target_object_p = ctx.stack[ctx.rsp - 2].to_object();
-
-        auto target_prop_key = (ctx.rpk)
-            // prototype key
-            ? PropertyHandle<Value> {PrototypeAccessOpt {}}
-            // normal property key 
-            : PropertyHandle<Value> {ctx.stack[ctx.rsp - 1], PropertyHandleTag::key, static_cast<uint8_t>(PropertyHandleFlag::writable)};
-
-        if (!target_object_p) {
-            ctx.status = VMErrcode::bad_property_access;
-        } else if (target_object_p->set_property_value(
-            target_prop_key,
-            ctx.stack[ctx.rsp]
-        )) {
-            ctx.rpk = false;
+        if (auto target_object_p = ctx.stack[ctx.rsp - 2].to_object(); target_object_p) {
+            target_object_p->set_property_value(
+                ctx.stack[ctx.rsp - 1], // property key
+                ctx.stack[ctx.rsp]      // property's new value
+            );
             ctx.rsp--;
             ctx.rsp--;
             ctx.rip_p++;

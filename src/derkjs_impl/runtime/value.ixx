@@ -16,6 +16,7 @@ export namespace DerkJS {
 
     struct JSNullOpt {};
     struct JSNaNOpt {};
+    struct JSProtoKeyOpt {};
 
     enum class ValueTag : uint8_t {
         undefined,
@@ -25,7 +26,8 @@ export namespace DerkJS {
         num_i32,
         num_f64,
         object,
-        val_ref
+        val_ref,
+        proto_key
     };
 
     /// TODO: add support for Value holding a Value* as a reference.
@@ -34,6 +36,7 @@ export namespace DerkJS {
         static constexpr auto dud_undefined_char_v = '\x00';
         static constexpr auto dud_null_char_v = '\x10';
         static constexpr auto dud_nan_char_v = '\x01';
+        static constexpr auto dud_proto_key_v = '\xff';
 
     private:
         union {
@@ -46,50 +49,89 @@ export namespace DerkJS {
         } m_data;
 
         ValueTag m_tag;
+        uint8_t m_parent_flags; // flags from PropertyDescriptor if any
 
     public:
-        constexpr Value() noexcept
-        : m_data {}, m_tag {ValueTag::undefined} {
+        constexpr Value(uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
+        : m_data {}, m_tag {ValueTag::undefined}, m_parent_flags {parent_flags} {
             m_data.dud = dud_undefined_char_v;
         }
 
-        constexpr Value([[maybe_unused]] JSNullOpt opt) noexcept
-        : m_data {}, m_tag {ValueTag::null} {
+        constexpr Value([[maybe_unused]] JSNullOpt opt, uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
+        : m_data {}, m_tag {ValueTag::null}, m_parent_flags {parent_flags} {
             m_data.dud = dud_null_char_v;
         }
 
-        constexpr Value([[maybe_unused]] JSNaNOpt opt) noexcept
-        : m_data {}, m_tag {ValueTag::num_nan} {
+        constexpr Value([[maybe_unused]] JSNaNOpt opt, uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
+        : m_data {}, m_tag {ValueTag::num_nan}, m_parent_flags {parent_flags} {
             m_data.dud = dud_nan_char_v;
         }
 
-        constexpr Value(bool b) noexcept
-        : m_data {}, m_tag {ValueTag::boolean} {
+        constexpr Value([[maybe_unused]] JSProtoKeyOpt opt, uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
+        : m_data {}, m_tag {ValueTag::proto_key}, m_parent_flags {parent_flags} {
+            m_data.dud = dud_proto_key_v;
+        }
+
+        constexpr Value(bool b, uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
+        : m_data {}, m_tag {ValueTag::boolean}, m_parent_flags {parent_flags} {
             m_data.b = b;
         }
 
-        constexpr Value(int i) noexcept
-        : m_data {}, m_tag {ValueTag::num_i32} {
+        constexpr Value(int i, uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
+        : m_data {}, m_tag {ValueTag::num_i32}, m_parent_flags {parent_flags} {
             m_data.i = i;
         }
 
-        Value(double d) noexcept
-        : m_data {}, m_tag {ValueTag::num_f64} {
+        Value(double d, uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
+        : m_data {}, m_tag {ValueTag::num_f64}, m_parent_flags {parent_flags} {
             m_data.d = d;
         }
 
-        constexpr Value(ObjectBase<Value>* object_p) noexcept
-        : m_data {}, m_tag {ValueTag::object} {
+        constexpr Value(ObjectBase<Value>* object_p, uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
+        : m_data {}, m_tag {ValueTag::object}, m_parent_flags {parent_flags} {
             m_data.obj_p = object_p;
         }
 
-        constexpr Value(Value* value_p) noexcept
-        : m_data {}, m_tag {ValueTag::val_ref} {
+        constexpr Value(Value* value_p, uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
+        : m_data {}, m_tag {ValueTag::val_ref}, m_parent_flags {parent_flags} {
             m_data.ref_p = value_p;
         }
 
         [[nodiscard]] constexpr auto get_tag() const noexcept -> ValueTag {
             return m_tag;
+        }
+
+        constexpr auto is_assignable_ref() const noexcept -> bool {
+            return m_tag == ValueTag::val_ref && get_parent_flag<AttrMask::writable>();
+        }
+
+        constexpr auto is_configurable_ref() const noexcept -> bool {
+            return m_tag == ValueTag::val_ref && get_parent_flag<AttrMask::configurable>();
+        }
+
+        template <AttrMask M>
+        [[nodiscard]] constexpr auto get_parent_flag(this auto&& self) noexcept -> bool {
+            if constexpr (M == AttrMask::writable || M == AttrMask::unused) {
+                return self.m_parent_flags & static_cast<uint8_t>(M);
+            } else if constexpr (M == AttrMask::configurable) {
+                return (self.m_parent_flags & static_cast<uint8_t>(M)) >> 1;
+            } else if constexpr (M == AttrMask::enumerable) {
+                return (self.m_parent_flags & static_cast<uint8_t>(M)) >> 2;
+            } else if constexpr (M == AttrMask::is_data_desc) {
+                return (self.m_parent_flags & static_cast<uint8_t>(M)) >> 3;
+            } else if constexpr (M == AttrMask::is_parent_frozen) {
+                return (self.m_parent_flags & static_cast<uint8_t>(M)) >> 4;
+            }
+
+            return self.m_parent_flags == 0x00;
+        }
+
+        constexpr void update_parent_flags(uint8_t parent_object_flags) noexcept {
+            m_parent_flags = parent_object_flags;
+        }
+
+        [[nodiscard]] constexpr auto is_prototype_key() const noexcept -> bool {
+            return m_tag == ValueTag::proto_key;
         }
 
         [[nodiscard]] constexpr auto is_reference() const noexcept -> bool {
@@ -466,6 +508,8 @@ export namespace DerkJS {
         [[nodiscard]] auto to_object() noexcept -> ObjectBase<Value>* {
             if (m_tag == ValueTag::object) {
                 return m_data.obj_p;
+            } else if (m_tag == ValueTag::val_ref) {
+                return m_data.ref_p->to_object();
             }
 
             return nullptr;
@@ -481,34 +525,32 @@ export namespace DerkJS {
 
         [[nodiscard]] auto deep_clone() const -> Value {
             switch (m_tag) {
+            // copy object reference for avoiding ownership problems
+            case ValueTag::object: return m_data.obj_p;
+            case ValueTag::val_ref: return m_data.ref_p->deep_clone();
             case ValueTag::undefined:
             case ValueTag::null:
             case ValueTag::boolean:
             case ValueTag::num_nan: 
             case ValueTag::num_i32:
-            case ValueTag::num_f64: return *this;
-            // copy object reference for avoiding ownership problems
-            case ValueTag::object: return m_data.obj_p;
-            case ValueTag::val_ref: return m_data.ref_p->deep_clone();
+            case ValueTag::num_f64:
+            default:
+                return *this;
             }
         }
     };
 
     class Object : public ObjectBase<Value> {
-    public:
-        static constexpr auto flag_extensible_v = 0b00000001;
-        static constexpr auto flag_frozen_v = 0b00000010;
-        static constexpr auto flag_prototype_v = 0b10000000;
-
     private:
-        PropPool<PropertyHandle<Value>, Value> m_own_props;
+        PropPool<Value, Value> m_own_properties;
         Value m_proto;
         uint8_t m_flags;
 
     public:
         /// NOTE: Creates mutable instances of anonymous objects. Pass the `flag_prototype_v | flag_extensible_v` if needed for Foo.prototype!
-        Object(ObjectBase<Value>* proto_p, uint8_t flags = flag_extensible_v)
-        : m_own_props {}, m_proto {(proto_p) ? proto_p : Value {}}, m_flags {flags} {
+        Object(ObjectBase<Value>* proto_p, uint8_t flags = std::to_underlying(AttrMask::unused))
+        : m_own_properties {}, m_proto {(proto_p) ? proto_p : Value {}}, m_flags {flags} {
+            m_proto.update_parent_flags(m_flags);
         }
 
         [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
@@ -523,10 +565,6 @@ export namespace DerkJS {
             return m_flags & flag_extensible_v;
         }
 
-        [[nodiscard]] auto is_frozen() const noexcept -> bool override {
-            return (m_flags & flag_frozen_v) >> 1;
-        }
-
         [[nodiscard]] auto is_prototype() const noexcept -> bool override {
             return (m_flags & flag_prototype_v) >> 7;
         }
@@ -539,42 +577,48 @@ export namespace DerkJS {
             return nullptr;
         }
 
-        auto get_own_prop_pool() noexcept -> PropPool<PropertyHandle<Value>, Value>& override {
-            return m_own_props;
+        auto get_own_prop_pool() noexcept -> PropPool<Value, Value>& override {
+            return m_own_properties;
         }
 
-        [[nodiscard]] auto get_property_value(const PropertyHandle<Value>& handle, bool allow_filler) -> Value* override {
-            if (handle.is_proto_key()) {
-                return &m_proto;
-            } else if (auto property_entry_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&handle](const auto& prop_pair) -> bool {
-                return prop_pair.first == handle;
-            }); property_entry_it != m_own_props.end()) {
-                return &property_entry_it->second;
+        [[nodiscard]] auto get_property_value(const Value& key, bool allow_filler) -> PropertyDescriptor<Value> override {
+            if (key.is_prototype_key()) {
+                return PropertyDescriptor<Value> {&key, &m_proto, m_flags};
+            } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
+                return prop.key == key;
+            }); property_entry_it != m_own_properties.end()) {
+                return PropertyDescriptor<Value> {&key, &property_entry_it->item, m_flags};
             } else if (allow_filler) {
-                return &m_own_props.emplace_back(std::pair {handle, Value {}}).second;
+                return PropertyDescriptor<Value> {
+                    &key,
+                    &m_own_properties.emplace_back(
+                        key, Value {},
+                        static_cast<uint8_t>(AttrMask::writable) | static_cast<uint8_t>(AttrMask::configurable)
+                    ).item,
+                    m_flags
+                };
             } else if (auto prototype_p = m_proto.to_object(); prototype_p) {
-                return prototype_p->get_property_value(handle, allow_filler);
+                return prototype_p->get_property_value(key, allow_filler);
             }
 
-            return nullptr;
+            return PropertyDescriptor<Value> {};
         }
 
-        [[maybe_unused]] auto set_property_value(const PropertyHandle<Value>& handle, const Value& value) -> Value* override {
-            if (handle.is_proto_key()) {
-                m_proto = value;
-                return &m_proto;
-            } else if (auto old_prop_it = std::find_if(m_own_props.begin(), m_own_props.end(), [&handle](const auto& prop_pair) -> bool {
-                return prop_pair.first == handle;
-            }); old_prop_it == m_own_props.end()) {
-                m_own_props.emplace_back(handle, value);
-                return &m_own_props.back().second;
-            } else {
-                old_prop_it->second = value;
-                return &old_prop_it->second;
+        void freeze() noexcept override {
+            m_flags = std::to_underlying(AttrMask::is_parent_frozen);
+
+            for (auto& entry : m_own_properties) {
+                entry.item.update_parent_flags(m_flags);
             }
         }
 
-        [[maybe_unused]] auto del_property_value(const PropertyHandle<Value>& handle) -> bool override {
+        [[maybe_unused]] auto set_property_value(const Value& key, const Value& value) -> Value* override {
+            auto property_desc = get_property_value(key, true);
+
+            return &(property_desc = value);
+        }
+
+        [[maybe_unused]] auto del_property_value([[maybe_unused]] const Value& key) -> bool override {
             return false; // TODO
         }
 
@@ -590,9 +634,7 @@ export namespace DerkJS {
             // Due to the Value repr needing an ObjectBase<Value>* ptr, the Value clone method returns a Value vs. `std::unique_ptr<Value>`, and the VM only stores Value-s on its stack, having a raw pointer is unavoidable. This may not be so bad since the PolyPool<ObjectBase<Value>> in the VM can quickly own it via `add_item()`.
             auto self_clone = new Object {m_proto.to_object()};
 
-            for (const auto& [prop_handle, prop_value] : m_own_props) {
-                self_clone->set_property_value(prop_handle, prop_value.deep_clone());
-            }
+            self_clone->get_own_prop_pool() = m_own_properties;
 
             return self_clone;
         }
