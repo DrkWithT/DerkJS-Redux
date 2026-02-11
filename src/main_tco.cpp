@@ -152,23 +152,30 @@ int main(int argc, char* argv[]) {
     driver.add_native_global<NativeFunction>(
         "parseInt",
         DerkJS::native_parse_int
-    );
+    )->freeze();
 
     auto string_prototype_p = driver.setup_string_prototype(std::to_array(std::move(str_props)));
+
+    if (!string_prototype_p) {
+        std::println(std::cerr, "SETUP ERROR: failed to allocate String.prototype object.");
+        return 1;
+    }
+
+    string_prototype_p->freeze();
 
     driver.add_native_object<Object>(
         string_prototype_p,
         "console",
         std::to_array(std::move(console_obj_props)),
         nullptr // TODO: add JSObject as prototype.
-    );
+    )->freeze();
 
     driver.add_native_object<Object>(
         string_prototype_p,
         "clock",
         std::to_array(std::move(clock_obj_props)),
         nullptr // TODO: add JSObject as prototype.
-    );
+    )->freeze();
 
     // Add `Array.prototype` object here!
     auto array_prototype_object_p = driver.add_anonymous_native_object(
@@ -181,10 +188,12 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    array_prototype_p->freeze();
+
     driver.add_native_global<Array>(
         "Array",
         array_prototype_object_p
-    );
+    )->freeze();
 
     /// TODO: fix nullptr prototype in strings, causing strings_1.js to FAIL.
     // for some reason, callables.ixx:66:13 is reached: .len is the wrong prototype!
