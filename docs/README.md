@@ -22,7 +22,6 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
  1. Give `./utility.sh` run permissions.
  2. Run `./utility.sh help` to see info on building, sloc count, etc.
  3. Run `./build/derkjs_tco -h` for help if you've successfully built the TCO intepreter version.
-  - **WARNING:** The loop switch version of the VM is _not yet updated_ to support simple objects & native objects.
 
 ### Other Repo Docs:
  - [Roadmap](../docs/roadmap.md)

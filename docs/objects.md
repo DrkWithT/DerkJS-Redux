@@ -17,6 +17,12 @@
  - A property can be looked up as a primitive or object reference value. Checks on being callable, etc. are at runtime.
  - In the stack VM, the object reference is pushed before a key value / reference on top. Then both are "popped" off and the lower slot is filled with the property's value reference.
 
+### "Property Descriptors" - `./src/derkjs_impl/runtime/`
+ - Wraps the key and associated item with additional metadata affecting:
+   - Writable: can the item's value be modified?
+   - Configurable: can the item's properties be modified?
+   - Enumerable: can the item be iterated over?
+
 ### "This"
  - For simplicity, it's a special variable referencing a local context of a function.
    - This would help represent closures... The caller's is the parent prototype, the callee's is the instance.
