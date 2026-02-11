@@ -256,14 +256,13 @@ namespace DerkJS {
     inline void op_emplace(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         auto& dest_val_ref = ctx.stack[ctx.rsp - 1];
 
-        if (dest_val_ref.get_tag() == ValueTag::val_ref) {
+        if (dest_val_ref.is_assignable_ref()) {
             *dest_val_ref.get_value_ref() = ctx.stack[ctx.rsp];
-            ctx.rsp--;
-            ctx.rsp--;
-            ctx.rip_p++;
-        } else {
-            ctx.status = VMErrcode::vm_abort;
         }
+
+        ctx.rsp--;
+        ctx.rsp--;
+        ctx.rip_p++;
 
         [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);

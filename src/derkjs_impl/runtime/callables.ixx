@@ -23,13 +23,13 @@ export namespace DerkJS {
         using native_func_p = bool(*)(ExternVMCtx*, PropPool<Value, Value>*, int);
 
     private:
-        PropPool<Value, Value> m_props;
+        PropPool<Value, Value> m_own_properties;
         native_func_p m_native_ptr;
         uint8_t m_flags;
 
     public:
         NativeFunction(native_func_p procedure_ptr) noexcept
-        : m_props {}, m_native_ptr {procedure_ptr} {}
+        : m_own_properties {}, m_native_ptr {procedure_ptr}, m_flags {std::to_underlying(AttrMask::unused)} {}
 
         [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
             return this;
@@ -56,7 +56,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_own_prop_pool() noexcept -> PropPool<Value, Value>& override {
-            return m_props;
+            return m_own_properties;
         }
 
         [[nodiscard]] auto get_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
@@ -64,7 +64,11 @@ export namespace DerkJS {
         }
 
         void freeze() noexcept override {
-            m_flags |= flag_frozen_v;
+            m_flags = std::to_underlying(AttrMask::is_parent_frozen);
+
+            for (auto& entry : m_own_properties) {
+                entry.item.update_parent_flags(m_flags);
+            }
         }
 
         [[nodiscard]] auto set_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] const Value& value) -> Value* override {
@@ -72,7 +76,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto del_property_value([[maybe_unused]] const Value& key) -> bool override {
-            // return m_props.erase(m_props.find(handle)) != m_props.end();
+            // return m_own_properties.erase(m_own_properties.find(handle)) != m_own_properties.end();
             return false;
         }
 
@@ -106,7 +110,7 @@ export namespace DerkJS {
             });
 
             // 2. Make native call
-            auto native_call_ok = m_native_ptr(vm_context_p, &m_props, argc);
+            auto native_call_ok = m_native_ptr(vm_context_p, &m_own_properties, argc);
 
             // 3. Restore caller stack state after native call
             vm_context_p->frames.pop_back();
@@ -199,14 +203,16 @@ export namespace DerkJS {
             "djs_halt",
         };
 
-        PropPool<Value, Value> m_props;
+        PropPool<Value, Value> m_own_properties;
         std::vector<Instruction> m_code;
         Value m_prototype;
         uint8_t m_flags;
 
     public:
         Lambda(std::vector<Instruction> code, ObjectBase<Value>* prototype_p) noexcept
-        : m_props {}, m_code (std::move(code)), m_prototype {prototype_p} {}
+        : m_own_properties {}, m_code (std::move(code)), m_prototype {prototype_p}, m_flags {std::to_underlying(AttrMask::unused)} {
+            m_prototype.update_parent_flags(m_flags);
+        }
 
         [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
             return this;
@@ -233,24 +239,24 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_own_prop_pool() noexcept -> PropPool<Value, Value>& override {
-            return m_props;
+            return m_own_properties;
         }
 
         [[nodiscard]] auto get_property_value(const Value& key, bool allow_filler) -> PropertyDescriptor<Value> override {
             if (key.is_prototype_key()) {
-                return PropertyDescriptor<Value> {&key, &m_prototype, false};
-            } else if (auto property_entry_it = std::find_if(m_props.begin(), m_props.end(), [&key](const auto& prop) -> bool {
+                return PropertyDescriptor<Value> {&key, &m_prototype, m_flags};
+            } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
                 return prop.key == key;
-            }); property_entry_it != m_props.end()) {
-                return PropertyDescriptor<Value> {*property_entry_it, ((m_flags & flag_frozen_v) >> 1) == 1};
+            }); property_entry_it != m_own_properties.end()) {
+                return PropertyDescriptor<Value> {&property_entry_it->key, &property_entry_it->item, m_flags};
             } else if (allow_filler) {
                 return PropertyDescriptor<Value> {
                     &key,
-                    &m_props.emplace_back(
+                    &m_own_properties.emplace_back(
                         key, Value {},
                         static_cast<uint8_t>(AttrMask::writable) | static_cast<uint8_t>(AttrMask::configurable)
                     ).item,
-                    ((m_flags & flag_frozen_v) >> 1) == 1
+                    m_flags
                 };
             } else if (auto prototype_p = m_prototype.to_object(); prototype_p) {
                 return prototype_p->get_property_value(key, allow_filler);
@@ -260,7 +266,11 @@ export namespace DerkJS {
         }
 
         void freeze() noexcept override {
-            m_flags |= flag_frozen_v;
+            m_flags = std::to_underlying(AttrMask::is_parent_frozen);
+
+            for (auto& entry : m_own_properties) {
+                entry.item.update_parent_flags(m_flags);
+            }
         }
 
         [[nodiscard]] auto set_property_value(const Value& key, const Value& value) -> Value* override {

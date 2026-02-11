@@ -35,7 +35,8 @@ export namespace DerkJS {
         configurable = 0b00000010,
         enumerable = 0b00000100,
         is_data_desc = 0b00001000,
-        is_parent_frozen = 0b00010000
+        is_parent_frozen = 0b00010000,
+        unused = 0b00000011
     };
 
     /**
@@ -48,9 +49,9 @@ export namespace DerkJS {
     private:
         static constexpr auto dud_item = V {};
 
-        const V* key_p;   // Views the PropPool entry's key member.
+        const V* key_p; // Views the PropPool entry's key member.
         V* item_p;      // Refers to the property value.
-        uint8_t flags;  // By the ES5 spec, this determines how properties allow some operations.
+        uint8_t flags;  // By the ES5 spec, this determines how properties allow some operations, but they're taken from the parent object if so.
 
         [[nodiscard]] constexpr auto has_item(this auto&& self) noexcept -> bool {
             return self.flags != std::to_underlying(AttrMask::dead);
@@ -61,21 +62,10 @@ export namespace DerkJS {
         explicit constexpr PropertyDescriptor() noexcept
         : key_p {nullptr}, item_p {nullptr}, flags {std::to_underlying(AttrMask::dead)} {}
 
-        constexpr PropertyDescriptor(const V* key_p_, V* item_p_, bool parent_frozen) noexcept
-        : key_p {key_p_}, item_p {item_p_}, flags {Meta::mask_enum_vals<AttrMask>(AttrMask::writable, AttrMask::configurable)} {
+        constexpr PropertyDescriptor(const V* key_p_, V* item_p_, uint8_t parent_object_flags) noexcept
+        : key_p {key_p_}, item_p {item_p_}, flags {parent_object_flags} {
             if (!item_p) {
                 flags = std::to_underlying(AttrMask::dead);
-            }
-
-            if (parent_frozen) {
-                flags |= std::to_underlying(AttrMask::is_parent_frozen);
-            }
-        }
-
-        constexpr PropertyDescriptor(PropEntry<V, V>& property, bool parent_frozen) noexcept
-        : key_p {&property.key}, item_p {&property.item}, flags {property.flags} {
-            if (parent_frozen) {
-                flags |= std::to_underlying(AttrMask::is_parent_frozen);
             }
         }
 
@@ -96,7 +86,7 @@ export namespace DerkJS {
                 return dud_item;
             }
 
-            return V {item_p};
+            return V {item_p, flags};
         }
 
         /**
@@ -106,7 +96,7 @@ export namespace DerkJS {
          * @return PropertyDescriptor& 
          */
         [[nodiscard]] auto operator=(const V& value) noexcept -> PropertyDescriptor& {
-            if (!get_flag<AttrMask::is_parent_frozen>() && has_item() && get_flag<AttrMask::writable>()) {
+            if (get_flag<AttrMask::writable>()) {
                 *item_p = value;
             }
 
@@ -115,7 +105,7 @@ export namespace DerkJS {
 
         template <AttrMask M>
         [[nodiscard]] constexpr auto get_flag() const noexcept -> bool {
-            if constexpr (M == AttrMask::writable) {
+            if constexpr (M == AttrMask::writable || M == AttrMask::unused) {
                 return flags & static_cast<uint8_t>(M);
             } else if constexpr (M == AttrMask::configurable) {
                 return (flags & static_cast<uint8_t>(M)) >> 1;

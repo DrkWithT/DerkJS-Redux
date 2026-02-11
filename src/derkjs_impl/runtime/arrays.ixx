@@ -14,7 +14,7 @@ export namespace DerkJS {
     class Array : public ObjectBase<Value> {
     private:
         // Holds non-integral key properties.
-        PropPool<Value, Value> m_props;
+        PropPool<Value, Value> m_own_properties;
         // Stores properties (items) accessed by integral keys. These are the sequential items. Sparse arrays can also be implemented via pushing `Value {}` repeatedly.
         std::vector<Value> m_items;
         // Holds a prototype reference.
@@ -54,7 +54,9 @@ export namespace DerkJS {
         }
     public:
         Array(ObjectBase<Value>* prototype_p) noexcept (std::is_nothrow_default_constructible_v<Value>)
-        : m_props {}, m_items {}, m_prototype {prototype_p}, m_flags {} {}
+        : m_own_properties {}, m_items {}, m_prototype {prototype_p}, m_flags {std::to_underlying(AttrMask::unused)} {
+            m_prototype.update_parent_flags(m_flags);
+        }
 
         [[nodiscard]] auto items() noexcept -> std::vector<Value>& {
             return m_items;
@@ -89,26 +91,26 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_own_prop_pool() noexcept -> PropPool<Value, Value>& override {
-            return m_props;
+            return m_own_properties;
         }
 
         [[nodiscard]] auto get_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
             if (key.is_prototype_key()) {
-                return PropertyDescriptor<Value> {&key, &m_prototype, false};
+                return PropertyDescriptor<Value> {&key, &m_prototype, m_flags};
             } else if (key.get_tag() == ValueTag::num_i32) {
-                return PropertyDescriptor<Value> {&key, get_item(key.to_num_i32().value(), true), false}; // TODO: maybe make the frozen argument checked to `m_flags`? Can arrays be frozen for their items?
-            } else if (auto property_entry_it = std::find_if(m_props.begin(), m_props.end(), [&key](const auto& prop) -> bool {
+                return PropertyDescriptor<Value> {&key, get_item(key.to_num_i32().value(), true), m_flags};
+            } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
                 return prop.key == key;
-            }); property_entry_it != m_props.end()) {
-                return PropertyDescriptor<Value> {&key, &property_entry_it->item, ((m_flags & flag_frozen_v) >> 1) == 1};
+            }); property_entry_it != m_own_properties.end()) {
+                return PropertyDescriptor<Value> {&key, &property_entry_it->item, m_flags};
             } else if (allow_filler) {
                 return PropertyDescriptor<Value> {
                     &key,
-                    &m_props.emplace_back(
+                    &m_own_properties.emplace_back(
                         key, Value {},
                         static_cast<uint8_t>(AttrMask::writable) | static_cast<uint8_t>(AttrMask::configurable)
                     ).item,
-                    ((m_flags & flag_frozen_v) >> 1) == 1
+                    m_flags
                 };
             } else if (auto prototype_p = m_prototype.to_object(); prototype_p) {
                 return prototype_p->get_property_value(key, allow_filler);
@@ -118,7 +120,11 @@ export namespace DerkJS {
         }
 
         void freeze() noexcept override {
-            m_flags |= flag_frozen_v;
+            m_flags = std::to_underlying(AttrMask::is_parent_frozen);
+
+            for (auto& entry : m_own_properties) {
+                entry.item.update_parent_flags(m_flags);
+            }
         }
 
         [[maybe_unused]] auto set_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] const Value& value) -> Value* override {
