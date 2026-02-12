@@ -26,7 +26,7 @@ export namespace DerkJS {
         try {
             ctx->stack[passed_rsbp] = Value {std::stoi(temp_str)};
         } catch (const std::exception& err) {
-            std::println(std::cerr, "Invalid integer literal!");
+            std::println(std::cerr, "parseInt: String is not a valid integer literal.");
             ctx->stack[passed_rsbp] = Value {JSNaNOpt {}};
         }
 
@@ -59,6 +59,7 @@ export namespace DerkJS {
         const auto str_this_p = dynamic_cast<const StringBase*>(ctx->stack[passed_rsbp + argc].to_object());
 
         if (!str_this_p) {
+            std::println(std::cerr, "Cannot get string length of non-string.");
             ctx->stack[passed_rsbp] = Value {JSNaNOpt {}};
             return false;
         }
@@ -75,7 +76,7 @@ export namespace DerkJS {
         auto str_as_obj_p = ctx->stack[passed_rsbp + argc].to_object();
         const auto str_this_p = dynamic_cast<const StringBase*>(str_as_obj_p);
         const int substr_begin = ctx->stack[passed_rsbp].to_num_i32().value_or(0);
-        const int substr_len = ctx->stack[passed_rsbp].to_num_i32().value_or(0);
+        const int substr_len = ctx->stack[passed_rsbp + 1].to_num_i32().value_or(0);
 
         std::string_view chars_view = str_this_p->as_str_view().substr(substr_begin, substr_len);
         std::string temp_substr;
@@ -88,6 +89,7 @@ export namespace DerkJS {
             ctx->stack[passed_rsbp] = Value {created_str_p};
             return true;
         } else {
+            std::println(std::cerr, "Failed to allocate JS sub-string on the heap.");
             ctx->stack[passed_rsbp] = Value {JSNullOpt {}};
             return false;
         }
@@ -126,6 +128,7 @@ export namespace DerkJS {
         ObjectBase<Value>* line_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), DynamicString { prompt_str_prototype, std::move(temp_line)});
 
         if (!line_str_p) {
+            std::println(std::cerr, "Failed to allocate input string on the heap.");
             ctx->stack[passed_rsbp] = Value {};
             return false;
         } else {            
@@ -151,7 +154,7 @@ export namespace DerkJS {
     //     return false; // TODO
     // }
 
-    /// BEGIN Array.prototype.xyz impls:
+    /// BEGIN Array.prototype impls:
 
     [[nodiscard]] auto native_array_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
@@ -166,6 +169,7 @@ export namespace DerkJS {
         ObjectBase<Value>* temp_array_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::move(temp_array));
 
         if (!temp_array_p) {
+            std::println(std::cerr, "Failed to allocate JS array on the heap.");
             ctx->stack[passed_rsbp] = Value {};
             return false;
         }
@@ -272,6 +276,47 @@ export namespace DerkJS {
         std::ranges::reverse(array_items_view);
 
         ctx->stack[passed_rsbp] = Value {array_this_p};
+
+        return true;
+    }
+
+    /// Object.prototype impls:
+
+    /// TODO: fix this to wrap primitives in object form / forward objects as-is.
+    [[nodiscard]] auto native_object_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const auto passed_rsbp = ctx->rsbp;
+        Value target_arg = ctx->stack.at(passed_rsbp);
+
+        if (auto target_as_object_p = target_arg.to_object(); !target_as_object_p) {
+            std::println(std::cerr, "Non-object arguments to Object ctor are unsupported.");
+            ctx->status = VMErrcode::bad_operation;
+            return false;
+        } else {
+            ctx->stack.at(passed_rsbp) = Value {target_as_object_p};
+            return true;
+        }
+    }
+
+    [[nodiscard]] auto native_object_create(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const auto passed_rsbp = ctx->rsbp;
+        auto taken_proto_p = ctx->stack.at(passed_rsbp).to_object();
+
+        if (auto result_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::make_unique<Object>(taken_proto_p)); result_p) {
+            ctx->stack.at(passed_rsbp) = Value {result_p};
+            return true;
+        } else {
+            std::println(std::cerr, "Failed to allocate JS object on the heap.");
+            ctx->stack.at(passed_rsbp) = Value {JSNullOpt {}};
+            ctx->status = VMErrcode::bad_heap_alloc;
+            return false;
+        }
+    }
+
+    [[nodiscard]] auto native_object_freeze(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const auto passed_rsbp = ctx->rsbp;
+        auto target_object_p = ctx->stack.at(passed_rsbp).to_object();
+
+        target_object_p->freeze();
 
         return true;
     }

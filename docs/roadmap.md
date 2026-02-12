@@ -36,4 +36,9 @@
     - ~~Implement `PropertyDescriptor`.~~
     - ~~Replace property handle keys with `Value` keys.~~
     - ~~Update VM opcodes to use `PropertyDescriptor`s in property accesses.~~
- 22. Add `+=, -=, *=, /=, %=` operators.
+ 22. Add an `Object.method` API:
+    - Add Object utility interface with: `new Object(arg), Object.create(proto), Object.freeze()`
+    - Improve `toString()` operations for objects:
+      - Prevent circular reference chasing.
+      - Show all properties recursively.
+ 23. Add `+=, -=, *=, /=, %=` operators.
