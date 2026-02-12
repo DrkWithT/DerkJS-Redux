@@ -47,67 +47,82 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    /// String native methods
     Core::NativePropertyStub str_props[] {
         Core::NativePropertyStub {
             .name_str = "charCodeAt",
-            .item = std::make_unique<NativeFunction>(DerkJS::native_str_charcode_at)
+            .item = std::make_unique<NativeFunction>(DerkJS::native_str_charcode_at, nullptr)
         },
         Core::NativePropertyStub {
             .name_str = "len",
-            .item = std::make_unique<NativeFunction>(DerkJS::native_str_len)
+            .item = std::make_unique<NativeFunction>(DerkJS::native_str_len, nullptr)
         },
         Core::NativePropertyStub {
             .name_str = "substr",
-            .item = std::make_unique<NativeFunction>(DerkJS::native_str_substr)
+            .item = std::make_unique<NativeFunction>(DerkJS::native_str_substr, nullptr)
         }
     };
 
+    /// Console native methods
     Core::NativePropertyStub console_obj_props[] {
         Core::NativePropertyStub {
             .name_str = "log",
-            .item = std::make_unique<NativeFunction>(DerkJS::native_console_log)
+            .item = std::make_unique<NativeFunction>(DerkJS::native_console_log, nullptr)
         },
         Core::NativePropertyStub {
             .name_str = "readln",
-            .item = std::make_unique<NativeFunction>(DerkJS::native_console_read_line)
+            .item = std::make_unique<NativeFunction>(DerkJS::native_console_read_line, nullptr)
         }
     };
 
     Core::NativePropertyStub clock_obj_props[] {
         Core::NativePropertyStub {
             .name_str = "now",
-            .item = std::make_unique<NativeFunction>(DerkJS::clock_time_now)
+            .item = std::make_unique<NativeFunction>(DerkJS::clock_time_now, nullptr)
         }
     };
 
+    /// Array native methods
     Core::NativePropertyStub array_obj_props[] {
         Core::NativePropertyStub {
             .name_str = "constructor",
-            .item = std::make_unique<NativeFunction>(DerkJS::native_array_ctor)
+            .item = std::make_unique<NativeFunction>(DerkJS::native_array_ctor, nullptr)
         },
         Core::NativePropertyStub {
             .name_str = "push",
-            .item = std::make_unique<NativeFunction>(DerkJS::native_array_push)
+            .item = std::make_unique<NativeFunction>(DerkJS::native_array_push, nullptr)
         },
         Core::NativePropertyStub {
             .name_str = "pop",
-            .item = std::make_unique<NativeFunction>(DerkJS::native_array_pop)
+            .item = std::make_unique<NativeFunction>(DerkJS::native_array_pop, nullptr)
         },
         Core::NativePropertyStub {
             .name_str = "at",
-            .item = std::make_unique<NativeFunction>(DerkJS::native_array_at)
+            .item = std::make_unique<NativeFunction>(DerkJS::native_array_at, nullptr)
         },
         Core::NativePropertyStub {
             .name_str = "indexOf",
-            .item = std::make_unique<NativeFunction>(DerkJS::native_array_index_of)
+            .item = std::make_unique<NativeFunction>(DerkJS::native_array_index_of, nullptr)
         },
         Core::NativePropertyStub {
             .name_str = "reverse",
-            .item = std::make_unique<NativeFunction>(DerkJS::native_array_reverse)
+            .item = std::make_unique<NativeFunction>(DerkJS::native_array_reverse, nullptr)
         },
         Core::NativePropertyStub {
             .name_str = "len",
-            .item = std::make_unique<NativeFunction>(DerkJS::native_array_len)
+            .item = std::make_unique<NativeFunction>(DerkJS::native_array_len, nullptr)
+        }
+    };
+
+    /// Object native methods
+    Core::NativePropertyStub object_helper_props[] {
+        Core::NativePropertyStub {
+            .name_str = "create",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_object_create, nullptr)
+        },
+        Core::NativePropertyStub {
+            .name_str = "freeze",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_object_freeze, nullptr)
         }
     };
 
@@ -151,7 +166,8 @@ int main(int argc, char* argv[]) {
 
     driver.add_native_global<NativeFunction>(
         "parseInt",
-        DerkJS::native_parse_int
+        DerkJS::native_parse_int,
+        nullptr
     );
 
     auto string_prototype_p = driver.setup_string_prototype(std::to_array(std::move(str_props)));
@@ -195,7 +211,23 @@ int main(int argc, char* argv[]) {
         array_prototype_object_p
     )->freeze();
 
-    /// TODO: fix nullptr prototype in strings, causing strings_1.js to FAIL.
-    // for some reason, callables.ixx:66:13 is reached: .len is the wrong prototype!
+    auto object_interface_prototype_p = driver.add_anonymous_native_object(
+        nullptr,
+        std::to_array(std::move(object_helper_props))
+    );
+
+    if (!object_interface_prototype_p) {
+        std::println(std::cerr, "SETUP ERROR: failed to allocate Object.prototype object.");
+        return 1;
+    }
+
+    object_interface_prototype_p->freeze();
+
+    driver.add_native_global<NativeFunction>(
+        "Object",
+        DerkJS::native_object_ctor,
+        object_interface_prototype_p
+    )->freeze();
+
     return driver.run(source_path, derkjs_gc_threshold);
 }

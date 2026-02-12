@@ -24,12 +24,13 @@ export namespace DerkJS {
 
     private:
         PropPool<Value, Value> m_own_properties;
+        Value m_prototype;
         native_func_p m_native_ptr;
         uint8_t m_flags;
 
     public:
-        NativeFunction(native_func_p procedure_ptr) noexcept
-        : m_own_properties {}, m_native_ptr {procedure_ptr}, m_flags {std::to_underlying(AttrMask::unused)} {}
+        NativeFunction(native_func_p procedure_ptr, ObjectBase<Value>* prototype_p) noexcept
+        : m_own_properties {}, m_prototype {(prototype_p) ? Value {prototype_p} : Value {}}, m_native_ptr {procedure_ptr}, m_flags {std::to_underlying(AttrMask::unused)} {}
 
         [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
             return this;
@@ -48,7 +49,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_prototype() noexcept -> ObjectBase<Value>* override {
-            return nullptr;
+            return m_prototype.to_object();
         }
 
         [[nodiscard]] auto get_seq_items() noexcept -> std::vector<Value>* override {
@@ -60,6 +61,11 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
+            /// NOTE: for now, I'll cheese this to get Object methods working: Just search the prototype.
+            if (auto prototype_p = m_prototype.to_object(); prototype_p) {
+                return prototype_p->get_property_value(key, allow_filler);
+            }
+
             return PropertyDescriptor<Value> {};
         }
 
@@ -122,12 +128,27 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto call_as_ctor([[maybe_unused]] void* opaque_ctx_p, [[maybe_unused]] int argc) -> bool override {
-            return false;
+            // 1.1: After access of the VM context, all constructor result objects have the function prototype.
+            auto vm_context_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
+
+            const int16_t callee_rsbp = vm_context_p->rsp - static_cast<int16_t>(argc);
+            const int16_t caller_rsbp = vm_context_p->rsbp;
+            vm_context_p->rsbp = callee_rsbp;
+
+            // 2. Make native call
+            auto native_call_ok = m_native_ptr(vm_context_p, &m_own_properties, argc);
+
+            // 3. Restore caller stack state after native call
+            vm_context_p->rsp = callee_rsbp;
+            vm_context_p->rsbp = caller_rsbp;
+            vm_context_p->rip_p++;
+
+            return native_call_ok;
         }
 
         /// NOTE: this only makes another wrapper around the C++ function ptr, but the raw pointer must be quickly owned by the VM heap (`PolyPool<ObjectBase<Value>>`)!
         [[nodiscard]] auto clone() -> ObjectBase<Value>* override {
-            auto copied_native_fn_p = new NativeFunction {m_native_ptr};
+            auto copied_native_fn_p = new NativeFunction {m_native_ptr, m_prototype.to_object()};
 
             return copied_native_fn_p;
         }
