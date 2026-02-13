@@ -32,6 +32,10 @@ export namespace DerkJS {
         NativeFunction(native_func_p procedure_ptr, ObjectBase<Value>* prototype_p) noexcept
         : m_own_properties {}, m_prototype {(prototype_p) ? Value {prototype_p} : Value {}}, m_native_ptr {procedure_ptr}, m_flags {std::to_underlying(AttrMask::unused)} {}
 
+        [[nodiscard]] auto get_native_fn_addr() const noexcept -> const void* {
+            return reinterpret_cast<const void*>(m_native_ptr);
+        }
+
         [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
             return this;
         }
@@ -75,10 +79,18 @@ export namespace DerkJS {
             for (auto& entry : m_own_properties) {
                 entry.item.update_parent_flags(m_flags);
             }
+
+            m_prototype.update_parent_flags(m_flags);
+
+            if (auto prototype_object_p = m_prototype.to_object(); prototype_object_p) {
+                prototype_object_p->freeze();
+            }
         }
 
         [[nodiscard]] auto set_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] const Value& value) -> Value* override {
-            return nullptr;
+            auto property_desc = get_property_value(key, true);
+
+            return &(property_desc = value);
         }
 
         [[nodiscard]] auto del_property_value([[maybe_unused]] const Value& key) -> bool override {
@@ -164,7 +176,11 @@ export namespace DerkJS {
 
         /// NOTE: does an equality check by unique hardware address -> unique instance mapping to a unique C++ function ptr
         [[nodiscard]] auto operator==(const ObjectBase& other) const noexcept -> bool override {
-            return this == &other;
+            if (auto other_as_native_callable_p = dynamic_cast<const NativeFunction*>(&other); other_as_native_callable_p) {
+                return other_as_native_callable_p->get_native_fn_addr() == reinterpret_cast<const void*>(m_native_ptr);
+            }
+
+            return false;
         }
 
         /// NOTE: yields false- this is a dud
@@ -196,7 +212,7 @@ export namespace DerkJS {
             "djs_emplace",
             "djs_put_this",
             "djs_put_obj_dud",
-            "djs_put_arr_dud",
+            "djs_make_arr",
             "djs_put_proto_key",
             "djs_get_prop", // Args: <should-default>: gets a property value based on RSP: <OBJ-REF>, RSP - 1: <POOLED-STR-REF>; IF should-default == 1, default any invalid key to `undefined`.
             "djs_put_prop", // SEE: djs_get_prop for stack args passing...
@@ -270,7 +286,7 @@ export namespace DerkJS {
                 return prop.key == key;
             }); property_entry_it != m_own_properties.end()) {
                 return PropertyDescriptor<Value> {&property_entry_it->key, &property_entry_it->item, m_flags};
-            } else if (allow_filler) {
+            } else if ((m_flags & std::to_underlying(AttrMask::writable)) && !m_prototype && allow_filler) {
                 return PropertyDescriptor<Value> {
                     &key,
                     &m_own_properties.emplace_back(
@@ -291,6 +307,12 @@ export namespace DerkJS {
 
             for (auto& entry : m_own_properties) {
                 entry.item.update_parent_flags(m_flags);
+            }
+
+            m_prototype.update_parent_flags(m_flags);
+
+            if (auto prototype_object_p = m_prototype.to_object(); prototype_object_p) {
+                prototype_object_p->freeze();
             }
         }
 

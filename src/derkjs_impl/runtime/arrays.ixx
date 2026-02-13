@@ -24,7 +24,7 @@ export namespace DerkJS {
         void fill_gap_to_n(int index, bool should_default) {
             int item_count = m_items.size();
 
-            if (!should_default) {
+            if (!should_default || (m_flags & std::to_underlying(AttrMask::writable)) == 0) {
                 return;
             }
 
@@ -37,11 +37,11 @@ export namespace DerkJS {
         [[nodiscard]] auto get_item(int index, bool should_default) -> Value* {
             int item_count = m_items.size();
 
-            fill_gap_to_n(index, should_default);
-
             if (!should_default && (index < 0 || index >= item_count)) {
                 return nullptr;
             }
+
+            fill_gap_to_n(index, should_default);
 
             return &m_items.at(index);
         }
@@ -94,7 +94,7 @@ export namespace DerkJS {
             return m_own_properties;
         }
 
-        [[nodiscard]] auto get_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
+        [[maybe_unused]] auto get_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
             if (key.is_prototype_key()) {
                 return PropertyDescriptor<Value> {&key, &m_prototype, m_flags};
             } else if (key.get_tag() == ValueTag::num_i32) {
@@ -103,7 +103,7 @@ export namespace DerkJS {
                 return prop.key == key;
             }); property_entry_it != m_own_properties.end()) {
                 return PropertyDescriptor<Value> {&key, &property_entry_it->item, m_flags};
-            } else if (allow_filler) {
+            } else if ((m_flags & std::to_underlying(AttrMask::writable)) && !m_prototype && allow_filler) {
                 return PropertyDescriptor<Value> {
                     &key,
                     &m_own_properties.emplace_back(
@@ -124,6 +124,12 @@ export namespace DerkJS {
 
             for (auto& entry : m_own_properties) {
                 entry.item.update_parent_flags(m_flags);
+            }
+
+            m_prototype.update_parent_flags(m_flags);
+
+            if (auto prototype_object_p = m_prototype.to_object(); prototype_object_p) {
+                prototype_object_p->freeze();
             }
         }
 

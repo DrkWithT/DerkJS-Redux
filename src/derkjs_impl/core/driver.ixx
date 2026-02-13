@@ -245,7 +245,7 @@ export namespace DerkJS::Core {
 
             // 2. Fill String.prototype & record string keys to patch prototype of...
             for (auto& [stub_name, item] : prop_list) {
-                auto prop_name_p = std::make_unique<DynamicString>(str_object_raw_p, stub_name);
+                auto prop_name_p = std::make_unique<DynamicString>(str_prototype_object_p.get(), stub_name);
                 auto prop_name_value = Value {prop_name_p.get()};
 
                 m_preloads.emplace_back(PreloadItem {
@@ -281,7 +281,7 @@ export namespace DerkJS::Core {
             }
 
             m_preloads.emplace_back(PreloadItem {
-                .lexeme = "",
+                .lexeme = "String::prototype",
                 .entity = std::move(str_prototype_object_p),
                 .location = Location::heap_obj
             });
@@ -299,6 +299,56 @@ export namespace DerkJS::Core {
             });
 
             return str_object_raw_p;
+        }
+
+        template <std::size_t N>
+        [[nodiscard]] auto setup_basic_prototype(ObjectBase<Value>* string_proto, std::string name, std::array<NativePropertyStub, N> prop_list) -> ObjectBase<Value>* {
+            auto proto_object_p = std::make_unique<Object>(nullptr);
+            auto proto_raw_p = proto_object_p.get();
+
+            for (auto& [stub_name, item] : prop_list) {
+                auto prop_name_p = std::make_unique<DynamicString>(string_proto, stub_name);
+                auto prop_name_value = Value {prop_name_p.get()};
+
+                m_preloads.emplace_back(PreloadItem {
+                    .lexeme = stub_name,
+                    .entity = prop_name_value,
+                    .location = Location::constant
+                });
+
+                m_preloads.emplace_back(PreloadItem {
+                    .lexeme = "",
+                    .entity = std::move(prop_name_p),
+                    .location = Location::heap_obj
+                });
+
+                if (auto item_as_primitive_p = std::get_if<Value>(&item); item_as_primitive_p) {
+                    if (!proto_raw_p->set_property_value(prop_name_value, *item_as_primitive_p)) {
+                        return nullptr;
+                    }
+                } else {
+                    auto item_as_object_p = std::get_if<std::unique_ptr<ObjectBase<Value>>>(&item);
+
+                    if (!proto_raw_p->set_property_value(prop_name_value, Value {item_as_object_p->get()})) {
+                        return nullptr;
+                    } else {
+                        /// NOTE: Here, prepare an anonymous JS Object value to be inserted into the heap, likely referenced by this object.
+                        m_preloads.emplace_back(PreloadItem {
+                            .lexeme = "",
+                            .entity = std::move(*item_as_object_p),
+                            .location = Location::heap_obj
+                        });
+                    }
+                }
+            }
+
+            m_preloads.emplace_back(PreloadItem {
+                .lexeme = name,
+                .entity = std::move(proto_object_p),
+                .location = Location::heap_obj
+            });
+
+            return proto_raw_p;
         }
 
         void enable_bc_dump(bool flag) noexcept {

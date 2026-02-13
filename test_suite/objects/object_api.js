@@ -11,11 +11,18 @@ var foo = {
 };
 
 var test = Object.create(foo);
-var check = test.secret;
 
-if (check != 69) {
+if (test.secret != 69) {
     /// NOTE: exit with status 1 if the result isn't the funny number.
-    console.log("Unexpected test_child.secret:", check);
+    console.log("Unexpected test_child.secret:", test.secret);
+    return 1;
+}
+
+Object.freeze(test);
+test.secret = null;
+
+if (test.secret != 69) {
+    console.log("Object.freeze failed on 'test', test.secret:", test.secret);
     return 1;
 }
 

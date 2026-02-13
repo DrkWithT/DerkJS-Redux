@@ -543,14 +543,14 @@ export namespace DerkJS {
     class Object : public ObjectBase<Value> {
     private:
         PropPool<Value, Value> m_own_properties;
-        Value m_proto;
+        Value m_prototype;
         uint8_t m_flags;
 
     public:
         /// NOTE: Creates mutable instances of anonymous objects. Pass the `flag_prototype_v | flag_extensible_v` if needed for Foo.prototype!
         Object(ObjectBase<Value>* proto_p, uint8_t flags = std::to_underlying(AttrMask::unused))
-        : m_own_properties {}, m_proto {(proto_p) ? proto_p : Value {}}, m_flags {flags} {
-            m_proto.update_parent_flags(m_flags);
+        : m_own_properties {}, m_prototype {(proto_p) ? proto_p : Value {}}, m_flags {flags} {
+            m_prototype.update_parent_flags(m_flags);
         }
 
         [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
@@ -570,7 +570,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_prototype() noexcept -> ObjectBase<Value>* override {
-            return m_proto.to_object();
+            return m_prototype.to_object();
         }
 
         [[nodiscard]] auto get_seq_items() noexcept -> std::vector<Value>* override {
@@ -583,12 +583,12 @@ export namespace DerkJS {
 
         [[nodiscard]] auto get_property_value(const Value& key, bool allow_filler) -> PropertyDescriptor<Value> override {
             if (key.is_prototype_key()) {
-                return PropertyDescriptor<Value> {&key, &m_proto, m_flags};
+                return PropertyDescriptor<Value> {&key, &m_prototype, m_flags};
             } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
                 return prop.key == key;
             }); property_entry_it != m_own_properties.end()) {
                 return PropertyDescriptor<Value> {&key, &property_entry_it->item, m_flags};
-            } else if (allow_filler) {
+            } else if ((m_flags & std::to_underlying(AttrMask::writable)) && !m_prototype && allow_filler) {
                 return PropertyDescriptor<Value> {
                     &key,
                     &m_own_properties.emplace_back(
@@ -597,7 +597,7 @@ export namespace DerkJS {
                     ).item,
                     m_flags
                 };
-            } else if (auto prototype_p = m_proto.to_object(); prototype_p) {
+            } else if (auto prototype_p = m_prototype.to_object(); prototype_p) {
                 return prototype_p->get_property_value(key, allow_filler);
             }
 
@@ -609,6 +609,12 @@ export namespace DerkJS {
 
             for (auto& entry : m_own_properties) {
                 entry.item.update_parent_flags(m_flags);
+            }
+
+            m_prototype.update_parent_flags(m_flags);
+
+            if (auto prototype_object_p = m_prototype.to_object(); prototype_object_p) {
+                prototype_object_p->freeze();
             }
         }
 
@@ -632,7 +638,7 @@ export namespace DerkJS {
 
         [[nodiscard]] auto clone() -> ObjectBase<Value>* override {
             // Due to the Value repr needing an ObjectBase<Value>* ptr, the Value clone method returns a Value vs. `std::unique_ptr<Value>`, and the VM only stores Value-s on its stack, having a raw pointer is unavoidable. This may not be so bad since the PolyPool<ObjectBase<Value>> in the VM can quickly own it via `add_item()`.
-            auto self_clone = new Object {m_proto.to_object()};
+            auto self_clone = new Object {m_prototype.to_object()};
 
             self_clone->get_own_prop_pool() = m_own_properties;
 

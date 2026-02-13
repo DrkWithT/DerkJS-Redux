@@ -21,8 +21,8 @@ int main(int argc, char* argv[]) {
             .name = "DerkJS",
             .author = "DrkWithT (GitHub)",
             .version_major = 0,
-            .version_minor = 2,
-            .version_patch = 5
+            .version_minor = 3,
+            .version_patch = 1
         },
         derkjs_heap_count // increase object count limit for VM if needed
     };
@@ -49,6 +49,7 @@ int main(int argc, char* argv[]) {
 
     /// String native methods
     Core::NativePropertyStub str_props[] {
+        /// TODO: implement String "constructor".
         Core::NativePropertyStub {
             .name_str = "charCodeAt",
             .item = std::make_unique<NativeFunction>(DerkJS::native_str_charcode_at, nullptr)
@@ -116,6 +117,10 @@ int main(int argc, char* argv[]) {
 
     /// Object native methods
     Core::NativePropertyStub object_helper_props[] {
+        Core::NativePropertyStub {
+            .name_str = "constructor",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_object_ctor, nullptr)
+        },
         Core::NativePropertyStub {
             .name_str = "create",
             .item = std::make_unique<NativeFunction>(DerkJS::native_object_create, nullptr)
@@ -194,8 +199,9 @@ int main(int argc, char* argv[]) {
     )->freeze();
 
     // Add `Array.prototype` object here!
-    auto array_prototype_object_p = driver.add_anonymous_native_object(
+    auto array_prototype_object_p = driver.setup_basic_prototype(
         string_prototype_p,
+        "Array::prototype",
         std::to_array(std::move(array_obj_props))
     );
 
@@ -206,13 +212,15 @@ int main(int argc, char* argv[]) {
 
     array_prototype_object_p->freeze();
 
-    driver.add_native_global<Array>(
+    driver.add_native_global<NativeFunction>(
         "Array",
+        DerkJS::native_array_ctor,
         array_prototype_object_p
     )->freeze();
 
-    auto object_interface_prototype_p = driver.add_anonymous_native_object(
-        nullptr,
+    auto object_interface_prototype_p = driver.setup_basic_prototype(
+        string_prototype_p,
+        "Object::prototype",
         std::to_array(std::move(object_helper_props))
     );
 

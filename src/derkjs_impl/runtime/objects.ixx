@@ -159,6 +159,18 @@ export namespace DerkJS {
         }
     };
 
+    /// NOTE: indexes into an array of `ObjectBase<Value>` pointers, each one to a built-in prototype:
+    /// "Base JS" Built-Ins: Boolean, Number, Object, Array, Function
+    enum class BasePrototypeID : uint8_t {
+        boolean,
+        number,
+        str,
+        object,
+        array,
+        function,
+        last
+    };
+
     /**
      * @brief This virtual base class is an interface for all "objects" in DerkJS. Concrete sub-types from `ObjectBase` include `Object`s. Though all objects have a "template" object with the default values to properties of their type-structure- The prototype! For now, let's assume instances are clones of the prototype's "template".
      */
