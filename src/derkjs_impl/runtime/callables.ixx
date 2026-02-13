@@ -30,7 +30,9 @@ export namespace DerkJS {
 
     public:
         NativeFunction(native_func_p procedure_ptr, ObjectBase<Value>* prototype_p) noexcept
-        : m_own_properties {}, m_prototype {(prototype_p) ? Value {prototype_p} : Value {}}, m_native_ptr {procedure_ptr}, m_flags {std::to_underlying(AttrMask::unused)} {}
+        : m_own_properties {}, m_prototype {(prototype_p) ? Value {prototype_p} : Value {}}, m_native_ptr {procedure_ptr}, m_flags {std::to_underlying(AttrMask::unused)} {
+            m_prototype.update_parent_flags(m_flags);
+        }
 
         [[nodiscard]] auto get_native_fn_addr() const noexcept -> const void* {
             return reinterpret_cast<const void*>(m_native_ptr);
@@ -65,8 +67,10 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
-            /// NOTE: for now, I'll cheese this to get Object methods working: Just search the prototype.
-            if (auto prototype_p = m_prototype.to_object(); prototype_p) {
+            /// NOTE: for now, I'll cheese this to get Object methods working: Just get / search the prototype.
+            if (key.is_prototype_key()) {
+                return PropertyDescriptor<Value> {&key, &m_prototype, m_flags};
+            } else if (auto prototype_p = m_prototype.to_object(); prototype_p) {
                 return prototype_p->get_property_value(key, allow_filler);
             }
 

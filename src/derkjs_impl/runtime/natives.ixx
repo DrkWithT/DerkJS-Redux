@@ -164,9 +164,19 @@ export namespace DerkJS {
             ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::array))
         );
 
-        // 2. Fill with N temporary arguments
-        for (int temp_item_offset = 0; temp_item_offset < argc; temp_item_offset++) {
-            temp_array->items().emplace_back(ctx->stack[passed_rsbp + temp_item_offset]);
+        // 2. Fill with N temporary arguments OR fill with N undefined values.
+        if (argc > 1) {
+            for (int temp_item_offset = 0; temp_item_offset < argc; temp_item_offset++) {
+                temp_array->items().emplace_back(ctx->stack[passed_rsbp + temp_item_offset]);
+            }
+        } else if (argc == 1) {
+            const int fill_count = ctx->stack[passed_rsbp].to_num_i32().value_or(0);
+
+            for (int temp_item_count = 0; temp_item_count < fill_count; temp_item_count++) {
+                temp_array->items().emplace_back(Value {});
+            }
+        } else {
+            ;
         }
 
         // 3. Record array to VM heap

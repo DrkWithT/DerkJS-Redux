@@ -18,3 +18,5 @@ if (a2[0] !== undefined && a2[0] !== undefined) {
     console.log("Expected empty items of a2:", a2[0], a2[1]);
     return 1;
 }
+
+return 0;
