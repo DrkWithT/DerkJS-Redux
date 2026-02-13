@@ -62,6 +62,7 @@ namespace DerkJS {
 
         GC gc;
         PolyPool<ObjectBase<Value>> heap;
+        std::array<ObjectBase<Value>*, static_cast<std::size_t>(BasePrototypeID::last)> base_protos;
         std::vector<Value> stack;
         std::vector<CallFrame> frames;
 
@@ -85,7 +86,7 @@ namespace DerkJS {
         VMErrcode status;
 
         ExternVMCtx(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit, std::size_t gc_heap_threshold)
-        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, rsbp {0}, rsp {-1}, status {VMErrcode::pending} {
+        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), base_protos(std::move(prgm.base_protos)) stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, rsbp {0}, rsp {-1}, status {VMErrcode::pending} {
             stack.reserve(stack_length_limit);
             stack.resize(stack_length_limit);
             frames.reserve(call_frame_limit);
@@ -117,7 +118,7 @@ namespace DerkJS {
     inline void op_emplace(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_put_this(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_put_obj_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_put_arr_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_make_arr(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_put_proto_key(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_get_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_put_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1);
@@ -149,7 +150,7 @@ namespace DerkJS {
     constexpr tco_opcode_fn tco_opcodes[static_cast<std::size_t>(Opcode::last)] = {
         op_nop,
         op_dup, op_dup_local, op_ref_local, op_store_upval, op_ref_upval, op_put_const, op_deref, op_pop, op_emplace,
-        op_put_this, op_put_obj_dud, op_put_arr_dud, op_put_proto_key, op_get_prop, op_put_prop, op_del_prop,
+        op_put_this, op_put_obj_dud, op_make_arr, op_put_proto_key, op_get_prop, op_put_prop, op_del_prop,
         op_numify, op_strcat,
         op_mod, op_mul, op_div, op_add, op_sub,
         op_test_falsy, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte,
@@ -294,13 +295,18 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
-    inline void op_put_arr_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_make_arr(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.gc(ctx.heap, ctx.stack, ctx.rsp);
 
-        auto array_prototype_p = ctx.stack[ctx.rsp].to_object();
-        auto array_ref_p = ctx.heap.add_item(ctx.heap.get_next_id(), Array {array_prototype_p});
-
+        auto array_ref_p = ctx.heap.add_item(ctx.heap.get_next_id(), new Array {
+            ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::array))
+        });
+        
         if (array_ref_p) {
+            for (int next_insert_pos = 0, next_array_item_pos = ctx.rsp - a0 + 1, end_next_array_items = ctx.rsp; next_array_item_pos <= end_next_array_items; next_insert_pos++, next_array_item_pos++) {
+                array_ref_p->set_property_value(Value {next_insert_pos}, ctx.stack.at(next_array_item_pos));
+            }
+
             ctx.stack[ctx.rsp] = Value {array_ref_p};
             ctx.rip_p++;
         } else {
