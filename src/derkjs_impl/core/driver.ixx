@@ -281,7 +281,7 @@ export namespace DerkJS::Core {
             }
 
             m_preloads.emplace_back(PreloadItem {
-                .lexeme = "",
+                .lexeme = "String::prototype",
                 .entity = std::move(str_prototype_object_p),
                 .location = Location::heap_obj
             });
