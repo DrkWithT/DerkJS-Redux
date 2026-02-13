@@ -515,7 +515,7 @@ export namespace DerkJS {
 
             Lambda temp_callable {
                 std::move(m_code_blobs.front()),
-                m_heap.add_item(m_heap.get_next_id(), std::make_unique<Object>(nullptr, Object::flag_prototype_v))
+                m_heap.add_item(m_heap.get_next_id(), std::make_unique<Object>(nullptr, std::to_underlying(AttrMask::unused)))
             };
             
             if (auto lambda_object_ptr = m_heap.add_item(m_heap.get_next_id(), std::move(temp_callable)); lambda_object_ptr) {

@@ -549,7 +549,7 @@ export namespace DerkJS {
     public:
         /// NOTE: Creates mutable instances of anonymous objects. Pass the `flag_prototype_v | flag_extensible_v` if needed for Foo.prototype!
         Object(ObjectBase<Value>* proto_p, uint8_t flags = std::to_underlying(AttrMask::unused))
-        : m_own_properties {}, m_prototype {(proto_p) ? proto_p : Value {}}, m_flags {flags} {
+        : m_own_properties {}, m_prototype {(proto_p) ? Value {proto_p} : Value {}}, m_flags {flags} {
             m_prototype.update_parent_flags(m_flags);
         }
 

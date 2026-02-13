@@ -18,10 +18,9 @@ Sequence.prototype.next = function() {
 };
 
 var odds = new Sequence(1);
-var num = 0;
 
-console.log(odds.next());
-// console.log(odds.next());
-// console.log(odds.next());
+console.log(odds.next() == 1);
+console.log(odds.next() == 3);
+console.log(odds.next() == 5);
 
 return 0;

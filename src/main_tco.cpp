@@ -210,8 +210,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    array_prototype_object_p->freeze();
-
     driver.add_native_global<NativeFunction>(
         "Array",
         DerkJS::native_array_ctor,
@@ -228,8 +226,6 @@ int main(int argc, char* argv[]) {
         std::println(std::cerr, "SETUP ERROR: failed to allocate Object.prototype object.");
         return 1;
     }
-
-    object_interface_prototype_p->freeze();
 
     driver.add_native_global<NativeFunction>(
         "Object",

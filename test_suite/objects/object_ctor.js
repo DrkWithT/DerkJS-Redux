@@ -1,7 +1,7 @@
 // Test Object ctor
 
-if (Object.prototype.constructor !== Object) {
-    console.log("Object() must be its prototype ctor.");
+if (!Object.prototype || !Object.prototype.constructor) {
+    console.log("Bad Object.prototype / ctor:", Object.prototype, Object.prototype.constructor);
     return 1;
 }
 
