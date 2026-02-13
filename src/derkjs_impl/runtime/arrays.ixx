@@ -94,7 +94,7 @@ export namespace DerkJS {
             return m_own_properties;
         }
 
-        [[nodiscard]] auto get_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
+        [[maybe_unused]] auto get_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
             if (key.is_prototype_key()) {
                 return PropertyDescriptor<Value> {&key, &m_prototype, m_flags};
             } else if (key.get_tag() == ValueTag::num_i32) {

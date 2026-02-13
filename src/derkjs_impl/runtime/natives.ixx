@@ -158,26 +158,29 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_array_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        // 1. Consume & bind Array prototype object to a blank array
-        auto temp_array = std::make_unique<Array>(ctx->stack[ctx->rsp].to_object());
+
+        // 1. Create blank JS array with the appropriate prototype
+        auto temp_array = std::make_unique<Array>(
+            ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::array))
+        );
 
         // 2. Fill with N temporary arguments
         for (int temp_item_offset = 0; temp_item_offset < argc; temp_item_offset++) {
             temp_array->items().emplace_back(ctx->stack[passed_rsbp + temp_item_offset]);
         }
 
+        // 3. Record array to VM heap
         ObjectBase<Value>* temp_array_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::move(temp_array));
 
-        if (!temp_array_p) {
+        if (temp_array_p) {
+            // 3. Put reference to array
+            ctx->stack[passed_rsbp] = Value {temp_array_p};
+            return true;
+        } else {
             std::println(std::cerr, "Failed to allocate JS array on the heap.");
             ctx->stack[passed_rsbp] = Value {};
             return false;
         }
-
-        // 3. Put reference to new array
-        ctx->stack[passed_rsbp] = Value {temp_array_p};
-
-        return true;
     }
 
     [[nodiscard]] auto native_array_push(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
@@ -316,7 +319,9 @@ export namespace DerkJS {
         const auto passed_rsbp = ctx->rsbp;
         auto target_object_p = ctx->stack.at(passed_rsbp).to_object();
 
-        target_object_p->freeze();
+        if (target_object_p != nullptr) {
+            target_object_p->freeze();
+        }
 
         return true;
     }
