@@ -199,11 +199,10 @@ int main(int argc, char* argv[]) {
     )->freeze();
 
     // Add `Array.prototype` object here!
-    auto array_prototype_object_p = driver.add_native_object<Object>(
+    auto array_prototype_object_p = driver.setup_basic_prototype(
         string_prototype_p,
         "Array::prototype",
-        std::to_array(std::move(array_obj_props)),
-        nullptr
+        std::to_array(std::move(array_obj_props))
     );
 
     if (!array_prototype_object_p) {
@@ -219,11 +218,10 @@ int main(int argc, char* argv[]) {
         array_prototype_object_p
     )->freeze();
 
-    auto object_interface_prototype_p = driver.add_native_object<Object>(
+    auto object_interface_prototype_p = driver.setup_basic_prototype(
         string_prototype_p,
         "Object::prototype",
-        std::to_array(std::move(object_helper_props)),
-        nullptr
+        std::to_array(std::move(object_helper_props))
     );
 
     if (!object_interface_prototype_p) {
