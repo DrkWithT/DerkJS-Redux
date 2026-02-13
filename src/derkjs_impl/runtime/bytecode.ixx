@@ -82,18 +82,6 @@ export namespace DerkJS {
         Opcode op;
     };
 
-    /// NOTE: indexes into an array of `ObjectBase<Value>` pointers, each one to a built-in prototype:
-    /// "Base JS" Built-Ins: Boolean, Number, Object, Array, Function
-    enum class BasePrototypeID : uint8_t {
-        boolean,
-        number,
-        str,
-        object,
-        array,
-        function,
-        last
-    };
-
     struct Program {
         /// Stores initial heap entries to load.
         PolyPool<ObjectBase<Value>> heap_items;

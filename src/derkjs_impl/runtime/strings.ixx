@@ -67,7 +67,7 @@ export namespace DerkJS {
                 return prop.key == key;
             }); property_entry_it != m_own_properties.end()) {
                 return PropertyDescriptor<Value> {&key, &property_entry_it->item, m_flags};
-            } else if (allow_filler) {
+            } else if ((m_flags & std::to_underlying(AttrMask::writable)) && !m_prototype && allow_filler) {
                 return PropertyDescriptor<Value> {
                     &key,
                     &m_own_properties.emplace_back(
@@ -88,6 +88,12 @@ export namespace DerkJS {
 
             for (auto& entry : m_own_properties) {
                 entry.item.update_parent_flags(m_flags);
+            }
+
+            m_prototype.update_parent_flags(m_flags);
+
+            if (auto prototype_object_p = m_prototype.to_object(); prototype_object_p) {
+                prototype_object_p->freeze();
             }
         }
 

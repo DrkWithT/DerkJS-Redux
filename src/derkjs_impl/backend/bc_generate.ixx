@@ -286,17 +286,17 @@ export namespace DerkJS {
                 m_heap.update_tenure_count();
 
                 if (symbol == "Boolean::prototype") {
-                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::boolean)] = heap_object_p;
+                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::boolean)] = heap_native_object_p;
                 } else if (symbol == "Number::prototype") {
-                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::number)] = heap_object_p;
+                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::number)] = heap_native_object_p;
                 } else if (symbol == "String::prototype") {
-                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::str)] = heap_object_p;
+                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::str)] = heap_native_object_p;
                 } else if (symbol == "Object::prototype") {
-                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::object)] = heap_object_p;
+                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::object)] = heap_native_object_p;
                 } else if (symbol == "Array::prototype") {
-                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::array)] = heap_object_p;
+                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::array)] = heap_native_object_p;
                 } else if (symbol == "Function::prototype") {
-                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::function)] = heap_object_p;
+                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::function)] = heap_native_object_p;
                 } else {
                     return false;
                 }
@@ -373,7 +373,7 @@ export namespace DerkJS {
                     m_has_string_ops = false;
 
                     // Case 1: property keys are always constant strings.
-                    if (m_callee_name == atom_lexeme && !m_accessing_property &&  m_has_call) {
+                    if (m_callee_name == atom_lexeme && !m_accessing_property && m_has_call) {
                         return Arg {.n = -1, .tag = Location::end, .is_str_literal = false, .from_closure = false};
                     } else if (pmt_is_key) {
                         return record_symbol(atom_lexeme, atom_lexeme, FindKeyConstOpt {});
@@ -458,7 +458,7 @@ export namespace DerkJS {
 
             // 2. Invoke this special opcode. Now there's a new array for use. :)
             encode_instruction(
-                Opcode::djs_put_arr_dud,
+                Opcode::djs_make_arr,
                 Arg {.n = static_cast<int16_t>(item_count), .tag = Location::immediate}
             );
 

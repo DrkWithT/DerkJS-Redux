@@ -86,7 +86,7 @@ namespace DerkJS {
         VMErrcode status;
 
         ExternVMCtx(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit, std::size_t gc_heap_threshold)
-        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), base_protos(std::move(prgm.base_protos)) stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, rsbp {0}, rsp {-1}, status {VMErrcode::pending} {
+        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), base_protos(std::move(prgm.base_protos)), stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, rsbp {0}, rsp {-1}, status {VMErrcode::pending} {
             stack.reserve(stack_length_limit);
             stack.resize(stack_length_limit);
             frames.reserve(call_frame_limit);
@@ -303,10 +303,11 @@ namespace DerkJS {
         });
         
         if (array_ref_p) {
-            for (int next_insert_pos = 0, next_array_item_pos = ctx.rsp - a0 + 1, end_next_array_items = ctx.rsp; next_array_item_pos <= end_next_array_items; next_insert_pos++, next_array_item_pos++) {
-                array_ref_p->set_property_value(Value {next_insert_pos}, ctx.stack.at(next_array_item_pos));
+            for (int next_array_item_pos = ctx.rsp - a0 + 1, end_next_array_items = ctx.rsp; next_array_item_pos <= end_next_array_items; next_array_item_pos++) {
+                array_ref_p->get_seq_items()->emplace_back(ctx.stack.at(next_array_item_pos));
             }
 
+            ctx.rsp -= (a0 - 1);
             ctx.stack[ctx.rsp] = Value {array_ref_p};
             ctx.rip_p++;
         } else {
