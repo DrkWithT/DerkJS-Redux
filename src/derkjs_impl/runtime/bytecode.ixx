@@ -1,6 +1,7 @@
 module;
 
 #include <cstdint>
+#include <array>
 #include <vector>
 #include <print>
 
@@ -31,7 +32,7 @@ export namespace DerkJS {
         djs_emplace, // Pops the temporary and stores it into the under value (local variable reference / property reference) which gets popped afterwards.
         djs_put_this, // Pushes a reference to the current `this` object.
         djs_put_obj_dud, // Pushes a newly created, empty JS object.
-        djs_put_arr_dud, // Args: <Array-prototype-ref> -> <new-Array>; Pushes a newly created, empty JS array. The Array prototype is taken as an argument.
+        djs_make_arr, // Args: <item-count>; Pushes a newly created, empty JS array from the top N stack items. The Array prototype is automatically bound to the new array.
         djs_put_proto_key, // Replaces top stack obj-ref with proto-ref.
         djs_get_prop, // djs_get_prop gets a property value's ref based on an object's ref below a pooled string ref on the stack... the result is placed where the targeted ref was. --> Stack placement: <OBJ-REF-LOCAL> <PROP-KEY-HANDLE> --> <PROP-VALUE-REF>
         djs_put_prop, // djs_put_prop --> Stack placement: <OBJ-REF> <PROP-KEY-HANDLE-VALUE> <NEW-VALUE> --> <OBJ-REF>
@@ -81,10 +82,25 @@ export namespace DerkJS {
         Opcode op;
     };
 
+    /// NOTE: indexes into an array of `ObjectBase<Value>` pointers, each one to a built-in prototype:
+    /// "Base JS" Built-Ins: Boolean, Number, Object, Array, Function
+    enum class BasePrototypeID : uint8_t {
+        boolean,
+        number,
+        str,
+        object,
+        array,
+        function,
+        last
+    };
+
     struct Program {
         /// Stores initial heap entries to load.
         PolyPool<ObjectBase<Value>> heap_items;
 
+        /// Stores JS intrinsic prototypes.
+        std::array<ObjectBase<Value>*, static_cast<std::size_t>(BasePrototypeID::last)> base_protos;
+        
         std::vector<Value> consts;
         std::vector<Instruction> code;
         std::vector<int> offsets;
@@ -105,7 +121,7 @@ export namespace DerkJS {
             "djs_emplace",
             "djs_put_this",
             "djs_put_obj_dud",
-            "djs_put_arr_dud",
+            "djs_make_arr",
             "djs_put_proto_key",
             "djs_get_prop", // Args: <should-default>: gets a property value based on RSP: <OBJ-REF>, RSP - 1: <POOLED-STR-REF>; IF should-default == 1, default any invalid key to `undefined`.
             "djs_put_prop", // SEE: djs_get_prop for stack args passing...
@@ -133,7 +149,7 @@ export namespace DerkJS {
             "djs_halt",
         };
 
-        const auto& [prgm_heap_items, prgm_consts, prgm_code, prgm_code_offsets, prgm_entry_id] = prgm;
+        const auto& [prgm_heap_items, prgm_prototype_bases, prgm_consts, prgm_code, prgm_code_offsets, prgm_entry_id] = prgm;
 
         std::println("\x1b[1;33mProgram Dump:\x1b[0m\n\nEntry Chunk ID: {}\n", prgm_entry_id);
 

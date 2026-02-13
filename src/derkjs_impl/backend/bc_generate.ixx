@@ -6,6 +6,7 @@ module;
 #include <optional>
 #include <string>
 #include <forward_list>
+#include <array>
 #include <vector>
 #include <variant>
 #include <flat_map>
@@ -58,11 +59,15 @@ export namespace DerkJS {
             .tag = Location::immediate
         };
 
+        
         // 1st priority lookup: maps primitive constants / native object names of top-level
         std::flat_map<std::string, Arg> m_global_consts_map;
-
+        
         // 2nd priority lookup: maps property names and outside variable names
         std::flat_map<std::string, Arg> m_key_consts_map;
+        
+        // Pre-Tracked prototypes:
+        std::array<ObjectBase<Value>*, static_cast<std::size_t>(BasePrototypeID::last)> m_base_prototypes;
 
         // 3rd priority lookup: maps local variable names to locations
         std::vector<CodeGenScope> m_local_maps;
@@ -184,7 +189,7 @@ export namespace DerkJS {
                     .from_closure = false,
                 };
 
-                auto string_prototype_const_id = lookup_symbol("String", FindGlobalConstsOpt {})->n;
+                auto string_prototype_const_id = lookup_symbol("String::prototype", FindGlobalConstsOpt {})->n;
 
                 if (auto heap_dyn_str_p = m_heap.add_item(m_heap.get_next_id(), std::make_unique<DynamicString>(
                     m_consts.at(string_prototype_const_id).to_object(),
@@ -279,6 +284,22 @@ export namespace DerkJS {
                 m_consts.emplace_back(Value {heap_native_object_p});
                 m_global_consts_map[symbol] = next_global_ref_loc;
                 m_heap.update_tenure_count();
+
+                if (symbol == "Boolean::prototype") {
+                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::boolean)] = heap_object_p;
+                } else if (symbol == "Number::prototype") {
+                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::number)] = heap_object_p;
+                } else if (symbol == "String::prototype") {
+                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::str)] = heap_object_p;
+                } else if (symbol == "Object::prototype") {
+                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::object)] = heap_object_p;
+                } else if (symbol == "Array::prototype") {
+                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::array)] = heap_object_p;
+                } else if (symbol == "Function::prototype") {
+                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::function)] = heap_object_p;
+                } else {
+                    return false;
+                }
 
                 return true;
             }
@@ -435,17 +456,10 @@ export namespace DerkJS {
                 ++item_count;
             }
 
-            // 2. Call the equivalent of Array.prototype.constructor(args...)
-            encode_instruction(Opcode::djs_put_const, lookup_symbol("Array", FindGlobalConstsOpt {}).value()); // prototype to bind
-            encode_instruction(Opcode::djs_put_const, lookup_symbol("Array", FindGlobalConstsOpt {}).value()); // for Array.prototype.constructor()
-            encode_instruction(Opcode::djs_put_const, lookup_symbol("constructor", FindGlobalConstsOpt {}).value());
-            encode_instruction(Opcode::djs_get_prop);
-
-            // 3. Invoke the construction of the array with all arguments & the Array prototype reference just above the temporaries. Now there's a new array for use. :)
+            // 2. Invoke this special opcode. Now there's a new array for use. :)
             encode_instruction(
-                Opcode::djs_object_call,
-                Arg {.n = static_cast<int16_t>(item_count), .tag = Location::immediate},
-                Arg {.n = 1, .tag = Location::immediate}
+                Opcode::djs_put_arr_dud,
+                Arg {.n = static_cast<int16_t>(item_count), .tag = Location::immediate}
             );
 
             return true;
@@ -1039,7 +1053,7 @@ export namespace DerkJS {
 
     public:
         BytecodeGenPass(std::vector<PreloadItem> preloadables, int heap_object_capacity)
-        : m_global_consts_map {}, m_key_consts_map {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code_blobs {}, m_callee_name {}, m_chunk_offsets {}, m_callee_lambda_id {-1}, m_member_depth {0}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_has_call {false}, m_prepass_vars {true} {
+        : m_global_consts_map {}, m_key_consts_map {}, m_base_prototypes {}, m_local_maps {}, m_heap {heap_object_capacity}, m_consts {}, m_code_blobs {}, m_callee_name {}, m_chunk_offsets {}, m_callee_lambda_id {-1}, m_member_depth {0}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_has_call {false}, m_prepass_vars {true} {
             // 1. Record fundamental primitive constants once to avoid extra work.
             record_symbol("undefined", Value {}, FindGlobalConstsOpt {});
             record_symbol("null", Value {JSNullOpt {}}, FindGlobalConstsOpt {});
@@ -1056,10 +1070,11 @@ export namespace DerkJS {
                     auto& js_object_p = std::get<std::unique_ptr<ObjectBase<Value>>>(pre_entity);
                     if (pre_name.empty()) {
                         m_heap.add_item(m_heap.get_next_id(), std::move(js_object_p));
-                        m_heap.update_tenure_count();
                     } else {
                         pre_record_object(pre_name, std::move(js_object_p));
                     }
+
+                    m_heap.update_tenure_count();
                 } break;
                 default: break;
                 }
@@ -1103,6 +1118,7 @@ export namespace DerkJS {
 
             return Program {
                 .heap_items = std::move(m_heap), // PolyPool<ObjectBase<Value>>
+                .base_protos = std::move(m_base_prototypes),
                 .consts = std::move(m_consts), // std::vector<Value>
                 .code = std::move(global_code_buffer), // std::vector<Instruction>
                 .offsets = std::move(m_chunk_offsets), // std::vector<int>
