@@ -41,4 +41,10 @@
     - Improve `toString()` operations for objects:
       - Prevent circular reference chasing.
       - Show all properties recursively.
- 23. Add `+=, -=, *=, /=, %=` operators.
+ 23. Update `Object` and `Array` built-ins to be more conformant:
+    - `Object` is a function that makes objects- `new Object(proto)` is the object constructor BUT `Object()` should box primitives later & no-op return existing objects.
+      - `Object.prototype.constructor` must be the `Object` function itself.
+    - `Array` is a function that makes arrays- `new Array(args...)` and `Array(args...)` should behave identically.
+      - `Array.prototype.constructor` must be the `Array` function itself.
+    - Add more methods from the ES5 specification.
+ 24. Add `+=, -=, *=, /=, %=` operators.

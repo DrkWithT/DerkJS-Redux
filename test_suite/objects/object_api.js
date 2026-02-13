@@ -19,4 +19,12 @@ if (check != 69) {
     return 1;
 }
 
+check = Object.freeze(check);
+check.secret = null;
+
+if (check.secret != 69) {
+    console.log("Object.freeze failed on 'check', check.secret:", check.secret);
+    return 1;
+}
+
 return 0;
