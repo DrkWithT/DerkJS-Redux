@@ -36,17 +36,19 @@
     - ~~Implement `PropertyDescriptor`.~~
     - ~~Replace property handle keys with `Value` keys.~~
     - ~~Update VM opcodes to use `PropertyDescriptor`s in property accesses.~~
- 22. Add an `Object.method` API:
-    - Add Object utility interface with: `new Object(arg), Object.create(proto), Object.freeze()`
+ 22. ~~Add an `Object.method` API:~~
+    - ~~Add Object utility interface with: `new Object(arg), Object.create(proto), Object.freeze()`~~
     - Improve `toString()` operations for objects:
       - Prevent circular reference chasing.
       - Show all properties recursively.
- 23. Update `Object` and `Array` built-ins to be more conformant:
-    - `Object` is a function that makes objects- `new Object(proto)` is the object constructor BUT `Object()` should box primitives later & no-op return existing objects.
-      - All object literals should have `this.prototype = Object.prototype`.
-      - `Object.prototype.constructor` must be the `Object` function itself.
-    - `Array` is a function that makes arrays- `new Array(args...)` and `Array(args...)` should behave identically.
-      - All array objects should have `this.prototype = Array.prototype`.
-      - `Array.prototype.constructor` must be the `Array` function itself.
+ 23. ~~Update `Object` and `Array` built-ins to be more conformant:~~
+    - ~~`Object` is a function that makes objects- `new Object(proto)` is the object constructor BUT `Object()` should box primitives later & no-op return existing objects.~~
+      - ~~All object literals should have `this.prototype = Object.prototype`.~~
+      - ~~`Object.prototype.constructor` must be the `Object` function itself.~~
+    - ~~`Array` is a function that makes arrays- `new Array(args...)` and `Array(args...)` should behave identically.~~
+      - ~~All array objects should have `this.prototype = Array.prototype`.~~
+      - ~~`Array.prototype.constructor` must be the `Array` function itself.~~
     - Add more methods from the ES5 specification.
- 24. Add `+=, -=, *=, /=, %=` operators.
+ 24. Add `typeof` operator.
+ 25. Add `void` operator.
+ 26. Add `+=, -=, *=, /=, %=` operators.

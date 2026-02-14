@@ -30,6 +30,11 @@ export namespace DerkJS {
             m_prototype.update_parent_flags(m_flags);
         }
 
+        explicit DynamicString(ObjectBase<Value>* prototype_p, std::string_view sv)
+        : m_own_properties {}, m_data {}, m_prototype {prototype_p}, m_flags {std::to_underlying(AttrMask::unused)} {
+            m_data.append_range(sv);
+        }
+
         /// BEGIN ObjectBase overrides
 
         [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
@@ -37,6 +42,10 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_class_name() const noexcept -> std::string override {
+            return "string";
+        }
+
+        [[nodiscard]] auto get_typename() const noexcept -> std::string_view override {
             return "string";
         }
 

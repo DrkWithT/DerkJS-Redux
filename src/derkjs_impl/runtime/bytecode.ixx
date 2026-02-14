@@ -31,6 +31,8 @@ export namespace DerkJS {
         djs_pop, // Lazy pops by N given <pop-n>.
         djs_emplace, // Pops the temporary and stores it into the under value (local variable reference / property reference) which gets popped afterwards.
         djs_put_this, // Pushes a reference to the current `this` object.
+        djs_discard, // For `void`, replaces the evaluated expression value with an `undefined`.
+        djs_typename, // For `typeof`, replaces the expression value with a newly created string to its typename.
         djs_put_obj_dud, // Pushes a newly created, empty JS object.
         djs_make_arr, // Args: <item-count>; Pushes a newly created, empty JS array from the top N stack items. The Array prototype is automatically bound to the new array.
         djs_put_proto_key, // Replaces top stack obj-ref with proto-ref.
@@ -108,6 +110,8 @@ export namespace DerkJS {
             "djs_pop",
             "djs_emplace",
             "djs_put_this",
+            "djs_discard",
+            "djs_typename",
             "djs_put_obj_dud",
             "djs_make_arr",
             "djs_put_proto_key",

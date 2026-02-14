@@ -4,6 +4,7 @@ module;
 #include <utility>
 #include <optional>
 #include <string>
+#include <string_view>
 
 export module runtime.value;
 
@@ -99,6 +100,18 @@ export namespace DerkJS {
 
         [[nodiscard]] constexpr auto get_tag() const noexcept -> ValueTag {
             return m_tag;
+        }
+
+        [[nodiscard]] constexpr auto get_typename() const noexcept -> std::string_view {
+            switch (m_tag) {
+            case ValueTag::undefined: return "undefined";
+            case ValueTag::null: return "object";
+            case ValueTag::boolean: return "boolean";
+            case ValueTag::num_nan: case ValueTag::num_i32: case ValueTag::num_f64: return "number";
+            case ValueTag::val_ref: return m_data.ref_p->get_typename();
+            case ValueTag::object: return m_data.obj_p->get_typename();
+            default: return "unknown";
+            }
         }
 
         constexpr auto is_assignable_ref() const noexcept -> bool {
@@ -558,6 +571,10 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_class_name() const noexcept -> std::string override {
+            return "object";
+        }
+
+        [[nodiscard]] auto get_typename() const noexcept -> std::string_view override {
             return "object";
         }
 

@@ -24,6 +24,8 @@ export namespace DerkJS {
         keyword_function,
         keyword_prototype,
         keyword_new,
+        keyword_void,
+        keyword_typeof,
         keyword_this,
         keyword_undefined,
         keyword_null,
