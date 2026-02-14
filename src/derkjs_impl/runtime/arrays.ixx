@@ -74,6 +74,10 @@ export namespace DerkJS {
             return "Array";
         }
 
+        [[nodiscard]] auto get_typename() const noexcept -> std::string_view override {
+            return "object";
+        }
+
         [[nodiscard]] auto is_extensible() const noexcept -> bool override {
             return true;
         }

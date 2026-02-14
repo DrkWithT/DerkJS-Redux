@@ -240,7 +240,7 @@ export namespace DerkJS::Core {
         [[nodiscard]] auto setup_string_prototype(std::array<NativePropertyStub, N> prop_list) -> ObjectBase<Value>* {
             // 1. Create dud String.prototype & its wrapping String.
             auto str_prototype_object_p = std::make_unique<Object>(nullptr);
-            auto str_object_p = std::make_unique<DynamicString>(str_prototype_object_p.get(), "");
+            auto str_object_p = std::make_unique<DynamicString>(str_prototype_object_p.get(), std::string {});
             ObjectBase<Value>* str_object_raw_p = str_object_p.get();
 
             // 2. Fill String.prototype & record string keys to patch prototype of...

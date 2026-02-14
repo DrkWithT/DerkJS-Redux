@@ -142,8 +142,8 @@ int main(int argc, char* argv[]) {
     driver.add_js_lexical("prototype", TokenTag::keyword_prototype);
     driver.add_js_lexical("this", TokenTag::keyword_this);
     driver.add_js_lexical("new", TokenTag::keyword_new);
-    driver.add_js_lexical("void", TokenType::keyword_void);
-    driver.add_js_lexical("typeof", TokenType::keyword_typeof);
+    driver.add_js_lexical("void", TokenTag::keyword_void);
+    driver.add_js_lexical("typeof", TokenTag::keyword_typeof);
     driver.add_js_lexical("undefined", TokenTag::keyword_undefined);
     driver.add_js_lexical("null", TokenTag::keyword_null);
     driver.add_js_lexical("true", TokenTag::keyword_true);

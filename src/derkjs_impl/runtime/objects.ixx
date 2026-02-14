@@ -185,6 +185,7 @@ export namespace DerkJS {
 
         virtual auto get_unique_addr() noexcept -> void* = 0;
         virtual auto get_class_name() const noexcept -> std::string = 0;
+        virtual auto get_typename() const noexcept -> std::string_view = 0;
         virtual auto is_extensible() const noexcept -> bool = 0;
         virtual auto is_prototype() const noexcept -> bool = 0;
 

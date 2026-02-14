@@ -4,6 +4,7 @@ module;
 #include <utility>
 #include <format>
 #include <string>
+#include <string_view>
 #include <sstream>
 // #include <print>
 
@@ -43,7 +44,11 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_class_name() const noexcept -> std::string override {
-            return "NativeFunction";
+            return "function";
+        }
+
+        [[nodiscard]] auto get_typename() const noexcept -> std::string_view override {
+            return "function";
         }
 
         [[nodiscard]] auto is_extensible() const noexcept -> bool override {
@@ -215,6 +220,8 @@ export namespace DerkJS {
             "djs_pop",
             "djs_emplace",
             "djs_put_this",
+            "djs_discard",
+            "djs_typename",
             "djs_put_obj_dud",
             "djs_make_arr",
             "djs_put_proto_key",
@@ -260,7 +267,11 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_class_name() const noexcept -> std::string override {
-            return "Lambda"; // non-standard behavior for ease of debugging the VM heap
+            return "function";
+        }
+
+        [[nodiscard]] auto get_typename() const noexcept -> std::string_view override {
+            return "function";
         }
 
         [[nodiscard]] auto is_extensible() const noexcept -> bool override {
