@@ -258,5 +258,3 @@ while (true) {
         console.log("ans:", answer);
     }
 }
-
-return 0;

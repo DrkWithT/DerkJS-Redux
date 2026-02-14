@@ -22,6 +22,4 @@ function linearSearch(items, target) {
 
 var x = linearSearch([1, 3, 7, 6, 9, 4, 2, 0], 4);
 
-console.log(x == 5);
-
-return 0;
+console.log("PASS:", x === 5);

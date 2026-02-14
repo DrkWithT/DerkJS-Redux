@@ -14,12 +14,12 @@ function count_fizz_or_buzz(n) {
     return answer;
 }
 
+var ans = count_fizz_or_buzz(10);
+
 /*
  FizzBuzz: (0) 1 2 (3) 4 (5) (6) 7 8 (9) (10)
  Count: 6
  */
-var ans = count_fizz_or_buzz(10);
-
-console.log(ans);
+console.log("PASS:", count_fizz_or_buzz(10) === 6);
 
 return 0;
