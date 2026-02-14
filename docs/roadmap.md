@@ -49,6 +49,7 @@
       - ~~All array objects should have `this.prototype = Array.prototype`.~~
       - ~~`Array.prototype.constructor` must be the `Array` function itself.~~
     - Add more methods from the ES5 specification.
- 24. Add `typeof` operator.
- 25. Add `void` operator.
- 26. Add `+=, -=, *=, /=, %=` operators.
+ 24. ~~Add `typeof` and `void` operators.~~
+ 25. Add implicit `leave` opcode on omitted returns, yielding `undefined` or `this` if present.
+ 26. Add more Array methods: `lastIndexOf(arg), join(delim), concat(args...), forEach(arr, thisArg), filter(predicateFn, thisArg), map(callabackFn, thisArg)`
+ 27. Add `+=, -=, *=, /=, %=` operators.
