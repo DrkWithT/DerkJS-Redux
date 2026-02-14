@@ -559,6 +559,16 @@ export namespace DerkJS {
                             .op = Opcode::djs_numify,
                             .inner_ok = emit_expr(*inner_expr, source)
                         };
+                    case AstOp::ast_op_void:
+                        return OpcodeWithGenFlag {
+                            .op = Opcode::djs_discard,
+                            .inner_ok = emit_expr(*inner_expr, source)
+                        };
+                    case AstOp::ast_op_typeof:
+                        return OpcodeWithGenFlag {
+                            .op = Opcode::djs_typename,
+                            .inner_ok = emit_expr(*inner_expr, source)
+                        };
                     case AstOp::ast_op_new: {
                         m_has_new_applied = true;
 
