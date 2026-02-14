@@ -3,10 +3,25 @@
  * @summary Test string methods.
  */
 
+var ok = 0;
 var a = "ones";
 
-console.log(a.charCodeAt(0) == 111);
-console.log(a.len()); // 4
-console.log(a.substr(0, 2));
+if (a.charCodeAt(0) == 111) {
+    ok = ok + 1;
+} else {
+    console.log("Unexpected a[0] char code.");
+}
 
-return 0;
+if (a.len() === 4) {
+    ok = ok + 1;
+} else {
+    console.log("Unexpected a.len(): not 4.");
+}
+
+if (a.substr(0, 3) === "one") {
+    ok = ok + 1;
+} else {
+    console.log("Unexpected a.substr(0, 3): not 'one'.");
+}
+
+console.log("PASS:", ok === 3);

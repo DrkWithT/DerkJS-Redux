@@ -24,8 +24,4 @@ if (squaresTo3Str === "1,4,9") {
     console.log("Wrong counts.map(<square fn>) result:", squaresTo3Str);
 }
 
-if (ok !== 2) {
-    return 1;
-}
-
-return 1;
+console.log("PASS:", ok === 2);

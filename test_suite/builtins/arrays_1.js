@@ -3,5 +3,3 @@
 var foo = [1, 2, 3];
 
 console.log(foo);
-
-return 0;

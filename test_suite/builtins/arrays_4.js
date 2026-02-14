@@ -28,4 +28,4 @@ if (testStrTest2 === "1,2,3,4,3,2,1") {
     console.log("unexpected test2 repr:", testStrTest2);
 }
 
-return 0;
+console.log("PASS:", ok === 3);

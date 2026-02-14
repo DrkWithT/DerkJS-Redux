@@ -1,14 +1,29 @@
 /* Test more array methods. */
 
-var junk = [null, undefined, 69, 420];
+var ok = 0;
+var junk = [null, 69, 420];
+
+if (junk.indexOf(69) === 1) {
+    ok = ok + 1;
+} else {
+    console.log("Failed junk.indexOf(69).");
+}
 
 /* 2 */
-console.log(junk.indexOf(69) === 2);
+if (junk.lastIndexOf(69) === 1) {
+    ok = ok + 1;
+} else {
+    console.log("Failed junk.lastIndexOf(69).");
+}
 
-/* 2 */
-console.log(junk.lastIndexOf(69) === 2);
+/* 420, 69, null */
+var junk2 = junk.reverse();
+var junk2Str = junk2.join();
 
-/* 420, 69, undefined, null */
-console.log(junk.reverse());
+if (junk2Str === ",69,420") {
+    ok = ok + 1;
+} else {
+    console.log("Failed junk.reverse():", junk2Str);
+}
 
-return 0;
+console.log("PASS:", ok === 3);

@@ -12,5 +12,3 @@ var postN = items.push(2, 1);
 console.log(first == 1);
 console.log(last == true);
 console.log(postN == 5);
-
-return 0;
