@@ -1,7 +1,3 @@
-/* banana */
-
-/* console.log("b" + "a" + + "a" + "a"); */
+/* test funny 'baNaNa' */
 
 console.log("b" + "a" + +"a" + "a");
-
-return 0;
