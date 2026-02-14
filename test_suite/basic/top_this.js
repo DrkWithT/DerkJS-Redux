@@ -1,5 +1,3 @@
 this.x = 10;
 
-console.log(this.x);
-
-return 0;
+console.log("PASS:", this.x === 10);

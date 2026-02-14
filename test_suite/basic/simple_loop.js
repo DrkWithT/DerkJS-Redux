@@ -12,7 +12,7 @@ function consecutive_sum(n) {
     return sum;
 }
 
-/* Should yield 55 */
-console.log(consecutive_sum(10));
+/* Should be true */
+console.log("PASS:", consecutive_sum(10) === 55);
 
 return 0;

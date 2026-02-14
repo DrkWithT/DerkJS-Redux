@@ -1,9 +1,10 @@
 // test failure of assignments to frozen object
 
-console.log = null;
+var ok = true;
+console.readln = null;
 
-if (!console.log) {
-    return 1;
+if (!console.readln) {
+    ok = false;
 }
 
-return 0;
+console.log("PASS:", ok);

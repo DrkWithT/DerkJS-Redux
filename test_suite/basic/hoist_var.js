@@ -6,7 +6,5 @@ if (secret1 > 0) {
     var secret2 = -2;
 }
 
-// Should print '42'.
-console.log(secret1 * secret2);
-
-return 0;
+// Must be `true`
+console.log("PASS:", secret1 * secret2 === 42);
