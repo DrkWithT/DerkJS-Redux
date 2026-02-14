@@ -7,4 +7,4 @@
 var c = parseInt("69");
 var d = parseInt("420");
 
-console.log("PASS:", c + d === 489); // 489
+console.log("PASS:", c + d === 489);
