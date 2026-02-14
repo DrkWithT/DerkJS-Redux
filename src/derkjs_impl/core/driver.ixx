@@ -394,9 +394,7 @@ export namespace DerkJS::Core {
                 return 1;
             case VMErrcode::ok:
             default:
-                std::println("DerkJS [Result]: \x1b[1;32m{}\x1b[0m\n\nFinished in \x1b[1;33m{}\x1b[0m", vm.peek_final_result().to_string().value(), derkjs_running_time);
-
-                return vm.peek_final_result().to_num_i32().value_or(1);
+                return 0;
             }
         }
     };

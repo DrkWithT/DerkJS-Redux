@@ -45,6 +45,7 @@ export namespace DerkJS {
         std::flat_map<std::string, Arg> locals; // Map names to variables.
         std::vector<int> callee_self_refs;      // Positions of self-calls by name.
         int next_local_id;                      // Tracks next stack slot for a local variable value.
+        int block_level;                        // Tracks depth of currently emitted block statement.
     };
 
     struct ActiveLoop {
@@ -473,7 +474,8 @@ export namespace DerkJS {
             m_local_maps.emplace_back(CodeGenScope {
                 .locals = {},
                 .callee_self_refs = {},
-                .next_local_id = 0
+                .next_local_id = 0,
+                .block_level = 0
             });
             m_code_blobs.emplace_front();
 
@@ -1030,10 +1032,24 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto emit_block(const Block& stmt, const std::string& source) -> bool {
+            m_local_maps.back().block_level++;
+
             for (const auto& temp_stmt : stmt.items) {
                 if (!emit_stmt(*temp_stmt, source)) {
                     return false;
                 }
+            }
+
+            m_local_maps.back().block_level--;
+
+            // Put implicit return at top-level lambda body. If there's a previous return, that will avoid this one.
+            if (!m_prepass_vars && m_local_maps.back().block_level == 0) {
+                encode_instruction(Opcode::djs_ret, Arg {
+                    .n = 1, // is-implicit-return flag -> a0
+                    .tag = Location::immediate,
+                    .is_str_literal = false,
+                    .from_closure = false
+                });
             }
 
             return true;
@@ -1093,7 +1109,9 @@ export namespace DerkJS {
             // 3. Prepare initial mapping of symbols & code buffer to build.
             m_local_maps.emplace_back(CodeGenScope {
                 .locals = {},
-                .next_local_id = 0
+                .callee_self_refs = {},
+                .next_local_id = 0,
+                .block_level = -1
             });
             m_code_blobs.emplace_front();
         }
@@ -1119,6 +1137,10 @@ export namespace DerkJS {
                     return {};
                 }
             }
+
+            /// NOTE: place implicit `return undefined` in top-level.
+            encode_instruction(Opcode::djs_put_const, lookup_symbol("undefined", FindGlobalConstsOpt {}).value());
+            encode_instruction(Opcode::djs_ret);
 
             /// NOTE: Place dud offset marker for bytecode dumping to properly end.
             m_chunk_offsets.emplace_back(-1);

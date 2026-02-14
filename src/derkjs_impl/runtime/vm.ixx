@@ -36,6 +36,16 @@ namespace DerkJS {
         ObjectBase<Value>* capture_p;
         int m_callee_sbp;
         int m_caller_sbp;
+        uint8_t m_flags;
+
+        template <CallFlags F>
+        friend constexpr auto derkjs_call_flag(const CallFrame& frame) noexcept -> bool {
+            if constexpr (F == CallFlags::is_ctor) {
+                return frame.m_flags & std::to_underlying(F);
+            }
+
+            return false;
+        }
     };
 
     #ifdef __clang__
@@ -601,9 +611,15 @@ namespace DerkJS {
     }
 
     inline void op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        const auto& [caller_ret_ip, caller_this_p, caller_addr, caller_capture_p, callee_sbp, caller_sbp] = ctx.frames.back();
+        const auto& [caller_ret_ip, caller_this_p, caller_addr, caller_capture_p, callee_sbp, caller_sbp, calling_flags] = ctx.frames.back();
 
-        ctx.stack[callee_sbp] = ctx.stack[ctx.rsp];
+        if (a0 == 0) {
+            ctx.stack[callee_sbp] = ctx.stack[ctx.rsp];
+        } else if (calling_flags & std::to_underlying(CallFlags::is_ctor)) {
+            ctx.stack[callee_sbp] = Value {caller_this_p};
+        } else {
+            ctx.stack[callee_sbp] = Value {};
+        }
 
         ctx.rsp = callee_sbp;
         ctx.rsbp = caller_sbp;

@@ -58,9 +58,13 @@ export namespace DerkJS {
         djs_jump,
         djs_object_call, // Args: <arg-count> <pass-this-flag>: Assumes the top stack value references a `ObjectBase<Value>` to invoke on <arg-count> temporaries below. NativeFunction objects don't need to affect `RSBP` and `RSP` for restoring caller stack state. The call() virtual method per function object can now take 'this' on `pass-this-flag == 1`: the caller object is 'this', laying on top of all other arguments as the consuming temporary. Stack: `<obj-ref> <obj-ref> <key-value> -> <result>`
         djs_ctor_call, // Args: <arg-count>; creates a this object to initialize and return via `var foo = new Foo()` where the function has `return this;`. Invokes the object's `call_as_ctor()` virtual method. If `opt-chunk-id >= 0`: invokes the bytecode function as a constructor. ONLY WORKS WITH FUNCTION OBJECTS!!
-        djs_ret,
+        djs_ret, // Arg: <is-implicit> Yields the callee's result to the caller. If `is-implicit = 1`, return `undefined` or `this`, but yield the top-stack value otherwise.
         djs_halt,
         last,
+    };
+
+    enum class CallFlags : uint8_t {
+        is_ctor = 0b00000001
     };
 
     enum Location : uint8_t {

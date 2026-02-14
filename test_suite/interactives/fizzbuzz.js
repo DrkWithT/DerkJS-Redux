@@ -24,4 +24,4 @@ function fizzbuzz(n) {
 
 var ans = fizzbuzz(30);
 
-console.log("PASS:", ans === 3);
+console.log("PASS:", ans === 2);

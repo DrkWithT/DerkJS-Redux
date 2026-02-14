@@ -133,7 +133,8 @@ export namespace DerkJS {
                 .capture_p = caller_capture_p,
                 /// NOTE: Put unused dud values for bytecode RBP, etc. because the native callee handles its own return.
                 .m_callee_sbp = -1,
-                .m_caller_sbp = -1
+                .m_caller_sbp = -1,
+                .m_flags = 0
             });
 
             // 2. Make native call
@@ -156,10 +157,26 @@ export namespace DerkJS {
             const int16_t caller_rsbp = vm_context_p->rsbp;
             vm_context_p->rsbp = callee_rsbp;
 
-            // 2. Make native call
+            // 2. Push dummy frame mostly to track ctor-call status.
+            vm_context_p->frames.emplace_back(ExternVMCtx::call_frame_type {
+                /// NOTE: Just put nullptr- the native callee will handle its own return of control back to the interpreter.
+                .m_caller_ret_ip = nullptr,
+                .this_p = nullptr,
+                .caller_addr = this,
+                .capture_p = nullptr,
+                /// NOTE: Put unused dud values for bytecode RBP, etc. because the native callee handles its own return.
+                .m_callee_sbp = -1,
+                .m_caller_sbp = -1,
+                /// NOTE: ctor call applies here.
+                .m_flags = std::to_underlying(CallFlags::is_ctor)
+            });
+
+            // 3. Make native call
             auto native_call_ok = m_native_ptr(vm_context_p, &m_own_properties, argc);
 
-            // 3. Restore caller stack state after native call
+            vm_context_p->frames.pop_back();
+
+            // 4. Restore caller stack state after native call
             vm_context_p->rsp = callee_rsbp;
             vm_context_p->rsbp = caller_rsbp;
             vm_context_p->rip_p++;
@@ -371,7 +388,8 @@ export namespace DerkJS {
                 .caller_addr = this,
                 .capture_p = capture_obj_p,
                 .m_callee_sbp = new_callee_sbp,
-                .m_caller_sbp = old_caller_sbp
+                .m_caller_sbp = old_caller_sbp,
+                .m_flags = 0
             });
 
             return true;
@@ -385,6 +403,10 @@ export namespace DerkJS {
                 vm_context_p->heap.get_next_id(),
                 std::make_unique<Object>(m_prototype.to_object())
             );
+
+            if (!this_arg_p) {
+                return false;
+            }
 
             // 1.2: Only allocate a capture Object for different callee vs. caller Functions.
             ObjectBase<Value>* caller_capture_p = vm_context_p->frames.back().capture_p;
@@ -404,10 +426,12 @@ export namespace DerkJS {
                 .caller_addr = this,
                 .capture_p = capture_obj_p,
                 .m_callee_sbp = new_callee_sbp,
-                .m_caller_sbp = old_caller_sbp
+                .m_caller_sbp = old_caller_sbp,
+                /// NOTE: ctor call applies here.
+                .m_flags = std::to_underlying(CallFlags::is_ctor)
             });
 
-            return this_arg_p != nullptr;
+            return true;
         }
 
         /// For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!
