@@ -11,9 +11,11 @@ export import frontend.lexicals;
 export namespace DerkJS {
     enum class AstOp : uint8_t {
         ast_op_noop,
-        ast_op_new, // 'new' for objects
-        ast_op_dot_access, // access member by `'.'`
-        ast_op_index_access, // access member by `<lhs>[...]`
+        ast_op_new,             // 'new' for objects
+        ast_op_void,            // 'void' for discarded evaluations
+        ast_op_typeof,          // `typeof` for getting a typename string of exprs.
+        ast_op_dot_access,      // access member by `'.'`
+        ast_op_index_access,    // access member by `<lhs>[...]`
         ast_op_percent,
         ast_op_times,
         ast_op_slash,

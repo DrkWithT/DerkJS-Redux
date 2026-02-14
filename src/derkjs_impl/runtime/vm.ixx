@@ -117,6 +117,8 @@ namespace DerkJS {
     inline void op_pop(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_emplace(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_put_this(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_discard(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_typename(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_put_obj_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_make_arr(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_put_proto_key(ExternVMCtx& ctx, int16_t a0, int16_t a1);
@@ -150,7 +152,7 @@ namespace DerkJS {
     constexpr tco_opcode_fn tco_opcodes[static_cast<std::size_t>(Opcode::last)] = {
         op_nop,
         op_dup, op_dup_local, op_ref_local, op_store_upval, op_ref_upval, op_put_const, op_deref, op_pop, op_emplace,
-        op_put_this, op_put_obj_dud, op_make_arr, op_put_proto_key, op_get_prop, op_put_prop, op_del_prop,
+        op_put_this, op_discard, op_typename, op_put_obj_dud, op_make_arr, op_put_proto_key, op_get_prop, op_put_prop, op_del_prop,
         op_numify, op_strcat,
         op_mod, op_mul, op_div, op_add, op_sub,
         op_test_falsy, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte,
@@ -273,6 +275,32 @@ namespace DerkJS {
         ctx.stack[ctx.rsp + 1] = Value {ctx.frames.back().this_p};
         ctx.rsp++;
         ctx.rip_p++;
+
+        [[clang::musttail]]
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    inline void op_discard(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+        ctx.stack[ctx.rsp] = Value {};
+        ctx.rip_p++;
+
+        [[clang::musttail]]
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    inline void op_typename(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+        const auto& temp_value_ref = ctx.stack[ctx.rsp];
+
+        if (auto js_typename_p = ctx.heap.add_item(ctx.heap.get_next_id(), DynamicString {
+            ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
+            temp_value_ref.get_typename()
+        })) {
+            // For `typeof` result: typename string.
+            ctx.stack[ctx.rsp] = Value {js_typename_p};
+            ctx.rip_p++;
+        } else {
+            ctx.status = VMErrcode::bad_heap_alloc;
+        }
 
         [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
