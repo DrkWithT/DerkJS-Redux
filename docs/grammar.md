@@ -10,7 +10,7 @@
     ; TODO: Update member grammar rule to support longer accesses.
 <new> = "new"? <member>
 <call> = <new> ( "(" ( <expr> ( "," <expr> )* )? ")" )?
-<unary> = ( "!" | "+" )? <call>
+<unary> = ( "!" | "+" | "typeof" | "void" )? <call>
 <factor> = <unary> ( ( "%" | "*" | "/" ) <unary> )*
 <term> = <factor> ( ( "+" | "-" ) <factor> )*
 <compare> = <term> ( ( "<" | ">" | "<=" | ">=" ) <term> )*
