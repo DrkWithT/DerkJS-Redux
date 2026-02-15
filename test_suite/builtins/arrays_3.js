@@ -20,7 +20,7 @@ if (junk.lastIndexOf(69) === 1) {
 var junk2 = junk.reverse();
 var junk2Str = junk2.join();
 
-if (junk2Str === ",69,420") {
+if (junk2Str === "420,69,") {
     ok = ok + 1;
 } else {
     console.log("Failed junk.reverse():", junk2Str);

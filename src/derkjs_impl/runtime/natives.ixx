@@ -269,6 +269,38 @@ export namespace DerkJS {
 
         return true;
     }
+    
+    /// SEE: ES5-15.4.4.14
+    [[nodiscard]] auto native_array_last_index_of(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const auto passed_rsbp = ctx->rsbp;
+        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object());
+
+        if (!array_this_p) {
+            std::println(std::cerr, "Array.lastIndexOf: Non-array argument.");
+            ctx->status = VMErrcode::bad_operation;
+            return false;
+        }
+
+        if (array_this_p->items().empty()) {
+            ctx->stack.at(passed_rsbp) = Value {-1};
+            return true;
+        }
+        
+        const auto& target = ctx->stack.at(passed_rsbp);
+        const int self_len = array_this_p->items().size();
+        int search_pos = (argc == 2) ? ctx->stack.at(passed_rsbp).to_num_i32().value_or(0) : self_len - 1 ;
+        search_pos = (search_pos < 0) ? self_len - std::abs(search_pos) : std::min(search_pos, self_len - 1);
+
+        for (; search_pos >= 0; search_pos--) {
+            if (array_this_p->items().at(search_pos) == target) {
+                ctx->stack.at(passed_rsbp) = Value {search_pos};
+                return true;
+            }
+        }
+
+        ctx->stack.at(passed_rsbp) = Value {-1};
+        return true;
+    }
 
     [[nodiscard]] auto native_array_len(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
@@ -284,13 +316,58 @@ export namespace DerkJS {
     [[nodiscard]] auto native_array_reverse(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
         auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object());
-        auto& array_items_view = *array_this_p->get_seq_items();
+        auto& array_items_view = array_this_p->items();
 
         std::ranges::reverse(array_items_view);
 
         ctx->stack[passed_rsbp] = Value {array_this_p};
 
         return true;
+    }
+
+    /// SEE: ES5-15.4.4.5
+    [[nodiscard]] auto native_array_join(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const int passed_rsbp = ctx->rsbp;
+        auto array_this_p = dynamic_cast<const Array*>(ctx->stack[passed_rsbp + argc].to_object());
+        auto temp_str = std::make_unique<DynamicString>(ctx->base_protos[static_cast<unsigned int>(BasePrototypeID::str)], std::string_view {});
+
+        if (array_this_p->items().empty()) {
+            auto empty_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::move(temp_str));
+
+            if (!empty_str_p) {
+                ctx->status = VMErrcode::bad_heap_alloc;
+                return false;
+            }
+
+            ctx->stack.at(passed_rsbp) = Value {empty_str_p};
+
+            return true;
+        }
+
+        std::string delim = (argc == 1) ? ctx->stack.at(passed_rsbp).to_string().value_or(",") : ",";
+        
+        temp_str->append_back(array_this_p->items().front().to_string().value());
+
+        for (int more_count = 1, self_len = array_this_p->items().size(); more_count < self_len; more_count++) {
+            temp_str->append_back(delim);
+
+            if (const auto& next_item = array_this_p->items().at(more_count); next_item.get_tag() != ValueTag::undefined && next_item.get_tag() != ValueTag::null) {
+                temp_str->append_back(next_item.to_string().value());
+            }
+        }
+
+        if (auto filled_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::move(temp_str)); filled_str_p) {
+            ctx->stack.at(passed_rsbp) = Value {filled_str_p};
+            return true;
+        } else {
+            ctx->status = VMErrcode::bad_heap_alloc;
+            return false;
+        }
+    }
+
+    [[nodiscard]] auto native_array_concat(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        std::println(std::cerr, "Array.concat: Not implemented.");
+        return false; // TODO!
     }
 
     /// Object.prototype impls:
@@ -301,7 +378,7 @@ export namespace DerkJS {
         Value target_arg = ctx->stack.at(passed_rsbp);
 
         if (auto target_as_object_p = target_arg.to_object(); !target_as_object_p) {
-            std::println(std::cerr, "Non-object arguments to Object ctor are unsupported.");
+            std::println(std::cerr, "Object.constructor: Non-object arguments to Object ctor are unsupported.");
             ctx->status = VMErrcode::bad_operation;
             return false;
         } else {

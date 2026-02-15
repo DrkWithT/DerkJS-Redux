@@ -106,6 +106,15 @@ int main(int argc, char* argv[]) {
             .item = std::make_unique<NativeFunction>(DerkJS::native_array_index_of, nullptr)
         },
         Core::NativePropertyStub {
+            .name_str = "lastIndexOf",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_array_last_index_of, nullptr)
+        },
+        Core::NativePropertyStub {
+            .name_str = "join",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_array_join, nullptr)
+        },
+        // TODO: add Array.prototype.concat(), etc.
+        Core::NativePropertyStub {
             .name_str = "reverse",
             .item = std::make_unique<NativeFunction>(DerkJS::native_array_reverse, nullptr)
         },
