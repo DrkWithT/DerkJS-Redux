@@ -48,3 +48,5 @@ compile_commands.json
 *.zip
 prof_*.json
 bc_dump*.txt
+ecmascript_tests/
+ecmascript_test262_logs/
