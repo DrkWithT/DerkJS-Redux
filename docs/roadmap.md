@@ -50,6 +50,8 @@
       - ~~`Array.prototype.constructor` must be the `Array` function itself.~~
     - Add more methods from the ES5 specification.
  24. ~~Add `typeof` and `void` operators.~~
- 25. Add implicit `ret` opcode on omitted returns- it yields a `this` reference on ctor-mode calls, discarding any regular expr result.
+ 25. ~~Add implicit `ret` opcode on omitted returns- it yields a `this` reference on ctor-mode calls, discarding any regular expr result.~~
  26. Add more Array methods: `lastIndexOf(arg), join(delim), concat(args...), forEach(arr, thisArg), filter(predicateFn, thisArg), map(callabackFn, thisArg)`
- 27. Add `+=, -=, *=, /=, %=` operators.
+    - WIP!
+ 27. Add prefix increment operator.
+ 28. Add `+=, -=, *=, /=, %=` operators.
