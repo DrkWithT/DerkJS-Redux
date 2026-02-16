@@ -119,7 +119,7 @@ export namespace DerkJS {
             if (key.is_prototype_key()) {
                 return PropertyDescriptor<Value> {&key, &m_prototype, this, m_flags};
             } else if (key.get_tag() == ValueTag::num_i32) {
-                return PropertyDescriptor<Value> {&key, get_item(key.to_num_i32().value(), true), this, m_flags};
+                return PropertyDescriptor<Value> {&key, get_item(key.to_num_i32().value(), allow_filler), this, m_flags};
             } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
                 return prop.key == key;
             }); property_entry_it != m_own_properties.end()) {
