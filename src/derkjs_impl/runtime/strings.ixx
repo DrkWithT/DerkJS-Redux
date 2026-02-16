@@ -28,7 +28,7 @@ export namespace DerkJS {
         : m_own_properties {}, m_data {s}, m_prototype {prototype_p}, m_flags {std::to_underlying(AttrMask::unused)} {
             m_prototype.update_parent_flags(m_flags);
 
-            if (length_key.to_object()) {
+            if (length_key.is_valid_object_ref()) {
                 m_own_properties.emplace_back(PropEntry<Value, Value> {
                     .key = length_key,
                     .item = Value {static_cast<int>(s.length())},
@@ -41,7 +41,7 @@ export namespace DerkJS {
         : m_own_properties {}, m_data {}, m_prototype {prototype_p}, m_flags {std::to_underlying(AttrMask::unused)} {
             m_data.append_range(sv);
 
-            if (length_key.to_object()) {
+            if (length_key.is_valid_object_ref()) {
                 m_own_properties.emplace_back(PropEntry<Value, Value> {
                     .key = length_key,
                     .item = Value {static_cast<int>(sv.length())},

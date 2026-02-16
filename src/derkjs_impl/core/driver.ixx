@@ -188,15 +188,14 @@ export namespace DerkJS::Core {
 
         template <std::size_t N>
         [[nodiscard]] auto setup_string_prototype(std::array<NativePropertyStub, N> prop_list) -> ObjectBase<Value>* {
-            // Bonus: hack in "length" here as a special key that could be used for strings (but also arrays).
-            auto length_str_length_key_p = std::make_unique<DynamicString>(str_prototype_object_p.get(), Value {nullptr}, "length"); // the property name value string itself- only to check against!
+            // 1.1: hack in "length" here as a special key that could be used for strings (but also arrays).
+            auto length_str_length_key_p = std::make_unique<DynamicString>(nullptr, Value {nullptr}, std::string {"length"}); // the property name value string itself- only to check against!
             m_length_str_length_key_p = length_str_length_key_p.get();
             length_str_length_key_p->patch_length_property(Value {m_length_str_length_key_p}, 7); // backpatch "length" string literal with length property key-value
 
-            // 1. Create dud String.prototype & its wrapping String.
+            // 1.2: Create dud String.prototype.
             auto str_prototype_object_p = std::make_unique<Object>(nullptr);
-            auto str_object_p = std::make_unique<DynamicString>(str_prototype_object_p.get(), Value {m_length_str_length_key_p}, std::string {});
-            ObjectBase<Value>* str_object_raw_p = str_object_p.get();
+            auto str_prototype_raw_p = str_prototype_object_p.get();
 
             // 2. Fill String.prototype & record string keys to patch prototype of...
             for (auto& [stub_name, item] : prop_list) {
@@ -247,19 +246,7 @@ export namespace DerkJS::Core {
                 .location = Location::heap_obj
             });
 
-            m_preloads.emplace_back(PreloadItem {
-                .lexeme = "",
-                .entity = std::move(str_object_p),
-                .location = Location::heap_obj
-            });
-
-            m_preloads.emplace_back(PreloadItem {
-                .lexeme = "String",
-                .entity = Value {str_object_raw_p},
-                .location = Location::constant
-            });
-
-            return str_object_raw_p;
+            return str_prototype_raw_p;
         }
 
         template <std::size_t N>

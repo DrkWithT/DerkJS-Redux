@@ -88,6 +88,11 @@ export namespace DerkJS {
             m_data.d = d;
         }
 
+        explicit constexpr Value([[maybe_unused]] decltype(nullptr) nullptr_v) noexcept
+        : m_data {}, m_tag {ValueTag::object}, m_parent_flags {std::to_underlying(AttrMask::unused)} {
+            m_data.obj_p = nullptr;
+        }
+
         constexpr Value(ObjectBase<Value>* object_p, uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
         : m_data {}, m_tag {ValueTag::object}, m_parent_flags {parent_flags} {
             m_data.obj_p = object_p;
@@ -100,6 +105,14 @@ export namespace DerkJS {
 
         [[nodiscard]] constexpr auto get_tag() const noexcept -> ValueTag {
             return m_tag;
+        }
+
+        [[nodiscard]] constexpr auto is_valid_object_ref() const noexcept -> bool {
+            if (m_tag == ValueTag::object) {
+                return m_data.obj_p != nullptr;
+            }
+
+            return false;
         }
 
         [[nodiscard]] constexpr auto get_typename() const noexcept -> std::string_view {

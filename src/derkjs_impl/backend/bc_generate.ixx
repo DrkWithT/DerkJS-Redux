@@ -190,10 +190,8 @@ export namespace DerkJS {
                     .from_closure = false,
                 };
 
-                auto string_prototype_const_id = lookup_symbol("String::prototype", FindGlobalConstsOpt {})->n;
-
                 if (auto heap_dyn_str_p = m_heap.add_item(m_heap.get_next_id(), std::make_unique<DynamicString>(
-                    m_consts.at(string_prototype_const_id).to_object(),
+                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::str)],
                     Value {m_base_prototypes[static_cast<unsigned int>(BasePrototypeID::extra_length_key)]},
                     std::forward<Item>(item)
                 )); heap_dyn_str_p) {
@@ -226,6 +224,21 @@ export namespace DerkJS {
                 } else {
                     return {};
                 }
+
+                return next_global_ref_loc;
+            } else if constexpr (std::is_same_v<plain_item_type, std::unique_ptr<ObjectBase<Value>>> && std::is_same_v<RecordOpt, FindKeyConstOpt>) {
+                // 3.2: special case - preload key strings like 'length'
+                const int16_t next_global_ref_const_id = m_consts.size();
+                Arg next_global_ref_loc {
+                    .n = next_global_ref_const_id,
+                    .tag = Location::constant,
+                    .is_str_literal = true,
+                    .from_closure = false,
+                };
+
+                m_consts.emplace_back(Value {m_heap.add_item(m_heap.get_next_id(), std::move(item))});
+                m_key_consts_map[symbol] = next_global_ref_loc;
+                m_heap.update_tenure_count();
 
                 return next_global_ref_loc;
             } else if constexpr (std::is_same_v<plain_item_type, std::string> && std::is_same_v<RecordOpt, FindCaptureOpt>) {
@@ -1105,7 +1118,7 @@ export namespace DerkJS {
                     }
                 } break;
                 case Location::key_str: {
-                    record_symbol(pre_name, std::move(std::get<Value>(pre_entity)), FindKeyConstOpt {});
+                    record_symbol(pre_name, std::move(std::get<std::unique_ptr<ObjectBase<Value>>>(pre_entity)), FindKeyConstOpt {});
                 } break;
                 default: break;
                 }
@@ -1114,6 +1127,7 @@ export namespace DerkJS {
             // 2.2: Add "length" for array accessor name.
             const int length_key_const_id = lookup_symbol("length", FindKeyConstOpt {})->n;
             m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::extra_length_key)] = m_consts.at(length_key_const_id).to_object();
+            std::println("length?? const:{}, {}", length_key_const_id, m_consts.at(length_key_const_id).to_string().value_or("??"));
 
             // 3. Prepare initial mapping of symbols & code buffer to build.
             m_local_maps.emplace_back(CodeGenScope {
