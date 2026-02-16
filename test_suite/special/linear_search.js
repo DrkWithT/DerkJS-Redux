@@ -4,7 +4,7 @@
  */
 
 function linearSearch(items, target) {
-    var end = items.len();
+    var end = items.length;
     var pos = 0;
     var ans = -1;
 

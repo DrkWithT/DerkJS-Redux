@@ -12,7 +12,7 @@ if (a.charCodeAt(0) == 111) {
     console.log("Unexpected a[0] char code.");
 }
 
-if (a.len() === 4) {
+if (a.length === 4) {
     ok = ok + 1;
 } else {
     console.log("Unexpected a.len(): not 4.");
