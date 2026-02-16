@@ -52,10 +52,27 @@ export namespace DerkJS {
 
             return &m_items[index];
         }
+
+        void resize_by_length(Value* length_value_p, int next_length) {
+            if (const int current_length = m_items.size(); next_length == current_length) {
+                ;
+            } else if (next_length > current_length) {
+                m_items.resize(next_length, Value {});
+                *length_value_p = Value {next_length};
+            } else {
+                m_items.resize(next_length);
+                *length_value_p = Value {next_length};
+            }
+        }
     public:
-        Array(ObjectBase<Value>* prototype_p) noexcept (std::is_nothrow_default_constructible_v<Value>)
+        Array(ObjectBase<Value>* prototype_p, const Value& length_key, const Value& initial_length_v) noexcept (std::is_nothrow_default_constructible_v<Value>)
         : m_own_properties {}, m_items {}, m_prototype {prototype_p}, m_flags {std::to_underlying(AttrMask::unused)} {
             m_prototype.update_parent_flags(m_flags);
+            m_own_properties.emplace_back(PropEntry<Value, Value> {
+                .key = length_key,
+                .item = initial_length_v,
+                .flags = m_flags
+            });
         }
 
         [[nodiscard]] auto items() noexcept -> std::vector<Value>& {
@@ -100,20 +117,21 @@ export namespace DerkJS {
 
         [[maybe_unused]] auto get_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
             if (key.is_prototype_key()) {
-                return PropertyDescriptor<Value> {&key, &m_prototype, m_flags};
+                return PropertyDescriptor<Value> {&key, &m_prototype, this, m_flags};
             } else if (key.get_tag() == ValueTag::num_i32) {
-                return PropertyDescriptor<Value> {&key, get_item(key.to_num_i32().value(), true), m_flags};
+                return PropertyDescriptor<Value> {&key, get_item(key.to_num_i32().value(), allow_filler), this, m_flags};
             } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
                 return prop.key == key;
             }); property_entry_it != m_own_properties.end()) {
-                return PropertyDescriptor<Value> {&key, &property_entry_it->item, m_flags};
+                return PropertyDescriptor<Value> {&key, &property_entry_it->item, this, static_cast<uint8_t>(m_flags & property_entry_it->flags)};
             } else if ((m_flags & std::to_underlying(AttrMask::writable)) && !m_prototype && allow_filler) {
                 return PropertyDescriptor<Value> {
                     &key,
                     &m_own_properties.emplace_back(
                         key, Value {},
-                        static_cast<uint8_t>(AttrMask::writable) | static_cast<uint8_t>(AttrMask::configurable)
+                        static_cast<uint8_t>(m_flags & std::to_underlying(AttrMask::unused))
                     ).item,
+                    this,
                     m_flags
                 };
             } else if (auto prototype_p = m_prototype.to_object(); prototype_p) {
@@ -145,6 +163,17 @@ export namespace DerkJS {
 
         [[maybe_unused]] auto del_property_value([[maybe_unused]] const Value& key) -> bool override {
             return false; // TODO
+        }
+
+        void update_on_accessor_mut(Value* accessor_p, const Value& value) override {
+            if ((m_flags & std::to_underlying(AttrMask::writable)) == 0) {
+                return;
+            }
+
+            if (value.to_string().value_or("") == "length") {
+                const int next_length = value.to_num_i32().value_or(0);
+                resize_by_length(accessor_p, std::min(0, next_length));
+            }
         }
 
         [[nodiscard]] auto call([[maybe_unused]] void* opaque_ctx_p, [[maybe_unused]] int argc, [[maybe_unused]] bool has_this_arg) -> bool override {

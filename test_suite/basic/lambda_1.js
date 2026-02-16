@@ -4,6 +4,5 @@ var ans = (function(a, b) {
     return foo(a, b);
 })(2, 21);
 
-console.log(ans);
-
-return 0;
+// Should be `true`
+console.log("PASS:", ans === 42);

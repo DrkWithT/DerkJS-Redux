@@ -74,7 +74,7 @@ export namespace DerkJS {
         [[nodiscard]] auto get_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
             /// NOTE: for now, I'll cheese this to get Object methods working: Just get / search the prototype.
             if (key.is_prototype_key()) {
-                return PropertyDescriptor<Value> {&key, &m_prototype, m_flags};
+                return PropertyDescriptor<Value> {&key, &m_prototype, this, m_flags};
             } else if (auto prototype_p = m_prototype.to_object(); prototype_p) {
                 return prototype_p->get_property_value(key, allow_filler);
             }
@@ -85,9 +85,9 @@ export namespace DerkJS {
         void freeze() noexcept override {
             m_flags = std::to_underlying(AttrMask::is_parent_frozen);
 
-            for (auto& entry : m_own_properties) {
-                entry.item.update_parent_flags(m_flags);
-            }
+            // for (auto& entry : m_own_properties) {
+            //     entry.item.update_parent_flags(m_flags);
+            // }
 
             m_prototype.update_parent_flags(m_flags);
 
@@ -106,6 +106,8 @@ export namespace DerkJS {
             // return m_own_properties.erase(m_own_properties.find(handle)) != m_own_properties.end();
             return false;
         }
+
+        void update_on_accessor_mut([[maybe_unused]] Value* accessor_p, [[maybe_unused]] const Value& value) override {}
 
         [[nodiscard]] auto call(void* opaque_ctx_p, int argc, [[maybe_unused]] bool has_this_arg) -> bool override {
             /// 1.1: Prepare the `opaque_ctx_p` argument, which MUST point to an `ExternVMCtx` and MUST NOT own the context.
@@ -133,7 +135,8 @@ export namespace DerkJS {
                 .capture_p = caller_capture_p,
                 /// NOTE: Put unused dud values for bytecode RBP, etc. because the native callee handles its own return.
                 .m_callee_sbp = -1,
-                .m_caller_sbp = -1
+                .m_caller_sbp = -1,
+                .m_flags = 0
             });
 
             // 2. Make native call
@@ -156,10 +159,26 @@ export namespace DerkJS {
             const int16_t caller_rsbp = vm_context_p->rsbp;
             vm_context_p->rsbp = callee_rsbp;
 
-            // 2. Make native call
+            // 2. Push dummy frame mostly to track ctor-call status.
+            vm_context_p->frames.emplace_back(ExternVMCtx::call_frame_type {
+                /// NOTE: Just put nullptr- the native callee will handle its own return of control back to the interpreter.
+                .m_caller_ret_ip = nullptr,
+                .this_p = nullptr,
+                .caller_addr = this,
+                .capture_p = nullptr,
+                /// NOTE: Put unused dud values for bytecode RBP, etc. because the native callee handles its own return.
+                .m_callee_sbp = -1,
+                .m_caller_sbp = -1,
+                /// NOTE: ctor call applies here.
+                .m_flags = std::to_underlying(CallFlags::is_ctor)
+            });
+
+            // 3. Make native call
             auto native_call_ok = m_native_ptr(vm_context_p, &m_own_properties, argc);
 
-            // 3. Restore caller stack state after native call
+            vm_context_p->frames.pop_back();
+
+            // 4. Restore caller stack state after native call
             vm_context_p->rsp = callee_rsbp;
             vm_context_p->rsbp = caller_rsbp;
             vm_context_p->rip_p++;
@@ -296,18 +315,19 @@ export namespace DerkJS {
 
         [[nodiscard]] auto get_property_value(const Value& key, bool allow_filler) -> PropertyDescriptor<Value> override {
             if (key.is_prototype_key()) {
-                return PropertyDescriptor<Value> {&key, &m_prototype, m_flags};
+                return PropertyDescriptor<Value> {&key, &m_prototype, this, m_flags};
             } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
                 return prop.key == key;
             }); property_entry_it != m_own_properties.end()) {
-                return PropertyDescriptor<Value> {&property_entry_it->key, &property_entry_it->item, m_flags};
+                return PropertyDescriptor<Value> {&property_entry_it->key, &property_entry_it->item, this, static_cast<uint8_t>(m_flags & property_entry_it->flags)};
             } else if ((m_flags & std::to_underlying(AttrMask::writable)) && !m_prototype && allow_filler) {
                 return PropertyDescriptor<Value> {
                     &key,
                     &m_own_properties.emplace_back(
                         key, Value {},
-                        static_cast<uint8_t>(AttrMask::writable) | static_cast<uint8_t>(AttrMask::configurable)
+                        static_cast<uint8_t>(m_flags & std::to_underlying(AttrMask::unused))
                     ).item,
+                    this,
                     m_flags
                 };
             } else if (auto prototype_p = m_prototype.to_object(); prototype_p) {
@@ -320,9 +340,9 @@ export namespace DerkJS {
         void freeze() noexcept override {
             m_flags = std::to_underlying(AttrMask::is_parent_frozen);
 
-            for (auto& entry : m_own_properties) {
-                entry.item.update_parent_flags(m_flags);
-            }
+            // for (auto& entry : m_own_properties) {
+            //     entry.item.update_parent_flags(m_flags);
+            // }
 
             m_prototype.update_parent_flags(m_flags);
 
@@ -340,6 +360,8 @@ export namespace DerkJS {
         [[nodiscard]] auto del_property_value([[maybe_unused]] const Value& key) -> bool override {
             return false;
         }
+
+        void update_on_accessor_mut([[maybe_unused]] Value* accessor_p, [[maybe_unused]] const Value& value) override {}
 
         [[maybe_unused]] auto call(void* opaque_ctx_p, int argc, bool has_this_arg) -> bool override {
             auto vm_context_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
@@ -371,7 +393,8 @@ export namespace DerkJS {
                 .caller_addr = this,
                 .capture_p = capture_obj_p,
                 .m_callee_sbp = new_callee_sbp,
-                .m_caller_sbp = old_caller_sbp
+                .m_caller_sbp = old_caller_sbp,
+                .m_flags = 0
             });
 
             return true;
@@ -385,6 +408,10 @@ export namespace DerkJS {
                 vm_context_p->heap.get_next_id(),
                 std::make_unique<Object>(m_prototype.to_object())
             );
+
+            if (!this_arg_p) {
+                return false;
+            }
 
             // 1.2: Only allocate a capture Object for different callee vs. caller Functions.
             ObjectBase<Value>* caller_capture_p = vm_context_p->frames.back().capture_p;
@@ -404,10 +431,12 @@ export namespace DerkJS {
                 .caller_addr = this,
                 .capture_p = capture_obj_p,
                 .m_callee_sbp = new_callee_sbp,
-                .m_caller_sbp = old_caller_sbp
+                .m_caller_sbp = old_caller_sbp,
+                /// NOTE: ctor call applies here.
+                .m_flags = std::to_underlying(CallFlags::is_ctor)
             });
 
-            return this_arg_p != nullptr;
+            return true;
         }
 
         /// For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!

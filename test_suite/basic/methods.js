@@ -12,6 +12,4 @@ var foo = {
     }
 };
 
-console.log(foo.next());
-
-return 0;
+console.log("PASS:", foo.next() === 1);

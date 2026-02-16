@@ -60,6 +60,7 @@ export namespace DerkJS::Core {
         std::vector<std::string> m_src_map;
         std::string_view m_app_name;
         std::string_view m_app_author;
+        ObjectBase<Value>* m_length_str_length_key_p;
         int m_version_major;
         int m_version_minor;
         int m_version_patch;
@@ -102,61 +103,10 @@ export namespace DerkJS::Core {
 
     public:
         Driver(DriverInfo info, int max_heap_object_count)
-        : m_js_lexicals {}, m_src_map {}, m_app_name {info.name}, m_app_author {info.author}, m_version_major {info.version_major}, m_version_minor {info.version_minor}, m_version_patch {info.version_patch}, m_max_heap_object_n {max_heap_object_count}, m_allow_bytecode_dump {false} {}
+        : m_js_lexicals {}, m_src_map {}, m_app_name {info.name}, m_app_author {info.author}, m_length_str_length_key_p {}, m_version_major {info.version_major}, m_version_minor {info.version_minor}, m_version_patch {info.version_patch}, m_max_heap_object_n {max_heap_object_count}, m_allow_bytecode_dump {false} {}
 
         void add_js_lexical(std::string_view lexeme, TokenTag tag) {
             m_js_lexicals[lexeme] = tag;
-        }
-
-        template <std::size_t N>
-        [[nodiscard]] auto add_anonymous_native_object(ObjectBase<Value>* string_proto, std::array<NativePropertyStub, N> prop_list) -> ObjectBase<Value>* {
-            auto anonymous_object_p = std::make_unique<Object>(nullptr);
-
-            for (auto& [stub_name, item] : prop_list) {
-                auto prop_name_p = std::make_unique<DynamicString>(string_proto, stub_name);
-                auto prop_name_value = Value {prop_name_p.get()};
-
-                m_preloads.emplace_back(PreloadItem {
-                    .lexeme = stub_name,
-                    .entity = prop_name_value,
-                    .location = Location::constant
-                });
-
-                m_preloads.emplace_back(PreloadItem {
-                    .lexeme = "",
-                    .entity = std::move(prop_name_p),
-                    .location = Location::heap_obj
-                });
-
-                if (auto item_as_primitive_p = std::get_if<Value>(&item); item_as_primitive_p) {
-                    if (!anonymous_object_p->set_property_value(prop_name_value, *item_as_primitive_p)) {
-                        return nullptr;
-                    }
-                } else {
-                    auto item_as_object_p = std::get_if<std::unique_ptr<ObjectBase<Value>>>(&item);
-
-                    if (!anonymous_object_p->set_property_value(prop_name_value, Value {item_as_object_p->get()})) {
-                        return nullptr;
-                    } else {
-                        /// NOTE: Here, prepare an anonymous JS Object value to be inserted into the heap, likely referenced by this object.
-                        m_preloads.emplace_back(PreloadItem {
-                            .lexeme = "",
-                            .entity = std::move(*item_as_object_p),
-                            .location = Location::heap_obj
-                        });
-                    }
-                }
-            }
-
-            auto anonymous_object_raw_p = anonymous_object_p.get();
-
-            m_preloads.emplace_back(PreloadItem {
-                .lexeme = "",
-                .entity = std::move(anonymous_object_p),
-                .location = Location::heap_obj
-            });
-
-            return anonymous_object_raw_p;
         }
 
         template <typename ObjectSubType, typename ... CtorArgs> requires (std::is_base_of_v<ObjectBase<Value>, ObjectSubType> && std::is_constructible_v<ObjectSubType, CtorArgs...>)
@@ -186,7 +136,7 @@ export namespace DerkJS::Core {
             auto object_raw_p = object_p.get();
 
             for (auto& [stub_name, item] : prop_list) {
-                auto prop_name_p = std::make_unique<DynamicString>(string_proto, stub_name);
+                auto prop_name_p = std::make_unique<DynamicString>(string_proto, Value {m_length_str_length_key_p}, stub_name);
                 auto prop_name_value = Value {prop_name_p.get()};
 
                 m_preloads.emplace_back(PreloadItem {
@@ -238,14 +188,18 @@ export namespace DerkJS::Core {
 
         template <std::size_t N>
         [[nodiscard]] auto setup_string_prototype(std::array<NativePropertyStub, N> prop_list) -> ObjectBase<Value>* {
-            // 1. Create dud String.prototype & its wrapping String.
+            // 1.1: hack in "length" here as a special key that could be used for strings (but also arrays).
+            auto length_str_length_key_p = std::make_unique<DynamicString>(nullptr, Value {nullptr}, std::string {"length"}); // the property name value string itself- only to check against!
+            m_length_str_length_key_p = length_str_length_key_p.get();
+            length_str_length_key_p->patch_length_property(Value {m_length_str_length_key_p}, 7); // backpatch "length" string literal with length property key-value
+
+            // 1.2: Create dud String.prototype.
             auto str_prototype_object_p = std::make_unique<Object>(nullptr);
-            auto str_object_p = std::make_unique<DynamicString>(str_prototype_object_p.get(), std::string {});
-            ObjectBase<Value>* str_object_raw_p = str_object_p.get();
+            auto str_prototype_raw_p = str_prototype_object_p.get();
 
             // 2. Fill String.prototype & record string keys to patch prototype of...
             for (auto& [stub_name, item] : prop_list) {
-                auto prop_name_p = std::make_unique<DynamicString>(str_prototype_object_p.get(), stub_name);
+                auto prop_name_p = std::make_unique<DynamicString>(str_prototype_object_p.get(), Value {m_length_str_length_key_p}, stub_name);
                 auto prop_name_value = Value {prop_name_p.get()};
 
                 m_preloads.emplace_back(PreloadItem {
@@ -281,24 +235,18 @@ export namespace DerkJS::Core {
             }
 
             m_preloads.emplace_back(PreloadItem {
+                .lexeme = "length",
+                .entity = std::move(length_str_length_key_p),
+                .location = Location::key_str
+            });
+
+            m_preloads.emplace_back(PreloadItem {
                 .lexeme = "String::prototype",
                 .entity = std::move(str_prototype_object_p),
                 .location = Location::heap_obj
             });
 
-            m_preloads.emplace_back(PreloadItem {
-                .lexeme = "",
-                .entity = std::move(str_object_p),
-                .location = Location::heap_obj
-            });
-
-            m_preloads.emplace_back(PreloadItem {
-                .lexeme = "String",
-                .entity = Value {str_object_raw_p},
-                .location = Location::constant
-            });
-
-            return str_object_raw_p;
+            return str_prototype_raw_p;
         }
 
         template <std::size_t N>
@@ -307,7 +255,7 @@ export namespace DerkJS::Core {
             auto proto_raw_p = proto_object_p.get();
 
             for (auto& [stub_name, item] : prop_list) {
-                auto prop_name_p = std::make_unique<DynamicString>(string_proto, stub_name);
+                auto prop_name_p = std::make_unique<DynamicString>(string_proto, Value {m_length_str_length_key_p}, stub_name);
                 auto prop_name_value = Value {prop_name_p.get()};
 
                 m_preloads.emplace_back(PreloadItem {
@@ -394,9 +342,7 @@ export namespace DerkJS::Core {
                 return 1;
             case VMErrcode::ok:
             default:
-                std::println("DerkJS [Result]: \x1b[1;32m{}\x1b[0m\n\nFinished in \x1b[1;33m{}\x1b[0m", vm.peek_final_result().to_string().value(), derkjs_running_time);
-
-                return vm.peek_final_result().to_num_i32().value_or(1);
+                return 0;
             }
         }
     };

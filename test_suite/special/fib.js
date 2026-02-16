@@ -8,6 +8,4 @@ function fib(n) {
 
 var ans = fib(30);
 
-console.log(ans);
-
-return 0;
+console.log("PASS:", ans === 832040);

@@ -25,7 +25,7 @@ var Lexer = {
     init: function(txt) {
         this.src = txt;
         this.pos = 0;
-        this.end = txt.len();
+        this.end = txt.length;
         return undefined;
     },
     matchDigit: function(c_code) {
@@ -258,5 +258,3 @@ while (true) {
         console.log("ans:", answer);
     }
 }
-
-return 0;

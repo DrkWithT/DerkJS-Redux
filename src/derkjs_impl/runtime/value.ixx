@@ -88,6 +88,11 @@ export namespace DerkJS {
             m_data.d = d;
         }
 
+        explicit constexpr Value([[maybe_unused]] decltype(nullptr) nullptr_v) noexcept
+        : m_data {}, m_tag {ValueTag::object}, m_parent_flags {std::to_underlying(AttrMask::unused)} {
+            m_data.obj_p = nullptr;
+        }
+
         constexpr Value(ObjectBase<Value>* object_p, uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
         : m_data {}, m_tag {ValueTag::object}, m_parent_flags {parent_flags} {
             m_data.obj_p = object_p;
@@ -100,6 +105,14 @@ export namespace DerkJS {
 
         [[nodiscard]] constexpr auto get_tag() const noexcept -> ValueTag {
             return m_tag;
+        }
+
+        [[nodiscard]] constexpr auto is_valid_object_ref() const noexcept -> bool {
+            if (m_tag == ValueTag::object) {
+                return m_data.obj_p != nullptr;
+            }
+
+            return false;
         }
 
         [[nodiscard]] constexpr auto get_typename() const noexcept -> std::string_view {
@@ -600,18 +613,19 @@ export namespace DerkJS {
 
         [[nodiscard]] auto get_property_value(const Value& key, bool allow_filler) -> PropertyDescriptor<Value> override {
             if (key.is_prototype_key()) {
-                return PropertyDescriptor<Value> {&key, &m_prototype, m_flags};
+                return PropertyDescriptor<Value> {&key, &m_prototype, this, m_flags};
             } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
                 return prop.key == key;
             }); property_entry_it != m_own_properties.end()) {
-                return PropertyDescriptor<Value> {&key, &property_entry_it->item, m_flags};
+                return PropertyDescriptor<Value> {&key, &property_entry_it->item, this, static_cast<uint8_t>(m_flags & property_entry_it->flags)};
             } else if ((m_flags & std::to_underlying(AttrMask::writable)) && !m_prototype && allow_filler) {
                 return PropertyDescriptor<Value> {
                     &key,
                     &m_own_properties.emplace_back(
                         key, Value {},
-                        static_cast<uint8_t>(AttrMask::writable) | static_cast<uint8_t>(AttrMask::configurable)
+                        static_cast<uint8_t>(m_flags & std::to_underlying(AttrMask::unused))
                     ).item,
+                    this,
                     m_flags
                 };
             } else if (auto prototype_p = m_prototype.to_object(); prototype_p) {
@@ -644,6 +658,8 @@ export namespace DerkJS {
         [[maybe_unused]] auto del_property_value([[maybe_unused]] const Value& key) -> bool override {
             return false; // TODO
         }
+
+        void update_on_accessor_mut([[maybe_unused]] Value* accessor_value_p, [[maybe_unused]] const Value& value) override {}
 
         [[nodiscard]] auto call([[maybe_unused]] void* opaque_ctx_p, [[maybe_unused]] int argc, [[maybe_unused]] bool has_this_arg) -> bool override {
             return false;

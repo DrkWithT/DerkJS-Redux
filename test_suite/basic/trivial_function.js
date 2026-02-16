@@ -6,6 +6,4 @@ function mid(a, b) {
 
 var ans = mid(10, 30);
 
-console.log(ans);
-
-return 0;
+console.log("PASS:", ans === 20);

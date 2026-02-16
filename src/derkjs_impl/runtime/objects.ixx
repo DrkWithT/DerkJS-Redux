@@ -30,14 +30,20 @@ export namespace DerkJS {
     using PropPool = std::vector<PropEntry<K, V>>;
 
     enum class AttrMask : uint8_t {
-        dead = 0x00,
+        dead = 0xff,
+        immutable = 0x00,
         writable = 0b00000001,
         configurable = 0b00000010,
         enumerable = 0b00000100,
         is_data_desc = 0b00001000,
         is_parent_frozen = 0b00010000,
+        is_accessor = 0b10000000,
         unused = 0b00000011
     };
+
+    /// NOTE: forward declaration of JS object interface.
+    template <typename V>
+    class ObjectBase;
 
     /**
      * @brief Implementation of the data JS property descriptor needed for proper member access semantics as per https://262.ecma-international.org/5.1/#sec-8.10.
@@ -49,9 +55,10 @@ export namespace DerkJS {
     private:
         static constexpr auto dud_item = V {};
 
-        const V* key_p; // Views the PropPool entry's key member.
-        V* item_p;      // Refers to the property value.
-        uint8_t flags;  // By the ES5 spec, this determines how properties allow some operations, but they're taken from the parent object if so.
+        const V* key_p;         // Views the PropPool entry's key member.
+        V* item_p;              // Refers to the property value.
+        ObjectBase<V>* self_p;  // Refers to the parent object.
+        uint8_t flags;          // By the ES5 spec, this determines how properties allow some operations, but they're taken from the parent object if so.
 
         [[nodiscard]] constexpr auto has_item(this auto&& self) noexcept -> bool {
             return self.flags != std::to_underlying(AttrMask::dead);
@@ -62,8 +69,8 @@ export namespace DerkJS {
         explicit constexpr PropertyDescriptor() noexcept
         : key_p {nullptr}, item_p {nullptr}, flags {std::to_underlying(AttrMask::dead)} {}
 
-        constexpr PropertyDescriptor(const V* key_p_, V* item_p_, uint8_t parent_object_flags) noexcept
-        : key_p {key_p_}, item_p {item_p_}, flags {parent_object_flags} {
+        constexpr PropertyDescriptor(const V* key_p_, V* item_p_, ObjectBase<V>* self_p_, uint8_t parent_object_flags) noexcept
+        : key_p {key_p_}, item_p {item_p_}, self_p {self_p_}, flags {parent_object_flags} {
             if (!item_p) {
                 flags = std::to_underlying(AttrMask::dead);
             }
@@ -97,7 +104,11 @@ export namespace DerkJS {
          */
         [[nodiscard]] auto operator=(const V& value) noexcept -> PropertyDescriptor& {
             if (get_flag<AttrMask::writable>()) {
-                *item_p = value;
+                if (get_flag<AttrMask::is_accessor>()) {
+                    self_p->update_on_accessor_mut(item_p, value);
+                } else {
+                    *item_p = value;
+                }
             }
 
             return *this;
@@ -106,7 +117,7 @@ export namespace DerkJS {
         template <AttrMask M>
         [[nodiscard]] constexpr auto get_flag() const noexcept -> bool {
             if constexpr (M == AttrMask::writable || M == AttrMask::unused) {
-                return flags & static_cast<uint8_t>(M);
+                return (flags & static_cast<uint8_t>(M)) == 1;
             } else if constexpr (M == AttrMask::configurable) {
                 return (flags & static_cast<uint8_t>(M)) >> 1;
             } else if constexpr (M == AttrMask::enumerable) {
@@ -115,6 +126,8 @@ export namespace DerkJS {
                 return (flags & static_cast<uint8_t>(M)) >> 3;
             } else if constexpr (M == AttrMask::is_parent_frozen) {
                 return (flags & static_cast<uint8_t>(M)) >> 4;
+            } else if constexpr (M == AttrMask::is_accessor) {
+                return ((flags & static_cast<uint8_t>(M)) >> 7) && self_p;
             }
 
             return flags == 0x00;
@@ -168,6 +181,7 @@ export namespace DerkJS {
         object,
         array,
         function,
+        extra_length_key, // Not a prototype, but I have to make "length" easily accessible for array creations.
         last
     };
 
@@ -198,6 +212,7 @@ export namespace DerkJS {
 
         virtual auto set_property_value(const V& key, const V& value) -> V* = 0;
         virtual auto del_property_value(const V& key) -> bool = 0;
+        virtual void update_on_accessor_mut(V* accessor_value_p, const V& value) = 0;
 
         virtual auto call(void* opaque_ctx_p, int argc, bool has_this_arg) -> bool = 0;
         virtual auto call_as_ctor(void* opaque_ctx_p, int argc) -> bool = 0;
@@ -224,7 +239,6 @@ export namespace DerkJS {
         virtual ~StringBase() = default;
 
         virtual auto is_empty() const noexcept -> bool = 0;
-        virtual auto get_slice(int start, int length) -> std::unique_ptr<StringBase> = 0;
         virtual auto get_length() const noexcept -> int = 0;
         virtual void append_front(const std::string& s) = 0;
         virtual void append_back(const std::string& s) = 0;

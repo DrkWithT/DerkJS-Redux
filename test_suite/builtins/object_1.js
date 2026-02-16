@@ -10,6 +10,4 @@ var num_1 = {
 num_1.x = 2;
 
 /* Should be 5 */
-console.log(num_1.x + num_1.x + 1);
-
-return 0;
+console.log("PASS:", num_1.x + num_1.x + 1 === 5);
