@@ -73,6 +73,7 @@ export namespace DerkJS {
         constant,
         heap_obj, // -2: this, -3: prototype
         local,
+        key_str,
         end,
     };
 
