@@ -51,7 +51,12 @@
     - Add more methods from the ES5 specification.
  24. ~~Add `typeof` and `void` operators.~~
  25. ~~Add implicit `ret` opcode on omitted returns- it yields a `this` reference on ctor-mode calls, discarding any regular expr result.~~
- 26. Add more Array methods: `lastIndexOf(arg), join(delim), concat(args...), forEach(arr, thisArg), filter(predicateFn, thisArg), map(callabackFn, thisArg)`
-    - WIP!
- 27. Add prefix increment operator.
- 28. Add `+=, -=, *=, /=, %=` operators.
+ 26. ~~Add `array.length` with side-effects!~~
+ 27. Refactor:
+    - Improve built-in object registration: `template <NativeKind K> class BuiltInBuilder {}`:
+      - Support adding global callables, anonymous prototypes, and native objects.
+      - Methods: `auto add_property(const std::string& name, NativePropertyStub stub) -> bool`, `auto set_frozen(bool b) -> void`, `[[nodiscard]] auto operator()() -> ObjectBase<Value>*`
+ 28. Add Array methods: `lastIndexOf(arg), join(delim), concat(args...), forEach(arr, thisArg), filter(predicateFn, thisArg), map(callabackFn, thisArg)`
+ 29. Add Object methods: `hasOwnProperty(key), isPrototypeOf(obj)`
+ 30. Add prefix increment operator.
+ 31. Add `+=, -=, *=, /=, %=` operators.

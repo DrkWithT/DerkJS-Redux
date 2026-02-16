@@ -303,6 +303,7 @@ namespace DerkJS {
 
         if (auto js_typename_p = ctx.heap.add_item(ctx.heap.get_next_id(), DynamicString {
             ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
+            Value {ctx.base_protos[static_cast<unsigned int>(BasePrototypeID::extra_length_key)]},
             temp_value_ref.get_typename()
         })) {
             // For `typeof` result: typename string.
@@ -336,17 +337,24 @@ namespace DerkJS {
     inline void op_make_arr(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.gc(ctx.heap, ctx.stack, ctx.rsp);
 
-        auto array_ref_p = ctx.heap.add_item(ctx.heap.get_next_id(), new Array {
-            ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::array))
-        });
+        auto array_p = new Array {
+            ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::array)),
+            Value {
+                ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))
+            },
+            Value {a0}
+        };
         
-        if (array_ref_p) {
+        if (array_p) {
             for (int next_array_item_pos = ctx.rsp - a0 + 1, end_next_array_items = ctx.rsp; next_array_item_pos <= end_next_array_items; next_array_item_pos++) {
-                array_ref_p->get_seq_items()->emplace_back(ctx.stack.at(next_array_item_pos));
+                array_p->items().emplace_back(ctx.stack.at(next_array_item_pos));
             }
 
             ctx.rsp -= (a0 - 1);
-            ctx.stack[ctx.rsp] = Value {array_ref_p};
+            // Manage raw array_p ptr with heap... An internal slot with a unique_ptr will wrap it.
+            ctx.stack[ctx.rsp] = Value {
+                ctx.heap.add_item(ctx.heap.get_next_id(), array_p)
+            };
             ctx.rip_p++;
         } else {
             ctx.status = VMErrcode::bad_heap_alloc;
@@ -423,7 +431,10 @@ namespace DerkJS {
         ctx.gc(ctx.heap, ctx.stack, ctx.rsp);
 
         /// NOTE: For making TCO possible, just allocate the new string on the heap via raw ptr to avoid non-trivial destructor problems. The heap will manage that anyways.
-        auto result_p = new DynamicString {ctx.stack[ctx.rsp].to_object()->get_prototype(), ctx.stack[ctx.rsp].to_string().value()};
+        auto result_p = new DynamicString {
+            ctx.stack[ctx.rsp].to_object()->get_prototype(),
+            Value {ctx.base_protos[static_cast<unsigned int>(BasePrototypeID::extra_length_key)]},
+            ctx.stack[ctx.rsp].to_string().value()};
         result_p->append_back(ctx.stack[ctx.rsp - 1].to_string().value());
 
         if (auto temp_str_p = ctx.heap.add_item(ctx.heap.get_next_id(), result_p); !temp_str_p) {
