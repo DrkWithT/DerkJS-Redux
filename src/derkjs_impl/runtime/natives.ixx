@@ -54,23 +54,6 @@ export namespace DerkJS {
         return true;
     }
 
-    [[nodiscard]] auto native_str_len(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
-        const int passed_rsbp = ctx->rsbp;
-        const auto str_this_p = dynamic_cast<const StringBase*>(ctx->stack[passed_rsbp + argc].to_object());
-
-        if (!str_this_p) {
-            std::println(std::cerr, "Cannot get string length of non-string.");
-            ctx->stack[passed_rsbp] = Value {JSNaNOpt {}};
-            return false;
-        }
-
-        const int str_len_i32 = str_this_p->as_str_view().length();
-
-        ctx->stack[passed_rsbp] = Value {str_len_i32};
-
-        return true;
-    }
-
     [[nodiscard]] auto native_str_substr(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
         auto str_as_obj_p = ctx->stack[passed_rsbp + argc].to_object();
@@ -80,12 +63,15 @@ export namespace DerkJS {
 
         std::string_view chars_view = str_this_p->as_str_view().substr(substr_begin, substr_len);
         std::string temp_substr;
+        temp_substr.append_range(chars_view);
 
-        for (auto c : chars_view) {
-            temp_substr += c;
-        }
-
-        if (auto created_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), DynamicString {str_as_obj_p->get_prototype(), std::move(temp_substr)}); created_str_p) {
+        if (auto created_str_p = ctx->heap.add_item(
+            ctx->heap.get_next_id(),
+            DynamicString {
+                str_as_obj_p->get_prototype(),
+                Value {ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))},
+                temp_substr}
+            ); created_str_p) {
             ctx->stack[passed_rsbp] = Value {created_str_p};
             return true;
         } else {
@@ -125,7 +111,14 @@ export namespace DerkJS {
         std::string temp_line;
         std::getline(std::cin, temp_line);
 
-        ObjectBase<Value>* line_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), DynamicString { prompt_str_prototype, std::move(temp_line)});
+        ObjectBase<Value>* line_str_p = ctx->heap.add_item(
+            ctx->heap.get_next_id(),
+            DynamicString {
+                prompt_str_prototype,
+                Value {ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))},
+                temp_line
+            }
+        );
 
         if (!line_str_p) {
             std::println(std::cerr, "Failed to allocate input string on the heap.");
@@ -158,10 +151,19 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_array_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
+        int maybe_fill_count = ctx->stack[passed_rsbp].to_num_i32().value_or(0);
+
+        if (argc == 0) {
+            maybe_fill_count = 0;
+        } else if (argc == 1) {
+            maybe_fill_count = std::abs(maybe_fill_count);
+        }
 
         // 1. Create blank JS array with the appropriate prototype
         auto temp_array = std::make_unique<Array>(
-            ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::array))
+            ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::array)),
+            Value {ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))},
+            Value {(argc > 1) ? argc : maybe_fill_count}
         );
 
         // 2. Fill with N temporary arguments OR fill with N undefined values.
@@ -170,9 +172,7 @@ export namespace DerkJS {
                 temp_array->items().emplace_back(ctx->stack[passed_rsbp + temp_item_offset]);
             }
         } else if (argc == 1) {
-            const int fill_count = ctx->stack[passed_rsbp].to_num_i32().value_or(0);
-
-            for (int temp_item_count = 0; temp_item_count < fill_count; temp_item_count++) {
+            for (int temp_item_count = 0; temp_item_count < maybe_fill_count; temp_item_count++) {
                 temp_array->items().emplace_back(Value {});
             }
         } else {
@@ -302,17 +302,6 @@ export namespace DerkJS {
         return true;
     }
 
-    [[nodiscard]] auto native_array_len(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
-        const int passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<const Array*>(ctx->stack[passed_rsbp + argc].to_object());
-
-        const int array_len_i32 = array_this_p->items().size();
-
-        ctx->stack[passed_rsbp] = Value {array_len_i32};
-
-        return true;
-    }
-
     [[nodiscard]] auto native_array_reverse(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
         auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object());
@@ -329,7 +318,11 @@ export namespace DerkJS {
     [[nodiscard]] auto native_array_join(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
         auto array_this_p = dynamic_cast<const Array*>(ctx->stack[passed_rsbp + argc].to_object());
-        auto temp_str = std::make_unique<DynamicString>(ctx->base_protos[static_cast<unsigned int>(BasePrototypeID::str)], std::string_view {});
+        auto temp_str = std::make_unique<DynamicString>(
+            ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
+            Value {ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))},
+            std::string_view {}
+        );
 
         if (array_this_p->items().empty()) {
             auto empty_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::move(temp_str));

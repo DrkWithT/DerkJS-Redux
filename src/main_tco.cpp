@@ -55,10 +55,6 @@ int main(int argc, char* argv[]) {
             .item = std::make_unique<NativeFunction>(DerkJS::native_str_charcode_at, nullptr)
         },
         Core::NativePropertyStub {
-            .name_str = "len",
-            .item = std::make_unique<NativeFunction>(DerkJS::native_str_len, nullptr)
-        },
-        Core::NativePropertyStub {
             .name_str = "substr",
             .item = std::make_unique<NativeFunction>(DerkJS::native_str_substr, nullptr)
         }
@@ -117,10 +113,6 @@ int main(int argc, char* argv[]) {
         Core::NativePropertyStub {
             .name_str = "reverse",
             .item = std::make_unique<NativeFunction>(DerkJS::native_array_reverse, nullptr)
-        },
-        Core::NativePropertyStub {
-            .name_str = "len",
-            .item = std::make_unique<NativeFunction>(DerkJS::native_array_len, nullptr)
         }
     };
 
@@ -180,12 +172,6 @@ int main(int argc, char* argv[]) {
     driver.add_js_lexical("+=", TokenTag::symbol_plus_assign);
     driver.add_js_lexical("-=", TokenTag::symbol_minus_assign);
 
-    driver.add_native_global<NativeFunction>(
-        "parseInt",
-        DerkJS::native_parse_int,
-        nullptr
-    );
-
     auto string_prototype_p = driver.setup_string_prototype(std::to_array(std::move(str_props)));
 
     if (!string_prototype_p) {
@@ -194,6 +180,12 @@ int main(int argc, char* argv[]) {
     }
 
     string_prototype_p->freeze();
+
+    driver.add_native_global<NativeFunction>(
+        "parseInt",
+        DerkJS::native_parse_int,
+        nullptr
+    );
 
     driver.add_native_object<Object>(
         string_prototype_p,
