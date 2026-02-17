@@ -377,7 +377,8 @@ export namespace DerkJS {
                     return record_symbol(atom_lexeme, Value {std::stod(atom_lexeme)}, FindGlobalConstsOpt {});
                 case TokenTag::literal_string: {
                     m_has_string_ops = true;
-                    return record_symbol(atom_lexeme, atom_lexeme, FindGlobalConstsOpt {});
+                    // Map '"abc"' -> "abc"
+                    return record_symbol(atom_lexeme, atom_lexeme.substr(1, atom_lexeme.length() - 2), FindGlobalConstsOpt {});
                 }
                 case TokenTag::keyword_prototype: {
                     m_has_string_ops = false;

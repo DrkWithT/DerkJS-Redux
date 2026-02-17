@@ -175,13 +175,14 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto lex_between(const std::string& source, TokenTag tag, char delim) noexcept -> Token {
-            update_source_location(source.at(m_pos)); // skip leading quote
-
             const auto temp_start = m_pos;
             auto temp_length = 0;
             const auto temp_line = m_line;
             const auto temp_column = m_column;
             bool closed = false;
+            
+            update_source_location(source.at(m_pos)); // skip leading quote
+            ++temp_length;
 
             while (!at_eof()) {
                 if (const auto c = source.at(m_pos); c != delim) {
@@ -189,6 +190,7 @@ export namespace DerkJS {
                     ++temp_length;
                 } else {
                     update_source_location(c);
+                    ++temp_length;
                     closed = true;
                     break;
                 }
