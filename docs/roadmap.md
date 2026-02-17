@@ -52,8 +52,8 @@
  24. ~~Add `typeof` and `void` operators.~~
  25. ~~Add implicit `ret` opcode on omitted returns- it yields a `this` reference on ctor-mode calls, discarding any regular expr result.~~
  26. ~~Add `array.length` with side-effects!~~
- 27. Make `String` a constructor function.
- 28. Add Array methods: `lastIndexOf(arg), join(delim), concat(args...), forEach(arr, thisArg), filter(predicateFn, thisArg), map(callabackFn, thisArg)`
+ 27. ~~Make `String` a constructor function & add some methods.~~
+ 28. Add Array methods: `forEach(arr, thisArg), filter(predicateFn, thisArg), map(callabackFn, thisArg), concat(args...)`
  29. Add Object methods: `hasOwnProperty(key), isPrototypeOf(obj)`
  30. Add prefix increment operator.
  31. Add `+=, -=, *=, /=, %=` operators.

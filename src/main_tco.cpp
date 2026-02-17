@@ -1,4 +1,5 @@
 #include <string>
+#include <string_view>
 #include <array>
 #include <print>
 #include <iostream>
@@ -7,6 +8,9 @@ import derkjs_impl;
 
 constexpr std::size_t derkjs_gc_threshold = 144000; // ~ 2K heap objects
 constexpr int derkjs_heap_count = 4096;
+constexpr std::string_view fancy_name = " _              __\n"
+                                        "| \\ _   _|    |(_\n"
+                                        "|_/(/_ | |< \\_|__)\n";
 
 int main(int argc, char* argv[]) {
     using namespace DerkJS;
@@ -18,11 +22,11 @@ int main(int argc, char* argv[]) {
 
     Core::Driver driver {
         Core::DriverInfo {
-            .name = "DerkJS",
+            .name = fancy_name,
             .author = "DrkWithT (GitHub)",
             .version_major = 0,
             .version_minor = 4,
-            .version_patch = 0
+            .version_patch = 1
         },
         derkjs_heap_count // increase object count limit for VM if needed
     };
@@ -35,7 +39,7 @@ int main(int argc, char* argv[]) {
         return 0;
     } else if (arg_1 == "-v") {
         const auto& [app_name, author_name, major, minor, patch] = driver.get_info();
-        std::println("{} v{}.{}.{}\nBy: {}", app_name, major, minor, patch, author_name);
+        std::println("\x1b[1;93m{}\x1b[0m\nv{}.{}.{}\tBy: {}", app_name, major, minor, patch, author_name);
         return 0;
     } else if (arg_1 == "-d") {
         source_path = argv[2];
@@ -49,7 +53,10 @@ int main(int argc, char* argv[]) {
 
     /// String native methods
     Core::NativePropertyStub str_props[] {
-        /// TODO: implement String "constructor".
+        Core::NativePropertyStub {
+            .name_str = "constructor",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_str_ctor, nullptr),
+        },
         Core::NativePropertyStub {
             .name_str = "charCodeAt",
             .item = std::make_unique<NativeFunction>(DerkJS::native_str_charcode_at, nullptr)
@@ -57,6 +64,14 @@ int main(int argc, char* argv[]) {
         Core::NativePropertyStub {
             .name_str = "substr",
             .item = std::make_unique<NativeFunction>(DerkJS::native_str_substr, nullptr)
+        },
+        Core::NativePropertyStub {
+            .name_str = "substring",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_str_substring, nullptr)
+        },
+        Core::NativePropertyStub {
+            .name_str = "trim",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_str_trim, nullptr)
         }
     };
 
@@ -180,6 +195,12 @@ int main(int argc, char* argv[]) {
     }
 
     string_prototype_p->freeze();
+
+    driver.add_native_global<NativeFunction>(
+        "String",
+        DerkJS::native_str_ctor,
+        string_prototype_p
+    );
 
     driver.add_native_global<NativeFunction>(
         "parseInt",

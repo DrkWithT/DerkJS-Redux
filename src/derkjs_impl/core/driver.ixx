@@ -14,7 +14,6 @@ module;
 #include <iostream>
 #include <sstream>
 #include <fstream>
-#include <chrono>
 
 export module core.driver;
 
@@ -328,9 +327,7 @@ export namespace DerkJS::Core {
             auto& prgm_ref = prgm.value();
             DerkJS::VM vm {prgm_ref, default_stack_size, default_call_depth_limit, gc_threshold};
 
-            auto derkjs_start_time = std::chrono::steady_clock::now();
             vm();
-            auto derkjs_running_time = std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::steady_clock::now() - derkjs_start_time);
 
             switch (const auto vm_status = vm.peek_status(); vm_status) {
             case VMErrcode::pending:
