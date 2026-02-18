@@ -147,6 +147,8 @@ int main(int argc, char* argv[]) {
         }
     };
 
+    /// 2. Register keywords, operators, etc. for parser's lexer. This makes the lexer's configuration flexible. ///
+
     driver.add_js_lexical("var", TokenTag::keyword_var);
     driver.add_js_lexical("if", TokenTag::keyword_if);
     driver.add_js_lexical("else", TokenTag::keyword_else);
@@ -186,6 +188,29 @@ int main(int argc, char* argv[]) {
     driver.add_js_lexical("/=", TokenTag::symbol_slash_assign);
     driver.add_js_lexical("+=", TokenTag::symbol_plus_assign);
     driver.add_js_lexical("-=", TokenTag::symbol_minus_assign);
+
+    /// 3. Register bytecode compiler modules since the emission logic per AST type is mostly decoupled from the compiler state. ///
+
+    driver.add_expr_emitter(ExprNodeTag::primitive, std::make_unique<Backend::PrimitiveEmitter>());
+    driver.add_expr_emitter(ExprNodeTag::object_literal, std::make_unique<Backend::ObjectLiteralEmitter>());
+    driver.add_expr_emitter(ExprNodeTag::array_literal, std::make_unique<Backend::ArrayLiteralEmitter>());
+    driver.add_expr_emitter(ExprNodeTag::lambda_literal, std::make_unique<Backend::LambdaLiteralEmitter>());
+    driver.add_expr_emitter(ExprNodeTag::member_access, std::make_unique<Backend::MemberAccessEmitter>());
+    driver.add_expr_emitter(ExprNodeTag::unary, std::make_unique<Backend::UnaryEmitter>());
+    driver.add_expr_emitter(ExprNodeTag::binary, std::make_unique<Backend::BinaryEmitter>());
+    driver.add_expr_emitter(ExprNodeTag::assign, std::make_unique<Backend::AssignEmitter>());
+    driver.add_expr_emitter(ExprNodeTag::call, std::make_unique<Backend::CallEmitter>());
+
+    driver.add_stmt_emitter(StmtNodeTag::stmt_expr_stmt, std::make_unique<Backend::ExprStmtEmitter>());
+    driver.add_stmt_emitter(StmtNodeTag::stmt_variables, std::make_unique<Backend::VariablesEmitter>());
+    driver.add_stmt_emitter(StmtNodeTag::stmt_if, std::make_unique<Backend::IfEmitter>());
+    driver.add_stmt_emitter(StmtNodeTag::stmt_return, std::make_unique<Backend::ReturnEmitter>());
+    driver.add_stmt_emitter(StmtNodeTag::stmt_while, std::make_unique<Backend::WhileEmitter>());
+    driver.add_stmt_emitter(StmtNodeTag::stmt_break, std::make_unique<Backend::BreakEmitter>());
+    driver.add_stmt_emitter(StmtNodeTag::stmt_continue, std::make_unique<Backend::ContinueEmitter>());
+    driver.add_stmt_emitter(StmtNodeTag::stmt_block, std::make_unique<Backend::BlockEmitter>());
+
+    /// 4. Prepare native objects alongside prototypes of Object, Array, etc. These are VERY important for DerkJS to interpret certain scripts properly. ///
 
     auto string_prototype_p = driver.setup_string_prototype(std::to_array(std::move(str_props)));
 
@@ -256,6 +281,8 @@ int main(int argc, char* argv[]) {
         DerkJS::native_object_ctor,
         object_interface_prototype_p
     )->freeze();
+
+    /// 4. Run the script after all configuration. ///
 
     return driver.run(source_path, derkjs_gc_threshold);
 }
