@@ -265,6 +265,9 @@ export namespace DerkJS {
         int m_last_tenured_id; // mark the end of preloaded native objects, etc.
 
     public:
+        PolyPool()
+        : m_items {}, m_free_slots {}, m_overhead {0UL}, m_next_id {0}, m_id_max {0}, m_last_tenured_id {-1} {}
+
         PolyPool(int capacity)
         : m_items {}, m_free_slots {}, m_overhead {0UL}, m_next_id {0}, m_id_max {capacity}, m_last_tenured_id {-1} {
             m_items.reserve(capacity);
