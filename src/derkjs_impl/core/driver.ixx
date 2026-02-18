@@ -19,10 +19,6 @@ export module core.driver;
 
 export import frontend.ast;
 import frontend.parse;
-import runtime.value;
-import runtime.callables;
-import runtime.strings;
-import runtime.bytecode;
 import runtime.vm;
 import backend.bc_generate;
 
@@ -54,8 +50,10 @@ export namespace DerkJS::Core {
         };
 
     private:
+        Backend::BytecodeEmitterContext m_compile_state;
+ 
         std::flat_map<std::string_view, TokenTag> m_js_lexicals;
-        std::vector<PreloadItem> m_preloads;
+        std::vector<Backend::PreloadItem> m_preloads;
         std::vector<std::string> m_src_map;
         std::string_view m_app_name;
         std::string_view m_app_author;
@@ -96,30 +94,41 @@ export namespace DerkJS::Core {
         }
 
         [[nodiscard]] auto compile_script(const ASTUnit& ast) -> std::optional<Program> {
-            BytecodeGenPass codegen_pass {std::move(m_preloads), m_max_heap_object_n};
-            return codegen_pass(ast, m_src_map);
+            return m_compile_state.compile_script(std::move(m_preloads), m_max_heap_object_n, ast, m_src_map);
         }
 
     public:
         Driver(DriverInfo info, int max_heap_object_count)
-        : m_js_lexicals {}, m_src_map {}, m_app_name {info.name}, m_app_author {info.author}, m_length_str_length_key_p {}, m_version_major {info.version_major}, m_version_minor {info.version_minor}, m_version_patch {info.version_patch}, m_max_heap_object_n {max_heap_object_count}, m_allow_bytecode_dump {false} {}
+        : m_compile_state {}, m_js_lexicals {}, m_src_map {}, m_app_name {info.name}, m_app_author {info.author}, m_length_str_length_key_p {}, m_version_major {info.version_major}, m_version_minor {info.version_minor}, m_version_patch {info.version_patch}, m_max_heap_object_n {max_heap_object_count}, m_allow_bytecode_dump {false} {}
 
         void add_js_lexical(std::string_view lexeme, TokenTag tag) {
             m_js_lexicals[lexeme] = tag;
         }
 
-        template <typename ObjectSubType, typename ... CtorArgs> requires (std::is_base_of_v<ObjectBase<Value>, ObjectSubType> && std::is_constructible_v<ObjectSubType, CtorArgs...>)
+        void add_expr_emitter(ExprNodeTag expr_type_tag, std::unique_ptr<Backend::ExprEmitterBase<Expr>> helper) {
+            m_compile_state.add_expr_emitter(expr_type_tag, std::move(helper));
+        }
+
+        void add_stmt_emitter(StmtNodeTag stmt_type_tag, std::unique_ptr<Backend::StmtEmitterBase<Stmt>> helper) {
+            m_compile_state.add_stmt_emitter(stmt_type_tag, std::move(helper));
+        }
+
+        template <typename ObjectSubType, typename ... CtorArgs>
+        requires (
+            std::is_base_of_v<ObjectBase<Value>, ObjectSubType>
+            && std::is_constructible_v<ObjectSubType, CtorArgs...>
+        )
         [[maybe_unused]] auto add_native_global(std::string name, CtorArgs&& ... ctor_args) -> ObjectBase<Value>* {
             auto object_p = std::make_unique<ObjectSubType>(std::forward<CtorArgs>(ctor_args)...);
             auto object_raw_p = object_p.get();
 
-            m_preloads.emplace_back(PreloadItem {
+            m_preloads.emplace_back(Backend::PreloadItem {
                 .lexeme = name,
                 .entity = Value {object_p.get()},
                 .location = Location::constant
             });
 
-            m_preloads.emplace_back(PreloadItem {
+            m_preloads.emplace_back(Backend::PreloadItem {
                 .lexeme = "",
                 .entity = std::move(object_p),
                 .location = Location::heap_obj
@@ -138,13 +147,13 @@ export namespace DerkJS::Core {
                 auto prop_name_p = std::make_unique<DynamicString>(string_proto, Value {m_length_str_length_key_p}, stub_name);
                 auto prop_name_value = Value {prop_name_p.get()};
 
-                m_preloads.emplace_back(PreloadItem {
+                m_preloads.emplace_back(Backend::PreloadItem {
                     .lexeme = stub_name,
                     .entity = prop_name_value,
                     .location = Location::constant
                 });
 
-                m_preloads.emplace_back(PreloadItem {
+                m_preloads.emplace_back(Backend::PreloadItem {
                     .lexeme = "",
                     .entity = std::move(prop_name_p),
                     .location = Location::heap_obj
@@ -161,7 +170,7 @@ export namespace DerkJS::Core {
                         return nullptr;
                     } else {
                         /// NOTE: Here, prepare an anonymous JS Object value to be inserted into the heap, likely referenced by this object.
-                        m_preloads.emplace_back(PreloadItem {
+                        m_preloads.emplace_back(Backend::PreloadItem {
                             .lexeme = "",
                             .entity = std::move(*item_as_object_p),
                             .location = Location::heap_obj
@@ -170,13 +179,13 @@ export namespace DerkJS::Core {
                 }
             }
 
-            m_preloads.emplace_back(PreloadItem {
+            m_preloads.emplace_back(Backend::PreloadItem {
                 .lexeme = name,
                 .entity = Value {object_p.get()},
                 .location = Location::constant
             });
 
-            m_preloads.emplace_back(PreloadItem {
+            m_preloads.emplace_back(Backend::PreloadItem {
                 .lexeme = "",
                 .entity = std::move(object_p),
                 .location = Location::heap_obj
@@ -201,13 +210,13 @@ export namespace DerkJS::Core {
                 auto prop_name_p = std::make_unique<DynamicString>(str_prototype_object_p.get(), Value {m_length_str_length_key_p}, stub_name);
                 auto prop_name_value = Value {prop_name_p.get()};
 
-                m_preloads.emplace_back(PreloadItem {
+                m_preloads.emplace_back(Backend::PreloadItem {
                     .lexeme = stub_name,
                     .entity = prop_name_value,
                     .location = Location::constant
                 });
 
-                m_preloads.emplace_back(PreloadItem {
+                m_preloads.emplace_back(Backend::PreloadItem {
                     .lexeme = "",
                     .entity = std::move(prop_name_p),
                     .location = Location::heap_obj
@@ -224,7 +233,7 @@ export namespace DerkJS::Core {
                         return nullptr;
                     } else {
                         /// NOTE: Here, prepare an anonymous JS Object value to be inserted into the heap, likely referenced by this object.
-                        m_preloads.emplace_back(PreloadItem {
+                        m_preloads.emplace_back(Backend::PreloadItem {
                             .lexeme = "",
                             .entity = std::move(*item_as_object_p),
                             .location = Location::heap_obj
@@ -233,13 +242,13 @@ export namespace DerkJS::Core {
                 }
             }
 
-            m_preloads.emplace_back(PreloadItem {
+            m_preloads.emplace_back(Backend::PreloadItem {
                 .lexeme = "length",
                 .entity = std::move(length_str_length_key_p),
                 .location = Location::key_str
             });
 
-            m_preloads.emplace_back(PreloadItem {
+            m_preloads.emplace_back(Backend::PreloadItem {
                 .lexeme = "String::prototype",
                 .entity = std::move(str_prototype_object_p),
                 .location = Location::heap_obj
@@ -257,13 +266,13 @@ export namespace DerkJS::Core {
                 auto prop_name_p = std::make_unique<DynamicString>(string_proto, Value {m_length_str_length_key_p}, stub_name);
                 auto prop_name_value = Value {prop_name_p.get()};
 
-                m_preloads.emplace_back(PreloadItem {
+                m_preloads.emplace_back(Backend::PreloadItem {
                     .lexeme = stub_name,
                     .entity = prop_name_value,
                     .location = Location::constant
                 });
 
-                m_preloads.emplace_back(PreloadItem {
+                m_preloads.emplace_back(Backend::PreloadItem {
                     .lexeme = "",
                     .entity = std::move(prop_name_p),
                     .location = Location::heap_obj
@@ -280,7 +289,7 @@ export namespace DerkJS::Core {
                         return nullptr;
                     } else {
                         /// NOTE: Here, prepare an anonymous JS Object value to be inserted into the heap, likely referenced by this object.
-                        m_preloads.emplace_back(PreloadItem {
+                        m_preloads.emplace_back(Backend::PreloadItem {
                             .lexeme = "",
                             .entity = std::move(*item_as_object_p),
                             .location = Location::heap_obj
@@ -289,7 +298,7 @@ export namespace DerkJS::Core {
                 }
             }
 
-            m_preloads.emplace_back(PreloadItem {
+            m_preloads.emplace_back(Backend::PreloadItem {
                 .lexeme = name,
                 .entity = std::move(proto_object_p),
                 .location = Location::heap_obj

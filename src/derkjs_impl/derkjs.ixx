@@ -8,4 +8,6 @@ export import runtime.bytecode;
 export import runtime.gc;
 export import runtime.vm;
 export import runtime.natives;
+export import backend.expr_gen;
+export import backend.stmt_gen;
 export import core.driver;
