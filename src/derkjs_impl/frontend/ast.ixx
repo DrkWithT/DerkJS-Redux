@@ -9,6 +9,22 @@ export module frontend.ast;
 export import frontend.lexicals;
 
 export namespace DerkJS {
+    /// NOTE: runtime tag of AST expression types for looking up bytecode generation handlers in `bc_generate.ixx`!
+    enum class ExprNodeTag : uint8_t {
+        primitive, object_literal, array_literal, lambda_literal,
+        member_access,
+        unary, binary,
+        assign, call,
+        last
+    };
+
+    enum class StmtNodeTag : uint8_t {
+        stmt_expr_stmt,
+        stmt_variables,
+        stmt_if, stmt_return, stmt_while, stmt_break, stmt_continue, stmt_block,
+        last
+    };
+
     enum class AstOp : uint8_t {
         ast_op_noop,
         ast_op_new,             // 'new' for objects
@@ -47,6 +63,7 @@ export namespace DerkJS {
         int src_id;
         int text_begin;
         int text_length;
+        StmtNodeTag tag;
     };
 
     struct ExprStmt;
@@ -68,6 +85,7 @@ export namespace DerkJS {
         int src_id;
         int text_begin;
         int text_length;
+        ExprNodeTag tag;
     };
 
     struct Primitive;

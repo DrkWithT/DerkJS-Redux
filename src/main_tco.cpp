@@ -1,4 +1,5 @@
 #include <string>
+#include <string_view>
 #include <array>
 #include <print>
 #include <iostream>
@@ -7,6 +8,9 @@ import derkjs_impl;
 
 constexpr std::size_t derkjs_gc_threshold = 144000; // ~ 2K heap objects
 constexpr int derkjs_heap_count = 4096;
+constexpr std::string_view fancy_name = " _              __\n"
+                                        "| \\ _   _|    |(_\n"
+                                        "|_/(/_ | |< \\_|__)\n";
 
 int main(int argc, char* argv[]) {
     using namespace DerkJS;
@@ -18,11 +22,11 @@ int main(int argc, char* argv[]) {
 
     Core::Driver driver {
         Core::DriverInfo {
-            .name = "DerkJS",
+            .name = fancy_name,
             .author = "DrkWithT (GitHub)",
             .version_major = 0,
             .version_minor = 4,
-            .version_patch = 0
+            .version_patch = 1
         },
         derkjs_heap_count // increase object count limit for VM if needed
     };
@@ -35,7 +39,7 @@ int main(int argc, char* argv[]) {
         return 0;
     } else if (arg_1 == "-v") {
         const auto& [app_name, author_name, major, minor, patch] = driver.get_info();
-        std::println("{} v{}.{}.{}\nBy: {}", app_name, major, minor, patch, author_name);
+        std::println("\x1b[1;93m{}\x1b[0m\nv{}.{}.{}\tBy: {}", app_name, major, minor, patch, author_name);
         return 0;
     } else if (arg_1 == "-d") {
         source_path = argv[2];
@@ -49,7 +53,10 @@ int main(int argc, char* argv[]) {
 
     /// String native methods
     Core::NativePropertyStub str_props[] {
-        /// TODO: implement String "constructor".
+        Core::NativePropertyStub {
+            .name_str = "constructor",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_str_ctor, nullptr),
+        },
         Core::NativePropertyStub {
             .name_str = "charCodeAt",
             .item = std::make_unique<NativeFunction>(DerkJS::native_str_charcode_at, nullptr)
@@ -57,6 +64,14 @@ int main(int argc, char* argv[]) {
         Core::NativePropertyStub {
             .name_str = "substr",
             .item = std::make_unique<NativeFunction>(DerkJS::native_str_substr, nullptr)
+        },
+        Core::NativePropertyStub {
+            .name_str = "substring",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_str_substring, nullptr)
+        },
+        Core::NativePropertyStub {
+            .name_str = "trim",
+            .item = std::make_unique<NativeFunction>(DerkJS::native_str_trim, nullptr)
         }
     };
 
@@ -132,6 +147,8 @@ int main(int argc, char* argv[]) {
         }
     };
 
+    /// 2. Register keywords, operators, etc. for parser's lexer. This makes the lexer's configuration flexible. ///
+
     driver.add_js_lexical("var", TokenTag::keyword_var);
     driver.add_js_lexical("if", TokenTag::keyword_if);
     driver.add_js_lexical("else", TokenTag::keyword_else);
@@ -172,6 +189,29 @@ int main(int argc, char* argv[]) {
     driver.add_js_lexical("+=", TokenTag::symbol_plus_assign);
     driver.add_js_lexical("-=", TokenTag::symbol_minus_assign);
 
+    /// 3. Register bytecode compiler modules since the emission logic per AST type is mostly decoupled from the compiler state. ///
+
+    driver.add_expr_emitter(ExprNodeTag::primitive, std::make_unique<Backend::PrimitiveEmitter>());
+    driver.add_expr_emitter(ExprNodeTag::object_literal, std::make_unique<Backend::ObjectLiteralEmitter>());
+    driver.add_expr_emitter(ExprNodeTag::array_literal, std::make_unique<Backend::ArrayLiteralEmitter>());
+    driver.add_expr_emitter(ExprNodeTag::lambda_literal, std::make_unique<Backend::LambdaLiteralEmitter>());
+    driver.add_expr_emitter(ExprNodeTag::member_access, std::make_unique<Backend::MemberAccessEmitter>());
+    driver.add_expr_emitter(ExprNodeTag::unary, std::make_unique<Backend::UnaryEmitter>());
+    driver.add_expr_emitter(ExprNodeTag::binary, std::make_unique<Backend::BinaryEmitter>());
+    driver.add_expr_emitter(ExprNodeTag::assign, std::make_unique<Backend::AssignEmitter>());
+    driver.add_expr_emitter(ExprNodeTag::call, std::make_unique<Backend::CallEmitter>());
+
+    driver.add_stmt_emitter(StmtNodeTag::stmt_expr_stmt, std::make_unique<Backend::ExprStmtEmitter>());
+    driver.add_stmt_emitter(StmtNodeTag::stmt_variables, std::make_unique<Backend::VariablesEmitter>());
+    driver.add_stmt_emitter(StmtNodeTag::stmt_if, std::make_unique<Backend::IfEmitter>());
+    driver.add_stmt_emitter(StmtNodeTag::stmt_return, std::make_unique<Backend::ReturnEmitter>());
+    driver.add_stmt_emitter(StmtNodeTag::stmt_while, std::make_unique<Backend::WhileEmitter>());
+    driver.add_stmt_emitter(StmtNodeTag::stmt_break, std::make_unique<Backend::BreakEmitter>());
+    driver.add_stmt_emitter(StmtNodeTag::stmt_continue, std::make_unique<Backend::ContinueEmitter>());
+    driver.add_stmt_emitter(StmtNodeTag::stmt_block, std::make_unique<Backend::BlockEmitter>());
+
+    /// 4. Prepare native objects alongside prototypes of Object, Array, etc. These are VERY important for DerkJS to interpret certain scripts properly. ///
+
     auto string_prototype_p = driver.setup_string_prototype(std::to_array(std::move(str_props)));
 
     if (!string_prototype_p) {
@@ -180,6 +220,12 @@ int main(int argc, char* argv[]) {
     }
 
     string_prototype_p->freeze();
+
+    driver.add_native_global<NativeFunction>(
+        "String",
+        DerkJS::native_str_ctor,
+        string_prototype_p
+    );
 
     driver.add_native_global<NativeFunction>(
         "parseInt",
@@ -235,6 +281,8 @@ int main(int argc, char* argv[]) {
         DerkJS::native_object_ctor,
         object_interface_prototype_p
     )->freeze();
+
+    /// 4. Run the script after all configuration. ///
 
     return driver.run(source_path, derkjs_gc_threshold);
 }

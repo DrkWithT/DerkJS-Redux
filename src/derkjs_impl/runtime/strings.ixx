@@ -164,7 +164,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto opaque_iter() const noexcept -> OpaqueIterator override {
-            return OpaqueIterator {reinterpret_cast<const std::byte*>(m_data.data()), m_data.size() * sizeof(decltype(*m_data.data()))};
+            return OpaqueIterator {reinterpret_cast<const std::byte*>(m_data.data()), m_data.size() * sizeof(std::string::value_type)};
         }
 
         [[nodiscard]] auto operator==(const ObjectBase& other) const noexcept -> bool override {
@@ -172,7 +172,7 @@ export namespace DerkJS {
                 return true;
             }
 
-            OpaqueIterator self_it {reinterpret_cast<const std::byte*>(m_data.data()), m_data.length() * sizeof(decltype(*m_data.data()))};
+            OpaqueIterator self_it {reinterpret_cast<const std::byte*>(m_data.data()), m_data.length() * sizeof(std::string::value_type)};
             OpaqueIterator other_it = other.opaque_iter();
 
             if (self_it.count() != other_it.count()) {

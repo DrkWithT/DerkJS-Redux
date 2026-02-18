@@ -52,8 +52,9 @@
  24. ~~Add `typeof` and `void` operators.~~
  25. ~~Add implicit `ret` opcode on omitted returns- it yields a `this` reference on ctor-mode calls, discarding any regular expr result.~~
  26. ~~Add `array.length` with side-effects!~~
- 27. Make `String` a constructor function.
- 28. Add Array methods: `lastIndexOf(arg), join(delim), concat(args...), forEach(arr, thisArg), filter(predicateFn, thisArg), map(callabackFn, thisArg)`
- 29. Add Object methods: `hasOwnProperty(key), isPrototypeOf(obj)`
- 30. Add prefix increment operator.
- 31. Add `+=, -=, *=, /=, %=` operators.
+ 27. ~~Make `String` a constructor function & add some methods.~~
+ 28. ~~Refactor bytecode gen to Dep. Inj. modules for generating each expr / stmt.~~
+ 29. Add prefix increment & decrement operator.
+ 30. Add `+=, -=, *=, /=, %=` operators. Side Quest: syntax error on `==` or `!=` for mandating migration of old JS code to new JS.
+ 31. Add Array methods: `forEach(arr, thisArg), filter(predicateFn, thisArg), map(callbackFn, thisArg), concat(args...)`
+ 32. Add Object methods: `hasOwnProperty(key), isPrototypeOf(obj)`

@@ -150,7 +150,8 @@ export namespace DerkJS {
                     Primitive { .token = current_token_copy, .is_key = m_primitive_as_key },
                     0, // NOTE: `src_id` is 0 since I'll only support single-file JS programs for now.
                     snippet_begin,
-                    primary_txt_length
+                    primary_txt_length,
+                    ExprNodeTag::primitive
                 );
             case TokenTag::left_brace:
                 return parse_object(lexer, source);
@@ -224,7 +225,8 @@ export namespace DerkJS {
                 },
                 0,
                 object_lexeme_begin,
-                m_current.start - object_lexeme_begin + 1
+                m_current.start - object_lexeme_begin + 1,
+                ExprNodeTag::object_literal
             );
         }
 
@@ -257,7 +259,8 @@ export namespace DerkJS {
                 },
                 0,
                 array_lexeme_begin,
-                m_current.start - array_lexeme_begin + 1
+                m_current.start - array_lexeme_begin + 1,
+                ExprNodeTag::array_literal
             );
         }
 
@@ -295,7 +298,8 @@ export namespace DerkJS {
                 },
                 0,
                 snippet_begin,
-                m_current.start - snippet_begin + 1
+                m_current.start - snippet_begin + 1,
+                ExprNodeTag::lambda_literal
             );
         }
 
@@ -324,7 +328,8 @@ export namespace DerkJS {
                         },
                         0,
                         snippet_begin,
-                        m_current.start - snippet_begin + 1
+                        m_current.start - snippet_begin + 1,
+                        ExprNodeTag::member_access
                     );
                 } else if (member_mark == TokenTag::left_bracket) {
                     consume_any(lexer, source);
@@ -340,7 +345,8 @@ export namespace DerkJS {
                         },
                         0,
                         snippet_begin,
-                        m_current.start - snippet_begin + 1
+                        m_current.start - snippet_begin + 1,
+                        ExprNodeTag::member_access
                     );
                 } else {
                     break;
@@ -376,7 +382,8 @@ export namespace DerkJS {
                 },
                 0,
                 snippet_begin,
-                m_current.start - snippet_begin + 1
+                m_current.start - snippet_begin + 1,
+                ExprNodeTag::unary
             );
         }
 
@@ -404,7 +411,8 @@ export namespace DerkJS {
                     },
                     0,
                     snippet_begin,
-                    m_current.start - snippet_begin + 1
+                    m_current.start - snippet_begin + 1,
+                    ExprNodeTag::call
                 );
             }
 
@@ -429,7 +437,8 @@ export namespace DerkJS {
                 },
                 0,
                 snippet_begin,
-                m_current.start - snippet_begin + 1
+                m_current.start - snippet_begin + 1,
+                ExprNodeTag::call
             );
         }
 
@@ -457,7 +466,8 @@ export namespace DerkJS {
                     },
                     0,
                     snippet_begin,
-                    m_current.start - snippet_begin + 1
+                    m_current.start - snippet_begin + 1,
+                    ExprNodeTag::unary
                 );
             }
 
@@ -493,7 +503,8 @@ export namespace DerkJS {
                     },
                     0,
                     snippet_begin,
-                    m_current.start - snippet_begin + 1
+                    m_current.start - snippet_begin + 1,
+                    ExprNodeTag::binary
                 );
             }
 
@@ -525,7 +536,8 @@ export namespace DerkJS {
                     },
                     0,
                     snippet_begin,
-                    m_current.start - snippet_begin + 1
+                    m_current.start - snippet_begin + 1,
+                    ExprNodeTag::binary
                 );
             }
 
@@ -562,7 +574,8 @@ export namespace DerkJS {
                     },
                     0,
                     snippet_begin,
-                    m_current.start - snippet_begin + 1
+                    m_current.start - snippet_begin + 1,
+                    ExprNodeTag::binary
                 );
             }
 
@@ -599,7 +612,8 @@ export namespace DerkJS {
                     },
                     0,
                     snippet_begin,
-                    m_current.start - snippet_begin + 1
+                    m_current.start - snippet_begin + 1,
+                    ExprNodeTag::binary
                 );
             }
 
@@ -625,7 +639,8 @@ export namespace DerkJS {
                     },
                     0,
                     snippet_begin,
-                    m_current.start - snippet_begin + 1
+                    m_current.start - snippet_begin + 1,
+                    ExprNodeTag::binary
                 );
             }
 
@@ -651,7 +666,8 @@ export namespace DerkJS {
                     },
                     0,
                     snippet_begin,
-                    m_current.start - snippet_begin + 1
+                    m_current.start - snippet_begin + 1,
+                    ExprNodeTag::binary
                 );
             }
 
@@ -696,7 +712,8 @@ export namespace DerkJS {
                         },
                         0,
                         snippet_begin,
-                        snippet_begin
+                        snippet_begin,
+                        ExprNodeTag::primitive
                     )
                 };
             }
@@ -737,7 +754,8 @@ export namespace DerkJS {
                 },
                 0,
                 snippet_begin,
-                m_current.start - snippet_begin + 1
+                m_current.start - snippet_begin + 1,
+                StmtNodeTag::stmt_variables
             );
         }
 
@@ -780,7 +798,8 @@ export namespace DerkJS {
                 },
                 0,
                 snippet_begin,
-                m_current.start - snippet_begin + 1
+                m_current.start - snippet_begin + 1,
+                StmtNodeTag::stmt_if
             );
         }
 
@@ -801,7 +820,8 @@ export namespace DerkJS {
                 },
                 0,
                 snippet_begin,
-                m_current.start - snippet_begin + 1
+                m_current.start - snippet_begin + 1,
+                StmtNodeTag::stmt_return
             );
         }
 
@@ -826,7 +846,8 @@ export namespace DerkJS {
                 },
                 0,
                 snippet_begin,
-                m_current.start - snippet_begin + 1
+                m_current.start - snippet_begin + 1,
+                StmtNodeTag::stmt_while
             );
         }
 
@@ -840,7 +861,8 @@ export namespace DerkJS {
                 Break {},
                 0,
                 snippet_begin,
-                m_current.start - snippet_begin + 1
+                m_current.start - snippet_begin + 1,
+                StmtNodeTag::stmt_break
             );
         }
 
@@ -854,7 +876,8 @@ export namespace DerkJS {
                 Continue {},
                 0,
                 snippet_begin,
-                m_current.start - snippet_begin + 1
+                m_current.start - snippet_begin + 1,
+                StmtNodeTag::stmt_continue
             );
         }
 
@@ -900,7 +923,8 @@ export namespace DerkJS {
                     },
                     0,
                     snippet_begin,
-                    m_current.start - snippet_begin + 1
+                    m_current.start - snippet_begin + 1,
+                    ExprNodeTag::lambda_literal
                 )
             });
 
@@ -910,7 +934,8 @@ export namespace DerkJS {
                 },
                 0,
                 snippet_begin,
-                m_current.start - snippet_begin + 1
+                m_current.start - snippet_begin + 1,
+                StmtNodeTag::stmt_variables
             );
         }
 
@@ -935,7 +960,8 @@ export namespace DerkJS {
                 },
                 0,
                 snippet_begin,
-                m_current.start - snippet_begin + 1
+                m_current.start - snippet_begin + 1,
+                StmtNodeTag::stmt_block
             );
         }
 
@@ -954,7 +980,8 @@ export namespace DerkJS {
                     },
                     0,
                     snippet_begin,
-                    m_current.start - snippet_begin + 1
+                    m_current.start - snippet_begin + 1,
+                    StmtNodeTag::stmt_expr_stmt
                 );
             }
 
@@ -966,16 +993,21 @@ export namespace DerkJS {
 
             return std::make_unique<Stmt>(
                 ExprStmt {
-                    .expr = std::make_unique<Expr>(
+                    .expr = std::make_unique<Expr>(Expr {
                         Assign {
                             .lhs = std::move(lhs_maybe_call),
                             .rhs = std::move(rhs)
-                        }
-                    )
+                        },
+                        0,
+                        snippet_begin,
+                        m_current.start - snippet_begin + 1,
+                        ExprNodeTag::assign
+                    }),
                 },
                 0,
                 snippet_begin,
-                m_current.start - snippet_begin + 1
+                m_current.start - snippet_begin + 1,
+                StmtNodeTag::stmt_expr_stmt
             );
         }
 

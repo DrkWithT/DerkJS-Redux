@@ -12,6 +12,8 @@ target_sources(
     src/derkjs_impl/frontend/ast.ixx
     src/derkjs_impl/frontend/parse.ixx
     src/derkjs_impl/backend/bc_generate.ixx
+    src/derkjs_impl/backend/expr_gen.ixx
+    src/derkjs_impl/backend/stmt_gen.ixx
     src/derkjs_impl/core/driver.ixx
     src/derkjs_impl/meta/enums.ixx
     src/derkjs_impl/runtime/objects.ixx

@@ -35,6 +35,24 @@ export namespace DerkJS {
 
     /// BEGIN string impls:
 
+    /// From: ES5 - 15.5.2.1
+    [[nodiscard]] auto native_str_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const int passed_rsbp = ctx->rsbp;
+        const auto& arg_value = ctx->stack[passed_rsbp];
+
+        if (auto temp_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::make_unique<DynamicString>(
+            ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
+            ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
+            arg_value.to_string().value()
+        )); temp_str_p) {
+            ctx->stack[passed_rsbp] = Value {temp_str_p};
+            return true;
+        } else {
+            ctx->status = VMErrcode::bad_heap_alloc;   
+            return false;
+        }
+    }
+
     [[nodiscard]] auto native_str_charcode_at(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
         const auto str_this_p = dynamic_cast<const StringBase*>(
@@ -52,6 +70,67 @@ export namespace DerkJS {
         }
 
         return true;
+    }
+
+    // ES5 15.5.4.15 - Create a substring with start & end indices of an original string.
+    [[nodiscard]] auto native_str_substring(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const int passed_rsbp = ctx->rsbp;
+        std::string old_source {ctx->stack[passed_rsbp + argc].to_string().value()};
+        
+        /// TODO: normalize start and end substring bounds as 0 minimum TO (N - 1) maximum
+        const int old_length = old_source.length();
+        const int final_start = std::min(
+            std::max(
+                ctx->stack.at(passed_rsbp).to_num_i32().value_or(0), // start index (NaNs -> 0)
+                0
+            ),
+            old_length
+        );
+        const int final_end = std::min(
+            std::max(
+                // end index (NaNs -> 0)
+                (argc > 1) ? ctx->stack.at(passed_rsbp + 1).to_num_i32().value_or(0) : old_length,
+                0
+            ),
+            old_length
+        );
+        const int from_index = std::min(final_start, final_end);
+        const int to_index = std::max(final_start, final_end);
+
+        if (auto substring_p = ctx->heap.add_item(
+            ctx->heap.get_next_id(),
+            std::make_unique<DynamicString>(
+                ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
+                ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
+                old_source.substr(from_index, to_index - from_index)
+            )
+        )) {
+            ctx->stack[passed_rsbp] = Value {substring_p};
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    // ES5 - 15.5.4.20: remove fringe spaces.
+    [[nodiscard]] auto native_str_trim(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const int passed_rsbp = ctx->rsbp;
+        std::string old_source {ctx->stack[passed_rsbp + argc].to_string().value()};
+        const int first_no_space_index = old_source.find_first_not_of(' ');
+        const int last_no_space_index = old_source.find_last_not_of(' ');
+
+        if (auto trimmed_string_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::make_unique<DynamicString>(
+            ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
+            ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
+            old_source.substr(first_no_space_index, last_no_space_index - first_no_space_index + 1)
+        )); trimmed_string_p) {
+            ctx->stack.at(passed_rsbp) = Value {trimmed_string_p};
+            return true;
+        }
+
+        ctx->status = VMErrcode::bad_heap_alloc;
+
+        return false;
     }
 
     [[nodiscard]] auto native_str_substr(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
