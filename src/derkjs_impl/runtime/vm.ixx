@@ -137,6 +137,8 @@ namespace DerkJS {
     inline void op_del_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_numify(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_strcat(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_pre_inc(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_pre_dec(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_mod(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_mul(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_div(ExternVMCtx& ctx, int16_t a0, int16_t a1);
@@ -163,7 +165,7 @@ namespace DerkJS {
         op_nop,
         op_dup, op_dup_local, op_ref_local, op_store_upval, op_ref_upval, op_put_const, op_deref, op_pop, op_emplace,
         op_put_this, op_discard, op_typename, op_put_obj_dud, op_make_arr, op_put_proto_key, op_get_prop, op_put_prop, op_del_prop,
-        op_numify, op_strcat,
+        op_numify, op_strcat, op_pre_inc, op_pre_dec,
         op_mod, op_mul, op_div, op_add, op_sub,
         op_test_falsy, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte,
         op_jump_else, op_jump_if, op_jump, op_object_call, op_ctor_call, op_ret,
@@ -444,6 +446,24 @@ namespace DerkJS {
             ctx.rsp--;
             ctx.rip_p++;
         }
+
+        [[clang::musttail]]
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    inline void op_pre_inc(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+        ctx.stack.at(ctx.rsp) = ctx.stack.at(ctx.rsp).increment().deep_clone();
+
+        ctx.rip_p++;
+
+        [[clang::musttail]]
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    inline void op_pre_dec(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+        ctx.stack.at(ctx.rsp) = ctx.stack.at(ctx.rsp).decrement().deep_clone();
+
+        ctx.rip_p++;
 
         [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);

@@ -244,11 +244,13 @@ export namespace DerkJS {
             "djs_put_obj_dud",
             "djs_make_arr",
             "djs_put_proto_key",
-            "djs_get_prop", // Args: <should-default>: gets a property value based on RSP: <OBJ-REF>, RSP - 1: <POOLED-STR-REF>; IF should-default == 1, default any invalid key to `undefined`.
-            "djs_put_prop", // SEE: djs_get_prop for stack args passing...
-            "djs_del_prop", // SEE: djs_get_prop for stack args passing...
+            "djs_get_prop",
+            "djs_put_prop",
+            "djs_del_prop",
             "djs_numify",
             "djs_strcat",
+            "djs_pre_inc",
+            "djs_pre_dec",
             "djs_mod",
             "djs_mul",
             "djs_div",
