@@ -1,12 +1,11 @@
 module;
 
 #include <utility>
+#include <memory>
 #include <optional>
-#include <array>
 #include <vector>
 #include <variant>
 #include <forward_list>
-#include <flat_map>
 #include <string>
 
 export module backend.expr_gen;
@@ -317,6 +316,30 @@ namespace DerkJS::Backend {
                             .op = Opcode::djs_numify,
                             .inner_ok = context.emit_expr(*inner_expr, source)
                         };
+                    case AstOp::ast_op_prefix_inc: {
+                        const bool old_access_as_lval = context.m_access_as_lval;
+                        context.m_access_as_lval = true;
+                        
+                        OpcodeWithGenFlag temp_inc_result {
+                            .op = Opcode::djs_pre_inc,
+                            .inner_ok = context.emit_expr(*inner_expr, source)
+                        };
+
+                        context.m_access_as_lval = old_access_as_lval;
+                        return temp_inc_result;
+                    }
+                    case AstOp::ast_op_prefix_dec: {
+                        const bool old_access_as_lval = context.m_access_as_lval;
+                        context.m_access_as_lval = true;
+                        
+                        OpcodeWithGenFlag temp_inc_result {
+                            .op = Opcode::djs_pre_dec,
+                            .inner_ok = context.emit_expr(*inner_expr, source)
+                        };
+
+                        context.m_access_as_lval = old_access_as_lval;
+                        return temp_inc_result;
+                    }
                     case AstOp::ast_op_void:
                         return OpcodeWithGenFlag {
                             .op = Opcode::djs_discard,

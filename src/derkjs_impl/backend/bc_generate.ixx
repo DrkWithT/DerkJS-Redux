@@ -411,6 +411,7 @@ namespace DerkJS::Backend {
             // 1.2: Record fundamental primitive constants once to avoid extra work.
             record_symbol("undefined", Value {}, FindGlobalConstsOpt {});
             record_symbol("null", Value {JSNullOpt {}}, FindGlobalConstsOpt {});
+            record_symbol("NaN", Value {JSNaNOpt {}}, FindGlobalConstsOpt {});
             record_symbol("true", Value {true}, FindGlobalConstsOpt {});
             record_symbol("false", Value {false}, FindGlobalConstsOpt {});
 

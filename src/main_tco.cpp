@@ -166,6 +166,8 @@ int main(int argc, char* argv[]) {
     driver.add_js_lexical("null", TokenTag::keyword_null);
     driver.add_js_lexical("true", TokenTag::keyword_true);
     driver.add_js_lexical("false", TokenTag::keyword_false);
+    driver.add_js_lexical("++", TokenTag::symbol_two_pluses);
+    driver.add_js_lexical("--", TokenTag::symbol_two_minuses);
     driver.add_js_lexical("%", TokenTag::symbol_percent);
     driver.add_js_lexical("*", TokenTag::symbol_times);
     driver.add_js_lexical("/", TokenTag::symbol_slash);
