@@ -450,6 +450,8 @@ export namespace DerkJS {
                 switch (tag) {
                 case TokenTag::symbol_bang: return AstOp::ast_op_bang;
                 case TokenTag::symbol_plus: return AstOp::ast_op_plus;
+                case TokenTag::symbol_two_pluses: return AstOp::ast_op_prefix_inc;
+                case TokenTag::symbol_two_minuses: return AstOp::ast_op_prefix_dec;
                 case TokenTag::keyword_typeof: return AstOp::ast_op_typeof;
                 case TokenTag::keyword_void: return AstOp::ast_op_void;
                 default: return AstOp::ast_op_noop;

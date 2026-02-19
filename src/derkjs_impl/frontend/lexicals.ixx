@@ -34,6 +34,8 @@ export namespace DerkJS {
         literal_int,
         literal_real,
         literal_string,
+        symbol_two_pluses,      // '++' prefix operator
+        symbol_two_minuses,     // '--' prefix operator
         symbol_percent,
         symbol_times,
         symbol_slash,
@@ -48,8 +50,8 @@ export namespace DerkJS {
         symbol_less_equal,
         symbol_greater,
         symbol_greater_equal,
-        symbol_amps, // `&&` symbol
-        symbol_pipes, // `||` symbol
+        symbol_amps,            // `&&` symbol
+        symbol_pipes,           // `||` symbol
         symbol_assign,
         symbol_percent_assign,
         symbol_times_assign,
