@@ -440,7 +440,6 @@ namespace DerkJS::Backend {
             // 2.2: Add "length" for array accessor name.
             const int length_key_const_id = lookup_symbol("length", FindKeyConstOpt {})->n;
             m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::extra_length_key)] = m_consts.at(length_key_const_id).to_object();
-            std::println("length?? const:{}, {}", length_key_const_id, m_consts.at(length_key_const_id).to_string().value_or("??"));
 
             // 3. Prepare initial mapping of symbols & code buffer to build.
             m_local_maps.emplace_back(CodeGenScope {
