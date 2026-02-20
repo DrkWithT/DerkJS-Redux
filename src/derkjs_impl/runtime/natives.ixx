@@ -288,111 +288,6 @@ export namespace DerkJS {
         return true;
     }
 
-    [[nodiscard]] auto native_array_pop(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
-        const auto passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object());
-
-        /// NOTE: By MDN, Array.prototype.pop returns the last element if possible, but this implementation returns undefined otherwise.
-        if (array_this_p->items().empty()) {
-            ctx->stack[passed_rsbp] = Value {};
-        } else {
-            ctx->stack[passed_rsbp] = array_this_p->items().back();
-            array_this_p->items().pop_back();
-        }
-
-        return true;
-    }
-
-    [[nodiscard]] auto native_array_at(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
-        const auto passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object());
-        auto actual_index_opt = ctx->stack[passed_rsbp].to_num_i32();
-        const int items_n = array_this_p->items().size(); 
-
-        /// NOTE: For now, just return undefined on non-numeric indices.
-        if (!actual_index_opt) {
-            ctx->stack[passed_rsbp] = Value {};
-            return false;
-        }
-
-        /// NOTE: By MDN, Array.prototype.at returns from the 0th position for unsigned indices, BUT negative indices offset backwards from N (the length).
-        if (auto actual_index = *actual_index_opt; actual_index >= 0 && actual_index < items_n) {
-            ctx->stack[passed_rsbp] = array_this_p->items().at(actual_index);
-        } else if (actual_index < 0 && items_n > 0) {
-            ctx->stack[passed_rsbp] = array_this_p->items().at(items_n + actual_index);
-        } else {
-            // Handle negative index on empty array
-            ctx->stack[passed_rsbp] = Value {};
-        } 
-
-        return true;
-    }
-
-    [[nodiscard]] auto native_array_index_of(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
-        const auto passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object());
-        const auto& array_items_view = *array_this_p->get_seq_items();
-        const auto& target_item = ctx->stack.at(passed_rsbp);
-        auto found_pos = -1;
-
-        for (int pos = 0; const auto& item_value : array_items_view) {
-            if (item_value == target_item) {
-                found_pos = pos;
-                break;
-            }
-
-            pos++;
-        }
-
-        ctx->stack.at(passed_rsbp) = Value {found_pos};
-
-        return true;
-    }
-    
-    /// SEE: ES5-15.4.4.14
-    [[nodiscard]] auto native_array_last_index_of(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
-        const auto passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object());
-
-        if (!array_this_p) {
-            std::println(std::cerr, "Array.lastIndexOf: Non-array argument.");
-            ctx->status = VMErrcode::bad_operation;
-            return false;
-        }
-
-        if (array_this_p->items().empty()) {
-            ctx->stack.at(passed_rsbp) = Value {-1};
-            return true;
-        }
-        
-        const auto& target = ctx->stack.at(passed_rsbp);
-        const int self_len = array_this_p->items().size();
-        int search_pos = (argc == 2) ? ctx->stack.at(passed_rsbp).to_num_i32().value_or(0) : self_len - 1 ;
-        search_pos = (search_pos < 0) ? self_len - std::abs(search_pos) : std::min(search_pos, self_len - 1);
-
-        for (; search_pos >= 0; search_pos--) {
-            if (array_this_p->items().at(search_pos) == target) {
-                ctx->stack.at(passed_rsbp) = Value {search_pos};
-                return true;
-            }
-        }
-
-        ctx->stack.at(passed_rsbp) = Value {-1};
-        return true;
-    }
-
-    [[nodiscard]] auto native_array_reverse(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
-        const auto passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object());
-        auto& array_items_view = array_this_p->items();
-
-        std::ranges::reverse(array_items_view);
-
-        ctx->stack[passed_rsbp] = Value {array_this_p};
-
-        return true;
-    }
-
     /// SEE: ES5-15.4.4.5
     [[nodiscard]] auto native_array_join(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
@@ -442,81 +337,6 @@ export namespace DerkJS {
         return false; // TODO!
     }
 
-    [[nodiscard]] auto native_array_for_each(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
-        const int passed_rsbp = ctx->rsbp;
-
-        // 1. Check arguments for simplicity.
-        if (argc != 2) {
-            ctx->status = VMErrcode::bad_operation;
-            std::println(std::cerr, "Array.forEach: Expected 2 arguments.");
-            return false;
-        }
-
-        auto array_this_p = dynamic_cast<const Array*>(ctx->stack[passed_rsbp + argc].to_object());
-
-        if (!array_this_p) {
-            ctx->status = VMErrcode::bad_operation;
-            std::println(std::cerr, "Array.forEach: Expected array argument.");
-            return false;
-        }
-
-        const auto& callback = ctx->stack.at(passed_rsbp);
-        const auto& this_arg = ctx->stack.at(passed_rsbp + 1);
-
-        if (callback.get_tag() != ValueTag::object) {
-            ctx->status = VMErrcode::bad_operation;
-            std::println(std::cerr, "Array.forEach: Expected object callback.");
-            return false;
-        }
-
-        if (this_arg.get_tag() != ValueTag::object) {
-            ctx->status = VMErrcode::bad_operation;
-            std::println(std::cerr, "Array.forEach: Expected object thisArg.");
-            return false;
-        }
-
-        // 3 & 4. Save exiting VM frame depth pre-callback before preparing the callback invocation.
-        const auto old_vm_frame_n = ctx->ending_frame_depth;    
-        const auto load_arg_base = ctx->rsp;
-        const auto old_vm_status = ctx->status;
-
-        // 2. Start invoking the callback with the VM context for each array item.
-        for (const auto& array_items = array_this_p->items(); const auto& item : array_items) {
-            ctx->rsp++;
-            ctx->stack.at(ctx->rsp) = item; // load next array item
-            ctx->rsp++;
-            ctx->stack.at(ctx->rsp) = this_arg; // load `thisArg` value
-            ctx->rsp++;
-            ctx->stack.at(ctx->rsp) = callback; // load callback value
-
-            /// NOTE: ensure exit of just the callback when its frame is popped...
-            ctx->ending_frame_depth = ctx->frames.size();
-            
-            if (!ctx->stack.at(ctx->rsp).to_object()->call(ctx, 1, true)) {
-                std::println(std::cerr, "Array.forEach: fatal error in callback call.");
-                return false;
-            }
-
-            dispatch_op(*ctx, ctx->rip_p->args[0], ctx->rip_p->args[1]);
-
-            if (ctx->status != VMErrcode::ok) {
-                std::println(std::cerr, "Array.forEach: fatal error in callback body.");
-                return false;
-            }
-
-            // 5. Restore old exiting frame depth for VM.
-            ctx->ending_frame_depth = old_vm_frame_n;
-            ctx->status = old_vm_status;
-            ctx->rsp = load_arg_base;
-        }
-
-        // 6. As per ES5, return nothing (and restore default call frame depth).
-        ctx->ending_frame_depth = old_vm_frame_n;
-        ctx->stack.at(passed_rsbp) = Value {};
-
-        return true;
-    }
-
     /// Object.prototype impls:
 
     /// TODO: fix this to wrap primitives in object form / forward objects as-is.
@@ -556,6 +376,56 @@ export namespace DerkJS {
         if (target_object_p != nullptr) {
             target_object_p->freeze();
         }
+
+        return true;
+    }
+
+    /// Function.prototype impls.
+
+    [[nodiscard]] auto native_function_call(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const auto passed_rsbp = ctx->rsbp;
+        auto maybe_callable_p = ctx->frames.back().this_p;
+        const auto old_vm_frame_n = ctx->ending_frame_depth;
+        const auto old_vm_status = ctx->status;
+
+        if (!maybe_callable_p) {
+            std::println(std::cerr, "Function.call: Cannot invoke invalid object reference.");
+            ctx->status = VMErrcode::bad_operation;
+            return false;
+        }
+
+        /// NOTE: See below diagram & mandate `thisArg` for now!
+        // foo.call(self, 1) becomes:
+        // STACK pass-native-call-args: self, 1, foo, foo.call
+        // STACK start-native-call: self, 1; this_p = foo
+        // STACK pre-call-from-native-call: self, 1; RSP = NATIVE_RSBP + NATIVE_ARGC - 1
+        // (dup thisArg of self)
+        // STACK start-call-from-native-call: self, 1, self, undefined
+        ctx->rsp = passed_rsbp + argc - 1;
+        ctx->rsp++;
+        ctx->stack.at(ctx->rsp) = ctx->stack.at(passed_rsbp); // DUP thisArg
+        ctx->rsp++;
+        ctx->stack.at(ctx->rsp) = Value {}; // DUP dud to pad the stack for proper callee RSBP
+        
+        /// NOTE: ensure exit of just the callback when its frame is popped...
+        ctx->ending_frame_depth = ctx->frames.size();
+
+        if (!maybe_callable_p->call(ctx, argc - 1, true)) {
+            std::println(std::cerr, "Function.call: Cannot invoke non-function object.");
+            ctx->status = VMErrcode::bad_operation;
+            return false;
+        }
+
+        dispatch_op(*ctx, ctx->rip_p->args[0], ctx->rip_p->args[1]);
+
+        if (ctx->status != VMErrcode::ok) {
+            std::println(std::cerr, "Array.forEach: fatal error in callback body.");
+            return false;
+        }
+
+        /// NOTE: Restore old exiting frame depth for VM.
+        ctx->ending_frame_depth = old_vm_frame_n;
+        ctx->status = old_vm_status;
 
         return true;
     }
