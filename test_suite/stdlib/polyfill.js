@@ -1,4 +1,7 @@
-/// JS Polyfills for anything that I don't need the DerkJS VM API for.
+/**
+ * @file stdlib/polyfill.js
+ * @summary Implements ES5 polyfills for everything that doesn't need the DerkJS VM API.
+ */
 
 Array.prototype.at = function(index) {
     if (index < 0) {
@@ -114,4 +117,47 @@ Array.prototype.map = function (callbackFn, thisArg) {
     return temp;
 };
 
-// TODO: Array.prototype.filter, Array.prototype.some
+Array.prototype.filter = function (predicateFn, thisArg) {
+    var pos = 0;
+    var end = this.length;
+    var temp = [];
+
+    if (typeof predicateFn !== "function") {
+        return temp;
+    }
+
+    while (pos < end) {
+        var item = this[pos];
+
+        if (predicateFn.call(thisArg, item) === true) {
+            temp.push(item);
+        }
+
+        ++pos;
+    }
+
+    return temp;
+};
+
+Array.prototype.some = function (predicateFn, thisArg) {
+    var pos = 0;
+    var end = this.length;
+    var ok = true;
+
+    if (typeof predicateFn !== "function") {
+        return false;
+    }
+
+    while (pos < end) {
+        var item = this[pos];
+
+        if (!predicateFn.call(thisArg, item)) {
+            ok = false;
+            break;
+        }
+
+        ++pos;
+    }
+
+    return ok;
+};

@@ -56,12 +56,14 @@
  28. ~~Refactor bytecode gen to Dep. Inj. modules for generating each expr / stmt.~~
  29. ~~Add prefix increment & decrement operator.~~
  30. Polyfills!
-    - Add `Function` prototype methods & immutable length accessor. (WIP)
-    - Refactor `NativeFunction` & `Lambda` to take `length` value on initialization.
-    - Modify bytecode "calling convention":
-      - The bytecode compiler must push the callee first for every call. If no this argument is passed, push undefined. Then push N arguments.
-      - The `NativeFunction` and `Lambda` classes _must_ follow this new convention!
-    - Add `stdlib/polyfill.js` prelude pasted before every script source.
+    - ~~Add `Function` prototype methods & immutable length accessor.~~ (WIP)
+    - ~~Refactor `NativeFunction` & `Lambda` to take `length` value on initialization.~~
+    - ~~Modify bytecode "calling convention":~~
+      - Call stack layout (bottom-up): `<thisArg?> <callee> <args>`
+      - Return results go to `CALLEE_RSBP - 1` where `CALLEE_RSBP = CALLER_RSP - ARGC + 1`.
+      - ~~The `NativeFunction` and `Lambda` classes _must_ follow this new convention!~~
+      - ~~All leftover natives _must_ follow the new convention!~~
+    - ~~Add `stdlib/polyfill.js` prelude pasted before every script source.~~
     - Polyfills for:
       - `Array.prototype`: `pop, indexOf, lastIndexOf, reverse, forEach(arr, thisArg), filter(predicateFn, thisArg), map(callbackFn, thisArg)`
     - Keep natives for:
