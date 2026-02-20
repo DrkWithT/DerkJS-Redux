@@ -55,9 +55,19 @@
  27. ~~Make `String` a constructor function & add some methods.~~
  28. ~~Refactor bytecode gen to Dep. Inj. modules for generating each expr / stmt.~~
  29. ~~Add prefix increment & decrement operator.~~
- 30. Add Array methods: `forEach(arr, thisArg), filter(predicateFn, thisArg), map(callbackFn, thisArg), concat(args...)`
-    - Fix native callable impls to respect `callables.ixx::NativeFunction::call(...)`: all native functions must push a return to `RSP + 1`
-    - Implement support in VM for running callback bytecode down to a certain call frame point.
-    - Implement `auto native_array_for_each(...) -> bool`.
- 31. Add Object methods: `hasOwnProperty(key), isPrototypeOf(obj)`
- 32. Add `+=, -=, *=, /=, %=` operators. Side Quest: syntax error on `==` or `!=` for mandating migration of old JS code to new JS.
+ 30. Polyfills!
+    - Add `Function` prototype methods & immutable length accessor. (WIP)
+    - Refactor `NativeFunction` & `Lambda` to take `length` value on initialization.
+    - Modify bytecode "calling convention":
+      - The bytecode compiler must push the callee first for every call. If no this argument is passed, push undefined. Then push N arguments.
+      - The `NativeFunction` and `Lambda` classes _must_ follow this new convention!
+    - Add `stdlib/polyfill.js` prelude pasted before every script source.
+    - Polyfills for:
+      - `Array.prototype`: `pop, indexOf, lastIndexOf, reverse, forEach(arr, thisArg), filter(predicateFn, thisArg), map(callbackFn, thisArg)`
+    - Keep natives for:
+      - `parseInt`, `parseFloat`
+      - `constructor`s of `Object`, `Array`, `String`
+      - `Array.prototype`: push, join, toString
+      - `Object.prototype`: hasOwnProperty, isPrototypeOf, toString, freeze
+      - `String.prototype`: hasOwnProperty, isPrototypeOf, charCodeAt, trim, split
+      - `Function.prototype`: call
