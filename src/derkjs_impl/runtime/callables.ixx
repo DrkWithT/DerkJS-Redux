@@ -6,7 +6,8 @@ module;
 #include <string>
 #include <string_view>
 #include <sstream>
-// #include <print>
+#include <iostream>
+#include <print>
 
 export module runtime.callables;
 
@@ -27,13 +28,19 @@ export namespace DerkJS {
         PropPool<Value, Value> m_own_properties;
         Value m_prototype;
         native_func_p m_native_ptr;
+        int16_t m_min_arity;
         uint8_t m_flags;
 
     public:
-        NativeFunction(native_func_p procedure_ptr, ObjectBase<Value>* prototype_p) noexcept
-        : m_own_properties {}, m_prototype {(prototype_p) ? Value {prototype_p} : Value {}}, m_native_ptr {procedure_ptr}, m_flags {std::to_underlying(AttrMask::unused)} {
+        NativeFunction(native_func_p procedure_ptr, ObjectBase<Value>* prototype_p, const Value& length_key, const Value& length_value) noexcept
+        : m_own_properties {}, m_prototype {(prototype_p) ? Value {prototype_p} : Value {}}, m_native_ptr {procedure_ptr}, m_min_arity {length_value.to_num_i32().value_or(0)}, m_flags {std::to_underlying(AttrMask::unused)} {
             m_prototype.update_parent_flags(m_flags);
+            m_own_properties.emplace_back(length_key, length_value, std::to_underlying(AttrMask::immutable));
         }
+
+        [[nodiscard]] auto min_arity(this auto&& self) noexcept -> int16_t {
+            return self.m_min_arity;
+        } 
 
         [[nodiscard]] auto get_native_fn_addr() const noexcept -> const void* {
             return reinterpret_cast<const void*>(m_native_ptr);
@@ -110,28 +117,29 @@ export namespace DerkJS {
         void update_on_accessor_mut([[maybe_unused]] Value* accessor_p, [[maybe_unused]] const Value& value) override {}
 
         [[nodiscard]] auto call(void* opaque_ctx_p, int argc, [[maybe_unused]] bool has_this_arg) -> bool override {
-            /// 1.1: Prepare the `opaque_ctx_p` argument, which MUST point to an `ExternVMCtx` and MUST NOT own the context.
+            /// 1.1: Prepare the `opaque_ctx_p` argument, which MUST point to an `ExternVMCtx` and MUST NOT own the context. Track other important caller/callee state too.
             auto vm_context_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
-            ObjectBase<Value>* this_arg_p = (has_this_arg) ? vm_context_p->stack[vm_context_p->rsp - 1].to_object() : nullptr;
 
-            // 1.2: Just get the captures from the previous caller. This is a native function that's NOT a regular JS Function.
+            const auto resume_ip = vm_context_p->rip_p + 1;
+            const int16_t caller_rsbp = vm_context_p->rsbp;
+            const int16_t callee_rsbp = vm_context_p->rsp - argc + 1;
+
+            // 1.2: Get special captures: `thisArg` and `<anonymous Object> capture`.
+            ObjectBase<Value>* this_arg_p = (has_this_arg) ? vm_context_p->stack.at(callee_rsbp - 2).to_object() : nullptr;
             ObjectBase<Value>* caller_capture_p = vm_context_p->frames.back().capture_p;
 
             // 1. Prepare native callee stack pointer
-            const auto resume_ip = vm_context_p->rip_p + 1;
-            const int16_t callee_rsbp = vm_context_p->rsp - static_cast<int16_t>(argc + has_this_arg);
-            const int16_t caller_rsbp = vm_context_p->rsbp;
             vm_context_p->rsbp = callee_rsbp;
 
             vm_context_p->frames.emplace_back(ExternVMCtx::call_frame_type {
-                .m_caller_ret_ip = nullptr,
+                .m_caller_ret_ip = resume_ip,
                 /// NOTE: Take the `this` argument of the object passed in case the native callee needs it via the C++ API.
                 .this_p = this_arg_p,
                 .caller_addr = this,
                 .capture_p = caller_capture_p,
                 /// NOTE: Put unused dud values for bytecode RBP, etc. because the native callee handles its own return.
-                .m_callee_sbp = -1,
-                .m_caller_sbp = -1,
+                .m_callee_sbp = callee_rsbp,
+                .m_caller_sbp = caller_rsbp,
                 .m_flags = 0
             });
 
@@ -139,7 +147,7 @@ export namespace DerkJS {
             auto native_call_ok = m_native_ptr(vm_context_p, &m_own_properties, argc);
 
             // 3. Restore caller stack state after native call
-            vm_context_p->rsp = callee_rsbp;
+            vm_context_p->rsp = callee_rsbp - 1;
             vm_context_p->rsbp = caller_rsbp;
             vm_context_p->rip_p = resume_ip;
             vm_context_p->frames.pop_back();
@@ -151,14 +159,15 @@ export namespace DerkJS {
             // 1.1: After access of the VM context, all constructor result objects have the function prototype.
             auto vm_context_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
 
-            const int16_t callee_rsbp = vm_context_p->rsp - static_cast<int16_t>(argc);
+            const auto resume_ip = vm_context_p->rip_p + 1;
             const int16_t caller_rsbp = vm_context_p->rsbp;
-            vm_context_p->rsbp = callee_rsbp;
+            const int16_t callee_rsbp = vm_context_p->rsp - argc + 1;
 
             // 2. Push dummy frame mostly to track ctor-call status.
+            vm_context_p->rsbp = callee_rsbp;
             vm_context_p->frames.emplace_back(ExternVMCtx::call_frame_type {
                 /// NOTE: Just put nullptr- the native callee will handle its own return of control back to the interpreter.
-                .m_caller_ret_ip = nullptr,
+                .m_caller_ret_ip = resume_ip,
                 .this_p = nullptr,
                 .caller_addr = this,
                 .capture_p = nullptr,
@@ -172,19 +181,18 @@ export namespace DerkJS {
             // 3. Make native call
             auto native_call_ok = m_native_ptr(vm_context_p, &m_own_properties, argc);
 
-            vm_context_p->frames.pop_back();
-
             // 4. Restore caller stack state after native call
-            vm_context_p->rsp = callee_rsbp;
+            vm_context_p->rsp = callee_rsbp - 1;
             vm_context_p->rsbp = caller_rsbp;
-            vm_context_p->rip_p++;
+            vm_context_p->rip_p = vm_context_p->frames.back().m_caller_ret_ip;
+            vm_context_p->frames.pop_back();
 
             return native_call_ok;
         }
 
         /// NOTE: this only makes another wrapper around the C++ function ptr, but the raw pointer must be quickly owned by the VM heap (`PolyPool<ObjectBase<Value>>`)!
         [[nodiscard]] auto clone() -> ObjectBase<Value>* override {
-            auto copied_native_fn_p = new NativeFunction {m_native_ptr, m_prototype.to_object()};
+            auto copied_native_fn_p = new NativeFunction {*this};
 
             return copied_native_fn_p;
         }
@@ -271,13 +279,19 @@ export namespace DerkJS {
         PropPool<Value, Value> m_own_properties;
         std::vector<Instruction> m_code;
         Value m_prototype;
+        int16_t m_min_arity;
         uint8_t m_flags;
 
     public:
-        Lambda(std::vector<Instruction> code, ObjectBase<Value>* prototype_p) noexcept
-        : m_own_properties {}, m_code (std::move(code)), m_prototype {prototype_p}, m_flags {std::to_underlying(AttrMask::unused)} {
+        Lambda(std::vector<Instruction> code, ObjectBase<Value>* prototype_p, const Value& length_key, const Value& length_value) noexcept
+        : m_own_properties {}, m_code (std::move(code)), m_prototype {prototype_p}, m_min_arity {length_value.to_num_i32().value_or(0)} m_flags {std::to_underlying(AttrMask::unused)} {
             m_prototype.update_parent_flags(m_flags);
+            m_own_properties.emplace_back(length_key, length_value, std::to_underlying(AttrMask::immutable));
         }
+
+        [[nodiscard]] auto min_arity(this auto&& self) noexcept -> int16_t {
+            return self.m_min_arity;
+        } 
 
         [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
             return this;
@@ -362,30 +376,30 @@ export namespace DerkJS {
         void update_on_accessor_mut([[maybe_unused]] Value* accessor_p, [[maybe_unused]] const Value& value) override {}
 
         [[maybe_unused]] auto call(void* opaque_ctx_p, int argc, bool has_this_arg) -> bool override {
+            // 1.1: After accessing the VM context, consume `this` argument (if needed) before the call to avoid garbage results.
             auto vm_context_p = reinterpret_cast<ExternVMCtx*>(opaque_ctx_p);
 
-            // 1.1: After accessing the VM context, consume `this` argument (if needed) before the call to avoid garbage results.
-            ObjectBase<Value>* this_arg_p = (has_this_arg) ? vm_context_p->stack[vm_context_p->rsp - 1].to_object() : nullptr;
+            const auto resume_ip = vm_context_p->rip_p + 1;
+            const int16_t caller_rsbp = vm_context_p->rsbp;
+            const int16_t callee_rsbp = vm_context_p->rsp - argc + 1;
 
-            // 1.2: Only allocate a capture Object for different callee vs. caller Functions.
+            // 1.2: Get thisArg and capture objects.
+            ObjectBase<Value>* this_arg_p = (has_this_arg) ? vm_context_p->stack.at(callee_rsbp - 2).to_object() : vm_context_p->frames.back().capture_p;
             ObjectBase<Value>* caller_capture_p = vm_context_p->frames.back().capture_p;
-            auto capture_obj_p = (vm_context_p->frames.back().caller_addr == this) ? caller_capture_p : vm_context_p->heap.add_item(vm_context_p->heap.get_next_id(), std::make_unique<Object>(caller_capture_p));
 
-            const auto caller_ret_ip = vm_context_p->rip_p + 1;
-            const int16_t old_caller_sbp = vm_context_p->rsbp;
-            int16_t new_callee_sbp = vm_context_p->rsp - (argc + static_cast<int16_t>(has_this_arg));
+            if (vm_context_p->frames.back().caller_addr != this) {
+                caller_capture_p = vm_context_p->heap.add_item(vm_context_p->heap.get_next_id(), std::make_unique<Object>(caller_capture_p));
+            }
 
             vm_context_p->rip_p = m_code.data();
-            vm_context_p->rsbp = new_callee_sbp;
-            vm_context_p->rsp = new_callee_sbp + argc - 1;
-
+            vm_context_p->rsbp = callee_rsbp;
             vm_context_p->frames.emplace_back(ExternVMCtx::call_frame_type {
-                .m_caller_ret_ip = caller_ret_ip,
+                .m_caller_ret_ip = resume_ip,
                 .this_p = this_arg_p,
                 .caller_addr = this,
-                .capture_p = capture_obj_p,
-                .m_callee_sbp = new_callee_sbp,
-                .m_caller_sbp = old_caller_sbp,
+                .capture_p = caller_capture_p,
+                .m_callee_sbp = callee_rsbp,
+                .m_caller_sbp = caller_rsbp,
                 .m_flags = 0
             });
 
@@ -407,23 +421,25 @@ export namespace DerkJS {
 
             // 1.2: Only allocate a capture Object for different callee vs. caller Functions.
             ObjectBase<Value>* caller_capture_p = vm_context_p->frames.back().capture_p;
-            auto capture_obj_p = (vm_context_p->frames.back().caller_addr == this) ? caller_capture_p : vm_context_p->heap.add_item(vm_context_p->heap.get_next_id(), std::make_unique<Object>(caller_capture_p));
 
-            const auto caller_ret_ip = vm_context_p->rip_p + 1;
-            const int16_t new_callee_sbp = vm_context_p->rsp - argc;
-            const int16_t old_caller_sbp = vm_context_p->rsbp;
+            if (vm_context_p->frames.back().caller_addr != this) {
+                caller_capture_p = vm_context_p->heap.add_item(vm_context_p->heap.get_next_id(), std::make_unique<Object>(caller_capture_p));
+            }
+
+            const auto resume_ip = vm_context_p->rip_p + 1;
+            const int16_t callee_rsbp = vm_context_p->rsp - argc + 1;
+            const int16_t caller_rsbp = vm_context_p->rsbp;
 
             vm_context_p->rip_p = m_code.data();
-            vm_context_p->rsbp = new_callee_sbp; // 0, Sequence
-            vm_context_p->rsp = new_callee_sbp;
+            vm_context_p->rsbp = callee_rsbp;
 
             vm_context_p->frames.emplace_back(ExternVMCtx::call_frame_type {
-                .m_caller_ret_ip = caller_ret_ip,
+                .m_caller_ret_ip = resume_ip,
                 .this_p = this_arg_p,
                 .caller_addr = this,
-                .capture_p = capture_obj_p,
-                .m_callee_sbp = new_callee_sbp,
-                .m_caller_sbp = old_caller_sbp,
+                .capture_p = caller_capture_p,
+                .m_callee_sbp = callee_rsbp,
+                .m_caller_sbp = caller_rsbp,
                 /// NOTE: ctor call applies here.
                 .m_flags = std::to_underlying(CallFlags::is_ctor)
             });
@@ -433,7 +449,7 @@ export namespace DerkJS {
 
         /// For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!
         [[nodiscard]] auto clone() -> ObjectBase<Value>* override {
-            return new Lambda {m_code, m_prototype.to_object()};
+            return new Lambda {*this};
         }
 
         [[nodiscard]] auto opaque_iter() const noexcept -> OpaqueIterator override {
