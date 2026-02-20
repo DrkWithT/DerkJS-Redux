@@ -61,7 +61,7 @@ namespace DerkJS::Backend {
 
                     // Case 1: property keys are always constant strings.
                     if (context.m_callee_name == atom_lexeme && !context.m_accessing_property && context.m_has_call) {
-                        return Arg {.n = -1, .tag = Location::end, .is_str_literal = false, .from_closure = false};
+                        return Arg { .n = -1, .tag = Location::end, .is_str_literal = false, .from_closure = false };
                     } else if (pmt_is_key) {
                         return context.record_symbol(atom_lexeme, atom_lexeme, FindKeyConstOpt {});
                     } else {
@@ -158,7 +158,12 @@ namespace DerkJS::Backend {
             // 2. Invoke this special opcode. Now there's a new array for use. :)
             context.encode_instruction(
                 Opcode::djs_make_arr,
-                Arg {.n = static_cast<int16_t>(item_count), .tag = Location::immediate}
+                Arg {
+                    .n = static_cast<int16_t>(item_count),
+                    .tag = Location::immediate,
+                    .is_str_literal = false,
+                    .from_closure = false
+                }
             );
 
             return true;
@@ -172,6 +177,7 @@ namespace DerkJS::Backend {
         [[nodiscard]] auto emit(BytecodeEmitterContext& context, const Expr& node, const std::string& source) -> bool override {
             const auto& [lambda_params, lambda_body] = std::get<LambdaLiteral>(node.data);
             context.m_accessing_property = false;
+            const int lambda_arity = lambda_params.size();
 
             // 1. Begin lambda code emission, but let's note that this nested "code scope" place a new buffer as the currently filling one before it's done & craps out a Lambda object... Which gets moved into the bytecode `Program` later.
             context.m_local_maps.emplace_back(CodeGenScope {
@@ -223,7 +229,9 @@ namespace DerkJS::Backend {
 
             Lambda temp_callable {
                 std::move(context.m_code_blobs.front()),
-                context.m_heap.add_item(context.m_heap.get_next_id(), std::make_unique<Object>(nullptr, std::to_underlying(AttrMask::unused)))
+                context.m_base_prototypes.at(static_cast<unsigned int>(BasePrototypeID::function)),
+                context.m_base_prototypes.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
+                Value {lambda_arity}
             };
             
             if (auto lambda_object_ptr = context.m_heap.add_item(context.m_heap.get_next_id(), std::move(temp_callable)); lambda_object_ptr) {
@@ -278,7 +286,9 @@ namespace DerkJS::Backend {
                 Opcode::djs_get_prop,
                 Arg {
                     .n = static_cast<int16_t>(!context.m_has_call && context.m_access_as_lval),
-                    .tag = Location::immediate
+                    .tag = Location::immediate,
+                    .is_str_literal = false,
+                    .from_closure = false
                 }
             );
 
@@ -397,12 +407,22 @@ namespace DerkJS::Backend {
                 context.encode_instruction(
                     Opcode::djs_jump_else,
                     /// NOTE: backpatch relative jump offset next
-                    Arg {.n = -1, .tag = Location::immediate}
+                    Arg {
+                        .n = -1,
+                        .tag = Location::immediate,
+                        .is_str_literal = false,
+                        .from_closure = false
+                    }
                 );
             } else if (logical_operator == AstOp::ast_op_or) {
                 context.encode_instruction(
                     Opcode::djs_jump_if,
-                    Arg {.n = -1, .tag = Location::immediate}
+                    Arg {
+                        .n = -1,
+                        .tag = Location::immediate,
+                        .is_str_literal = false,
+                        .from_closure = false
+                    }
                 );
             }
 
@@ -515,16 +535,8 @@ namespace DerkJS::Backend {
 
         [[nodiscard]] auto emit(BytecodeEmitterContext& context, const Expr& node, const std::string& source) -> bool override {
             const auto& [expr_args, expr_callee] = std::get<Call>(node.data);
-            auto call_argc = 0;
+            const int call_argc = expr_args.size();
 
-            for (const auto& arg_p : expr_args) {
-                if (!context.emit_expr(*arg_p, source)) {
-                    return false;
-                }
-
-                ++call_argc;
-            }
-            
             context.m_has_call = true;
             context.m_access_as_lval = true;
 
@@ -536,6 +548,12 @@ namespace DerkJS::Backend {
 
             context.m_access_as_lval = false;
             context.m_member_depth = 0;
+
+            for (const auto& arg_p : expr_args) {
+                if (!context.emit_expr(*arg_p, source)) {
+                    return false;
+                }
+            }
 
             if (!context.m_has_new_applied) {
                 context.encode_instruction(

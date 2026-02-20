@@ -278,7 +278,7 @@ namespace DerkJS::Backend {
                         .n = next_global_ref_const_id,
                         .tag = Location::constant,
                         .is_str_literal = true,
-                        .from_closure = false, // the variable name may also mirror a string literal, so keep the actual symbol's flag false!
+                        .from_closure = false // the variable name may also mirror a string literal, so keep the actual symbol's flag false!
                     };
                     m_heap.update_tenure_count();
 

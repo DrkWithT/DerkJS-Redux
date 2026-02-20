@@ -21,13 +21,14 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_parse_int(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
-        std::string temp_str = ctx->stack[passed_rsbp].to_string().value_or("");
+        std::string temp_str = ctx->stack.at(passed_rsbp).to_string().value_or("");
+        const int radix_i32 = (argc == 2) ? ctx->stack.at(passed_rsbp + 1).to_num_i32().value_or(10) : 10;
 
         try {
-            ctx->stack[passed_rsbp] = Value {std::stoi(temp_str)};
+            ctx->stack.at(passed_rsbp - 1) = Value {std::stoi(temp_str, radix_i32)};
         } catch (const std::exception& err) {
             std::println(std::cerr, "parseInt: String is not a valid integer literal.");
-            ctx->stack[passed_rsbp] = Value {JSNaNOpt {}};
+            ctx->stack.at(passed_rsbp) = Value {JSNaNOpt {}};
         }
 
         return true;
@@ -38,14 +39,13 @@ export namespace DerkJS {
     /// From: ES5 - 15.5.2.1
     [[nodiscard]] auto native_str_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
-        const auto& arg_value = ctx->stack[passed_rsbp];
 
         if (auto temp_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::make_unique<DynamicString>(
             ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
             ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
-            arg_value.to_string().value()
+            ctx->stack.at(passed_rsbp).to_string().value()
         )); temp_str_p) {
-            ctx->stack[passed_rsbp] = Value {temp_str_p};
+            ctx->stack.at(passed_rsbp - 1) = Value {temp_str_p};
             return true;
         } else {
             ctx->status = VMErrcode::bad_heap_alloc;   
@@ -56,17 +56,15 @@ export namespace DerkJS {
     [[nodiscard]] auto native_str_charcode_at(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
         const auto str_this_p = dynamic_cast<const StringBase*>(
-            (ctx->stack[passed_rsbp + argc].get_tag() == ValueTag::val_ref)
-                ? ctx->stack[passed_rsbp + argc].get_value_ref()->to_object()
-                : ctx->stack[passed_rsbp + argc].to_object()
+            ctx->frames.back().this_p
         );
-        const int str_at_pos = ctx->stack[passed_rsbp].to_num_i32().value_or(-1);
+        const int str_at_pos = ctx->stack.at(passed_rsbp).to_num_i32().value_or(-1);
         std::string_view chars_view = str_this_p->as_str_view();
 
         if (const int chars_n = chars_view.length(); str_at_pos < 0 || str_at_pos >= chars_n) {
-            ctx->stack[passed_rsbp] = Value {JSNaNOpt {}}; // get undefined for invalid char positions
+            ctx->stack(passed_rsbp - 1) = Value {JSNaNOpt {}}; // get NaN for invalid char positions
         } else {
-            ctx->stack[passed_rsbp] = Value {static_cast<int>(chars_view[str_at_pos])};
+            ctx->stack(passed_rsbp - 1) = Value {static_cast<int>(chars_view[str_at_pos])};
         }
 
         return true;
@@ -75,10 +73,12 @@ export namespace DerkJS {
     // ES5 15.5.4.15 - Create a substring with start & end indices of an original string.
     [[nodiscard]] auto native_str_substring(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
-        std::string old_source {ctx->stack[passed_rsbp + argc].to_string().value()};
-        
-        /// TODO: normalize start and end substring bounds as 0 minimum TO (N - 1) maximum
-        const int old_length = old_source.length();
+        const auto str_this_p = dynamic_cast<const StringBase*>(
+            ctx->frames.back().this_p
+        );
+
+        /// NOTE: normalize start and end substring bounds as 0 minimum TO (N - 1) maximum
+        const int old_length = str_this_p->as_str_view().length();
         const int final_start = std::min(
             std::max(
                 ctx->stack.at(passed_rsbp).to_num_i32().value_or(0), // start index (NaNs -> 0)
@@ -102,12 +102,13 @@ export namespace DerkJS {
             std::make_unique<DynamicString>(
                 ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
                 ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
-                old_source.substr(from_index, to_index - from_index)
+                std::string_view {str_this_p->as_str_view().substr(from_index, to_index - from_index)}
             )
         )) {
-            ctx->stack[passed_rsbp] = Value {substring_p};
+            ctx->stack.at(passed_rsbp - 1) = Value {substring_p};
             return true;
         } else {
+            ctx->status = VMErrcode::bad_heap_alloc;
             return false;
         }
     }
@@ -115,7 +116,11 @@ export namespace DerkJS {
     // ES5 - 15.5.4.20: remove fringe spaces.
     [[nodiscard]] auto native_str_trim(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
-        std::string old_source {ctx->stack[passed_rsbp + argc].to_string().value()};
+        const auto str_this_p = dynamic_cast<const StringBase*>(
+            ctx->frames.back().this_p
+        );
+
+        std::string old_source {str_this_p->as_string()};
         const int first_no_space_index = old_source.find_first_not_of(' ');
         const int last_no_space_index = old_source.find_last_not_of(' ');
 
@@ -124,7 +129,7 @@ export namespace DerkJS {
             ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
             old_source.substr(first_no_space_index, last_no_space_index - first_no_space_index + 1)
         )); trimmed_string_p) {
-            ctx->stack.at(passed_rsbp) = Value {trimmed_string_p};
+            ctx->stack.at(passed_rsbp - 1) = Value {trimmed_string_p};
             return true;
         }
 
@@ -135,8 +140,9 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_str_substr(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
-        auto str_as_obj_p = ctx->stack[passed_rsbp + argc].to_object();
-        const auto str_this_p = dynamic_cast<const StringBase*>(str_as_obj_p);
+        const auto str_this_p = dynamic_cast<const StringBase*>(
+            ctx->frames.back().this_p
+        );
         const int substr_begin = ctx->stack[passed_rsbp].to_num_i32().value_or(0);
         const int substr_len = ctx->stack[passed_rsbp + 1].to_num_i32().value_or(0);
 
@@ -147,15 +153,15 @@ export namespace DerkJS {
         if (auto created_str_p = ctx->heap.add_item(
             ctx->heap.get_next_id(),
             DynamicString {
-                str_as_obj_p->get_prototype(),
+                ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
                 Value {ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))},
-                temp_substr}
-            ); created_str_p) {
-            ctx->stack[passed_rsbp] = Value {created_str_p};
+                temp_substr
+            }); created_str_p) {
+            ctx->stack.at(passed_rsbp - 1) = Value {created_str_p};
             return true;
         } else {
+            ctx->status = VMErrcode::bad_heap_alloc;
             std::println(std::cerr, "Failed to allocate JS sub-string on the heap.");
-            ctx->stack[passed_rsbp] = Value {JSNullOpt {}};
             return false;
         }
     }
@@ -171,19 +177,15 @@ export namespace DerkJS {
 
         std::println();
 
+        ctx->stack.at(passed_rsbp - 1) = Value {};
+
         return true;
     }
 
     [[nodiscard]] auto native_console_read_line(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {    
         /// NOTE: Show user the passed-in prompt string: It MUST be the 1st argument on the stack.
         const auto passed_rsbp = ctx->rsbp;
-        const auto prompt_str_p = ctx->stack[passed_rsbp].to_object();
-        ObjectBase<Value>* prompt_str_prototype = prompt_str_p->get_prototype();
-
-        if (!prompt_str_p || prompt_str_p->get_class_name() != "string") {
-            ctx->stack[passed_rsbp] = Value {};
-            return false;
-        }
+        const auto& prompt_value = ctx->stack.at(passed_rsbp);
 
         std::print("{}", prompt_str_p->as_string());
 
@@ -193,18 +195,18 @@ export namespace DerkJS {
         ObjectBase<Value>* line_str_p = ctx->heap.add_item(
             ctx->heap.get_next_id(),
             DynamicString {
-                prompt_str_prototype,
+                ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
                 Value {ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))},
                 temp_line
             }
         );
 
         if (!line_str_p) {
+            ctx->status = VMErrcode::bad_heap_alloc;
             std::println(std::cerr, "Failed to allocate input string on the heap.");
-            ctx->stack[passed_rsbp] = Value {};
             return false;
-        } else {            
-            ctx->stack[passed_rsbp] = Value {line_str_p};
+        } else {
+            ctx->stack.at(passed_rsbp - 1) = Value {line_str_p};
             return true;
         }
     }
@@ -217,7 +219,7 @@ export namespace DerkJS {
         const std::chrono::duration<double, std::milli> current_time_ms = std::chrono::steady_clock::now().time_since_epoch();
 
         /// NOTE: the VM's `djs_native_call` opcode will restore RSP -> callee RBP automtically, so the result would have to be placed there for other code.
-        ctx->stack[passed_rsbp] = Value {current_time_ms.count()};
+        ctx->stack.at(passed_rsbp - 1) = Value {current_time_ms.count()};
 
         return true;
     }
@@ -230,7 +232,7 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_array_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        int maybe_fill_count = ctx->stack[passed_rsbp].to_num_i32().value_or(0);
+        int maybe_fill_count = ctx->stack.at(passed_rsbp).to_num_i32().value_or(0);
 
         if (argc == 0) {
             maybe_fill_count = 0;
@@ -248,40 +250,39 @@ export namespace DerkJS {
         // 2. Fill with N temporary arguments OR fill with N undefined values.
         if (argc > 1) {
             for (int temp_item_offset = 0; temp_item_offset < argc; temp_item_offset++) {
-                temp_array->items().emplace_back(ctx->stack[passed_rsbp + temp_item_offset]);
+                temp_array->items().emplace_back(ctx->stack.at(passed_rsbp + temp_item_offset));
             }
         } else if (argc == 1) {
             for (int temp_item_count = 0; temp_item_count < maybe_fill_count; temp_item_count++) {
                 temp_array->items().emplace_back(Value {});
             }
-        } else {
-            ;
         }
 
         // 3. Record array to VM heap
         ObjectBase<Value>* temp_array_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::move(temp_array));
 
         if (temp_array_p) {
-            // 3. Put reference to array
-            ctx->stack[passed_rsbp] = Value {temp_array_p};
+            ctx->stack.at(passed_rsbp - 1) = Value {temp_array_p};
             return true;
         } else {
+            ctx->status = VMErrcode::bad_heap_alloc;
             std::println(std::cerr, "Failed to allocate JS array on the heap.");
-            ctx->stack[passed_rsbp] = Value {};
             return false;
         }
     }
 
     [[nodiscard]] auto native_array_push(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object()); // consume an array object by reference off the stack for mutation
+        auto array_this_p = dynamic_cast<Array*>(
+            ctx->frames.back().this_p
+        );
 
         for (int temp_item_offset = 0; temp_item_offset < argc; temp_item_offset++) {
-            array_this_p->items().emplace_back(ctx->stack[passed_rsbp + temp_item_offset]);
+            array_this_p->items().emplace_back(ctx->stack.at(passed_rsbp + temp_item_offset));
         }
 
         /// NOTE: By MDN, Array.prototype.push returns a new length.
-        ctx->stack[passed_rsbp] = Value {
+        ctx->stack.at(passed_rsbp - 1) = Value {
             static_cast<int>(array_this_p->items().size())
         };
 
@@ -291,7 +292,9 @@ export namespace DerkJS {
     /// SEE: ES5-15.4.4.5
     [[nodiscard]] auto native_array_join(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<const Array*>(ctx->stack[passed_rsbp + argc].to_object());
+        auto array_this_p = dynamic_cast<Array*>(
+            ctx->frames.back().this_p
+        );
         auto temp_str = std::make_unique<DynamicString>(
             ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
             Value {ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))},
@@ -306,8 +309,7 @@ export namespace DerkJS {
                 return false;
             }
 
-            ctx->stack.at(passed_rsbp) = Value {empty_str_p};
-
+            ctx->stack.at(passed_rsbp - 1) = Value {empty_str_p};
             return true;
         }
 
@@ -324,7 +326,7 @@ export namespace DerkJS {
         }
 
         if (auto filled_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::move(temp_str)); filled_str_p) {
-            ctx->stack.at(passed_rsbp) = Value {filled_str_p};
+            ctx->stack.at(passed_rsbp - 1) = Value {filled_str_p};
             return true;
         } else {
             ctx->status = VMErrcode::bad_heap_alloc;
@@ -349,7 +351,7 @@ export namespace DerkJS {
             ctx->status = VMErrcode::bad_operation;
             return false;
         } else {
-            ctx->stack.at(passed_rsbp) = Value {target_as_object_p};
+            ctx->stack.at(passed_rsbp - 1) = Value {target_as_object_p};
             return true;
         }
     }
@@ -359,21 +361,19 @@ export namespace DerkJS {
         auto taken_proto_p = ctx->stack.at(passed_rsbp).to_object();
 
         if (auto result_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::make_unique<Object>(taken_proto_p)); result_p) {
-            ctx->stack.at(passed_rsbp) = Value {result_p};
+            ctx->stack.at(passed_rsbp - 1) = Value {result_p};
             return true;
         } else {
-            std::println(std::cerr, "Failed to allocate JS object on the heap.");
-            ctx->stack.at(passed_rsbp) = Value {JSNullOpt {}};
             ctx->status = VMErrcode::bad_heap_alloc;
+            std::println(std::cerr, "Failed to allocate JS object on the heap.");
             return false;
         }
     }
 
     [[nodiscard]] auto native_object_freeze(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        auto target_object_p = ctx->stack.at(passed_rsbp).to_object();
 
-        if (target_object_p != nullptr) {
+        if (auto target_object_p = ctx->stack.at(passed_rsbp).to_object(); target_object_p != nullptr) {
             target_object_p->freeze();
         }
 
