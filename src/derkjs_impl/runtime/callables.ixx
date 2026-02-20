@@ -117,18 +117,14 @@ export namespace DerkJS {
             // 1.2: Just get the captures from the previous caller. This is a native function that's NOT a regular JS Function.
             ObjectBase<Value>* caller_capture_p = vm_context_p->frames.back().capture_p;
 
-            if (has_this_arg) {
-                --vm_context_p->rsp;
-            }
-
             // 1. Prepare native callee stack pointer
-            const int16_t callee_rsbp = vm_context_p->rsp - static_cast<int16_t>(argc);
+            const auto resume_ip = vm_context_p->rip_p + 1;
+            const int16_t callee_rsbp = vm_context_p->rsp - static_cast<int16_t>(argc + has_this_arg);
             const int16_t caller_rsbp = vm_context_p->rsbp;
             vm_context_p->rsbp = callee_rsbp;
 
             vm_context_p->frames.emplace_back(ExternVMCtx::call_frame_type {
-                /// NOTE: Just put nullptr- the native callee will handle its own return of control back to the interpreter.
-                .m_caller_ret_ip = vm_context_p->rip_p + 1,
+                .m_caller_ret_ip = nullptr,
                 /// NOTE: Take the `this` argument of the object passed in case the native callee needs it via the C++ API.
                 .this_p = this_arg_p,
                 .caller_addr = this,
@@ -143,10 +139,10 @@ export namespace DerkJS {
             auto native_call_ok = m_native_ptr(vm_context_p, &m_own_properties, argc);
 
             // 3. Restore caller stack state after native call
-            vm_context_p->frames.pop_back();
             vm_context_p->rsp = callee_rsbp;
             vm_context_p->rsbp = caller_rsbp;
-            vm_context_p->rip_p++;
+            vm_context_p->rip_p = resume_ip;
+            vm_context_p->frames.pop_back();
 
             return native_call_ok;
         }
@@ -375,12 +371,6 @@ export namespace DerkJS {
             ObjectBase<Value>* caller_capture_p = vm_context_p->frames.back().capture_p;
             auto capture_obj_p = (vm_context_p->frames.back().caller_addr == this) ? caller_capture_p : vm_context_p->heap.add_item(vm_context_p->heap.get_next_id(), std::make_unique<Object>(caller_capture_p));
 
-            // if (vm_context_p->frames.back().caller_addr == this) {
-            //     std::println("Captures: Object(this = {})", reinterpret_cast<void*>(capture_obj_p));
-            // } else {
-            //     std::println("Captures: Object(this = {}, prototype = {})", reinterpret_cast<void*>(capture_obj_p), reinterpret_cast<void*>(caller_capture_p));
-            // }
-
             const auto caller_ret_ip = vm_context_p->rip_p + 1;
             const int16_t old_caller_sbp = vm_context_p->rsbp;
             int16_t new_callee_sbp = vm_context_p->rsp - (argc + static_cast<int16_t>(has_this_arg));
@@ -484,6 +474,5 @@ export namespace DerkJS {
         [[nodiscard]] auto operator>(const ObjectBase& other) const noexcept -> bool override {
             return false;
         }
-
     };
 }
