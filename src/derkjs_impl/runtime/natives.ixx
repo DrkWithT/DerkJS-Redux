@@ -442,6 +442,81 @@ export namespace DerkJS {
         return false; // TODO!
     }
 
+    [[nodiscard]] auto native_array_for_each(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const int passed_rsbp = ctx->rsbp;
+
+        // 1. Check arguments for simplicity.
+        if (argc != 2) {
+            ctx->status = VMErrcode::bad_operation;
+            std::println(std::cerr, "Array.forEach: Expected 2 arguments.");
+            return false;
+        }
+
+        auto array_this_p = dynamic_cast<const Array*>(ctx->stack[passed_rsbp + argc].to_object());
+
+        if (!array_this_p) {
+            ctx->status = VMErrcode::bad_operation;
+            std::println(std::cerr, "Array.forEach: Expected array argument.");
+            return false;
+        }
+
+        const auto& callback = ctx->stack.at(passed_rsbp);
+        const auto& this_arg = ctx->stack.at(passed_rsbp + 1);
+
+        if (callback.get_tag() != ValueTag::object) {
+            ctx->status = VMErrcode::bad_operation;
+            std::println(std::cerr, "Array.forEach: Expected object callback.");
+            return false;
+        }
+
+        if (this_arg.get_tag() != ValueTag::object) {
+            ctx->status = VMErrcode::bad_operation;
+            std::println(std::cerr, "Array.forEach: Expected object thisArg.");
+            return false;
+        }
+
+        // 3 & 4. Save exiting VM frame depth pre-callback before preparing the callback invocation.
+        const auto old_vm_frame_n = ctx->ending_frame_depth;    
+        const auto load_arg_base = ctx->rsp;
+        const auto old_vm_status = ctx->status;
+
+        // 2. Start invoking the callback with the VM context for each array item.
+        for (const auto& array_items = array_this_p->items(); const auto& item : array_items) {
+            ctx->rsp++;
+            ctx->stack.at(ctx->rsp) = item; // load next array item
+            ctx->rsp++;
+            ctx->stack.at(ctx->rsp) = this_arg; // load `thisArg` value
+            ctx->rsp++;
+            ctx->stack.at(ctx->rsp) = callback; // load callback value
+
+            /// NOTE: ensure exit of just the callback when its frame is popped...
+            ctx->ending_frame_depth = ctx->frames.size();
+            
+            if (!ctx->stack.at(ctx->rsp).to_object()->call(ctx, 1, true)) {
+                std::println(std::cerr, "Array.forEach: fatal error in callback call.");
+                return false;
+            }
+
+            dispatch_op(*ctx, ctx->rip_p->args[0], ctx->rip_p->args[1]);
+
+            if (ctx->status != VMErrcode::ok) {
+                std::println(std::cerr, "Array.forEach: fatal error in callback body.");
+                return false;
+            }
+
+            // 5. Restore old exiting frame depth for VM.
+            ctx->ending_frame_depth = old_vm_frame_n;
+            ctx->status = old_vm_status;
+            ctx->rsp = load_arg_base;
+        }
+
+        // 6. As per ES5, return nothing (and restore default call frame depth).
+        ctx->ending_frame_depth = old_vm_frame_n;
+        ctx->stack.at(passed_rsbp) = Value {};
+
+        return true;
+    }
+
     /// Object.prototype impls:
 
     /// TODO: fix this to wrap primitives in object form / forward objects as-is.
