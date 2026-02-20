@@ -87,6 +87,8 @@ namespace DerkJS {
         /// NOTE: holds direct pointer to an `Instruction`.
         const Instruction* rip_p;
 
+        std::size_t ending_frame_depth;
+
         /// NOTE: holds stack base pointer for call locals
         int16_t rsbp;
 
@@ -96,7 +98,7 @@ namespace DerkJS {
         VMErrcode status;
 
         ExternVMCtx(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit, std::size_t gc_heap_threshold)
-        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), base_protos(std::move(prgm.base_protos)), stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, rsbp {0}, rsp {-1}, status {VMErrcode::pending} {
+        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), base_protos(std::move(prgm.base_protos)), stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, ending_frame_depth {0}, rsbp {0}, rsp {-1}, status {VMErrcode::pending} {
             stack.reserve(stack_length_limit);
             stack.resize(stack_length_limit);
             frames.reserve(call_frame_limit);
@@ -158,7 +160,7 @@ namespace DerkJS {
     inline void op_ctor_call(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    export inline void dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1);
 
     using tco_opcode_fn = void(*)(ExternVMCtx&, int16_t, int16_t);
     constexpr tco_opcode_fn tco_opcodes[static_cast<std::size_t>(Opcode::last)] = {
@@ -658,7 +660,7 @@ namespace DerkJS {
 
         ctx.frames.pop_back();
 
-        if (ctx.frames.empty()) {
+        if (ctx.frames.size() <= ctx.ending_frame_depth) {
             ctx.status = VMErrcode::ok;
             return;
         }
@@ -684,9 +686,7 @@ namespace DerkJS {
     }
 
     /**
-     * @brief Provides the general bytecode VM type. Actual specializations via DispatchPolicy are meant to be used.
-     * 
-     * @tparam Dp Determines how bytecode opcodes are dispatched, either by loop-switch or tail-call optimization-friendly recursion. Tail call optimization (TCO) allows a slight speedup in the VM over a typical switch-loop by avoiding some overhead of creating / unwinding call frames.
+     * @brief Provides the general bytecode VM type.
      */
     export class VM {
     public:
@@ -706,7 +706,7 @@ namespace DerkJS {
             return self.m_ctx.status;
         }
 
-        inline void operator()() {
+        inline void run() {
             return dispatch_op(m_ctx, m_ctx.rip_p->args[0], m_ctx.rip_p->args[1]);
         }
     };

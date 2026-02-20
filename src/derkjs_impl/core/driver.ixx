@@ -336,7 +336,7 @@ export namespace DerkJS::Core {
             auto& prgm_ref = prgm.value();
             DerkJS::VM vm {prgm_ref, default_stack_size, default_call_depth_limit, gc_threshold};
 
-            vm();
+            vm.run();
 
             switch (const auto vm_status = vm.peek_status(); vm_status) {
             case VMErrcode::pending:
