@@ -79,13 +79,16 @@ export namespace DerkJS::Core {
                 src_buffer << src_line << '\n';
             }
 
-            std::vector<int> a;
+            src_buffer << '\n';
 
             return src_buffer.str();
         }
 
-        [[nodiscard]] auto parse_script(const std::string& file_path, std::string file_source) -> std::optional<ASTUnit> {
-            m_src_map.emplace_back(std::move(file_source)); // Source 0 is <main>.js
+        [[nodiscard]] auto parse_script(const std::string& file_path, const std::string& polyfill_file_path) -> std::optional<ASTUnit> {
+            std::string source_with_prelude = read_script(polyfill_file_path);
+            source_with_prelude.append_range(read_script(file_path));
+
+            m_src_map.emplace_back(std::move(source_with_prelude));
 
             Lexer lexer {m_src_map.at(0), std::move(m_js_lexicals)};
             Parser parser;
@@ -111,6 +114,10 @@ export namespace DerkJS::Core {
 
         void add_stmt_emitter(StmtNodeTag stmt_type_tag, std::unique_ptr<Backend::StmtEmitterBase<Stmt>> helper) {
             m_compile_state.add_stmt_emitter(stmt_type_tag, std::move(helper));
+        }
+
+        [[nodiscard]] auto get_length_key_str_p() noexcept -> ObjectBase<Value>* {
+            return m_length_str_length_key_p;
         }
 
         template <typename ObjectSubType, typename ... CtorArgs>
@@ -315,8 +322,8 @@ export namespace DerkJS::Core {
             return DriverInfo {m_app_name, m_app_author, m_version_major, m_version_minor, m_version_patch};
         }
 
-        [[nodiscard]] auto run(const std::string& file_path, std::size_t gc_threshold) -> int {
-            auto script_ast = parse_script(file_path, read_script(file_path));
+        [[nodiscard]] auto run(const std::string& file_path, const std::string& polyfill_file_path, std::size_t gc_threshold) -> int {
+            auto script_ast = parse_script(file_path, polyfill_file_path);
 
             if (!script_ast) {
                 return 1;
