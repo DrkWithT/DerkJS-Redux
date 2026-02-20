@@ -255,7 +255,7 @@ int main(int argc, char* argv[]) {
                 DerkJS::native_console_log,
                 nullptr,
                 driver.get_length_key_p(),
-                Value {0}
+                Value {1}
             )
         },
         Core::NativePropertyStub {
@@ -264,15 +264,20 @@ int main(int argc, char* argv[]) {
                 DerkJS::native_console_read_line,
                 nullptr,
                 driver.get_length_key_p(),
-                Value {2}
+                Value {1}
             )
         }
     };
 
-    Core::NativePropertyStub clock_obj_props[] {
+    Core::NativePropertyStub date_obj_props[] {
         Core::NativePropertyStub {
             .name_str = "now",
-            .item = std::make_unique<NativeFunction>(DerkJS::clock_time_now, nullptr)
+            .item = std::make_unique<NativeFunction>(
+                DerkJS::clock_time_now,
+                nullptr,
+                driver.get_length_key_p(),
+                Value {1}
+            )
         }
     };
 
@@ -282,20 +287,6 @@ int main(int argc, char* argv[]) {
         string_prototype_p,
         driver.get_length_key_str_p(),
         Value {1}
-    );
-
-    driver.add_native_object<Object>(
-        string_prototype_p,
-        "console",
-        std::to_array(std::move(console_obj_props)),
-        nullptr // TODO: add Object prototype.
-    );
-
-    driver.add_native_object<Object>(
-        string_prototype_p,
-        "clock",
-        std::to_array(std::move(clock_obj_props)),
-        nullptr // TODO: add Object prototype.
     );
 
     // Add `Array.prototype` object here!
@@ -340,6 +331,20 @@ int main(int argc, char* argv[]) {
         string_prototype_p,
         "Function::prototype",
         std::to_array(std::move(function_helper_props))
+    );
+
+    driver.add_native_object<Object>(
+        string_prototype_p,
+        "console",
+        std::to_array(std::move(console_obj_props)),
+        object_interface_prototype_p
+    );
+
+    driver.add_native_object<Object>(
+        string_prototype_p,
+        "Date",
+        std::to_array(std::move(date_obj_props)),
+        object_interface_prototype_p
     );
 
     driver.add_native_global<NativeFunction>(

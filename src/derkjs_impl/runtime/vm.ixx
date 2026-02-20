@@ -108,9 +108,9 @@ namespace DerkJS {
             } else {
                 frames.emplace_back(CallFrame {
                     .m_caller_ret_ip = nullptr,
-                    .this_p = global_this_p, // TODO: add globalThis & working global prop assignments...
+                    .this_p = global_this_p,
                     .caller_addr = nullptr,
-                    .capture_p = heap.add_item(heap.get_next_id(), std::make_unique<Object>(nullptr)),
+                    .capture_p = global_this_p,
                     .m_callee_sbp = 0,
                     .m_caller_sbp = 0,
                 });
@@ -647,14 +647,14 @@ namespace DerkJS {
         const auto& [caller_ret_ip, caller_this_p, caller_addr, caller_capture_p, callee_sbp, caller_sbp, calling_flags] = ctx.frames.back();
 
         if (a0 == 0) {
-            ctx.stack[callee_sbp] = ctx.stack[ctx.rsp];
+            ctx.stack.at(callee_sbp - 1) = ctx.stack[ctx.rsp];
         } else if (calling_flags & std::to_underlying(CallFlags::is_ctor)) {
-            ctx.stack[callee_sbp] = Value {caller_this_p};
+            ctx.stack.at(callee_sbp - 1) = Value {caller_this_p};
         } else {
-            ctx.stack[callee_sbp] = Value {};
+            ctx.stack.at(callee_sbp - 1) = Value {};
         }
 
-        ctx.rsp = callee_sbp;
+        ctx.rsp = callee_sbp - 1;
         ctx.rsbp = caller_sbp;
         ctx.rip_p = caller_ret_ip;
 
