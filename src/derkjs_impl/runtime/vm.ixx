@@ -4,6 +4,7 @@ module;
 #include <utility>
 #include <algorithm>
 #include <vector>
+// #include <print>
 
 export module runtime.vm;
 
@@ -31,7 +32,6 @@ namespace DerkJS {
      */
     struct CallFrame {
         const Instruction* m_caller_ret_ip;
-        ObjectBase<Value>* this_p;
         ObjectBase<Value>* caller_addr;
         ObjectBase<Value>* capture_p;
         int m_callee_sbp;
@@ -95,10 +95,12 @@ namespace DerkJS {
         /// NOTE: holds stack top pointer
         int16_t rsp;
 
+        // int16_t dispatch_allowance;
+
         VMErrcode status;
 
         ExternVMCtx(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit, std::size_t gc_heap_threshold)
-        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), base_protos(std::move(prgm.base_protos)), stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, ending_frame_depth {0}, rsbp {0}, rsp {-1}, status {VMErrcode::pending} {
+        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), base_protos(std::move(prgm.base_protos)), stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, ending_frame_depth {0}, rsbp {-1}, rsp {-1}, /*dispatch_allowance {100},*/ status {VMErrcode::pending} {
             stack.reserve(stack_length_limit);
             stack.resize(stack_length_limit);
             frames.reserve(call_frame_limit);
@@ -108,12 +110,18 @@ namespace DerkJS {
             } else {
                 frames.emplace_back(CallFrame {
                     .m_caller_ret_ip = nullptr,
-                    .this_p = global_this_p,
                     .caller_addr = nullptr,
                     .capture_p = global_this_p,
-                    .m_callee_sbp = 0,
-                    .m_caller_sbp = 0,
+                    .m_callee_sbp = 1,
+                    .m_caller_sbp = -1,
                 });
+                // 2. Push globalThis for implicit main code...
+                ++rsp;
+                stack.at(rsp) = Value {global_this_p};
+                // 3. Push undefined as dud for implicit main function- Which cannot directly self call anyways.
+                ++rsp;
+                stack.at(rsp) = Value {};
+                rsbp = rsp;
             }
         }
     };
@@ -286,7 +294,7 @@ namespace DerkJS {
     }
 
     inline void op_put_this(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        ctx.stack[ctx.rsp + 1] = Value {ctx.frames.back().this_p};
+        ctx.stack.at(ctx.rsp + 1) = ctx.stack.at(ctx.rsbp - 1);
         ctx.rsp++;
         ctx.rip_p++;
 
@@ -379,11 +387,11 @@ namespace DerkJS {
     }
 
     inline void op_get_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        auto& target_ref = ctx.stack[ctx.rsp - 1];
+        auto& target_ref = ctx.stack.at(ctx.rsp - 1);
 
         if (ObjectBase<Value>* target_obj_p = target_ref.to_object(); target_obj_p) {
-            ctx.stack[ctx.rsp - 1] = *target_obj_p->get_property_value(
-                ctx.stack[ctx.rsp], // special prototype key from previous opcode `put_proto_key`
+            ctx.stack.at(ctx.rsp - 1) = *target_obj_p->get_property_value(
+                ctx.stack.at(ctx.rsp), // special prototype key from previous opcode `put_proto_key`
                 a0
             );
             ctx.rsp--;
@@ -614,7 +622,7 @@ namespace DerkJS {
     }
 
     inline void op_object_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        auto& callable_value = ctx.stack[ctx.rsp];
+        auto& callable_value = ctx.stack.at(ctx.rsp - a0);
 
         if (const auto val_tag = callable_value.get_tag(); val_tag == ValueTag::val_ref && callable_value.get_value_ref()->get_tag() == ValueTag::object && callable_value.get_value_ref()->to_object()->call(&ctx, a0, a1)) {
             ; // ok
@@ -629,7 +637,7 @@ namespace DerkJS {
     }
 
     inline void op_ctor_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        auto& callable_value = ctx.stack[ctx.rsp];
+        auto& callable_value = ctx.stack.at(ctx.rsp - a0);
 
         if (const auto val_tag = callable_value.get_tag(); val_tag == ValueTag::val_ref && callable_value.get_value_ref()->get_tag() == ValueTag::object && callable_value.get_value_ref()->to_object()->call_as_ctor(&ctx, a0)) {
             ; // ok
@@ -644,12 +652,13 @@ namespace DerkJS {
     }
 
     inline void op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        const auto& [caller_ret_ip, caller_this_p, caller_addr, caller_capture_p, callee_sbp, caller_sbp, calling_flags] = ctx.frames.back();
+        const auto& [caller_ret_ip, caller_addr, caller_capture_p, callee_sbp, caller_sbp, calling_flags] = ctx.frames.back();
 
         if (a0 == 0) {
-            ctx.stack.at(callee_sbp - 1) = ctx.stack[ctx.rsp];
+            ctx.stack.at(callee_sbp - 1) = ctx.stack.at(ctx.rsp);
         } else if (calling_flags & std::to_underlying(CallFlags::is_ctor)) {
-            ctx.stack.at(callee_sbp - 1) = Value {caller_this_p};
+            /// NOTE: The initialized `this` object from the ctor must be at CALLEE_RSBP - 1.
+            // ctx.stack.at(callee_sbp - 1) = Value {...};
         } else {
             ctx.stack.at(callee_sbp - 1) = Value {};
         }
@@ -657,7 +666,6 @@ namespace DerkJS {
         ctx.rsp = callee_sbp - 1;
         ctx.rsbp = caller_sbp;
         ctx.rip_p = caller_ret_ip;
-
         ctx.frames.pop_back();
 
         if (ctx.frames.size() <= ctx.ending_frame_depth) {
@@ -677,9 +685,12 @@ namespace DerkJS {
     }
 
     inline void dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        if (ctx.status != VMErrcode::pending) {
+        if (ctx.status != VMErrcode::pending /* || ctx.dispatch_allowance == 0*/) {
             return;
         }
+
+        // std::println("DISPATCHES-LEFT: {}, RBP: {}, RSP: {}, RIP_P: {}", ctx.dispatch_allowance, ctx.rsbp, ctx.rsp, reinterpret_cast<const void*>(ctx.rip_p));
+        // ctx.dispatch_allowance--;
 
         [[clang::musttail]]
         return tco_opcodes[ctx.rip_p->op](ctx, a0, a1);
