@@ -59,8 +59,11 @@
     - ~~Add `Function` prototype methods & immutable length accessor.~~ (WIP)
     - ~~Refactor `NativeFunction` & `Lambda` to take `length` value on initialization.~~
     - ~~Modify bytecode "calling convention":~~
-      - Call stack layout (bottom-up): `<thisArg?> <callee> <args>`
-      - Return results go to `CALLEE_RSBP - 1` where `CALLEE_RSBP = CALLER_RSP - ARGC + 1`.
+      - Actual local variables start at offset `1` (thisArg defaults to undefined or object, requiring a swap of callee and thisArg beforehand) _yet_ offset `-1` is `this`. `0` is the callee reference.
+        - `<thisArg (undefined)> <callee> <args...>` -> patch `thisArg` to a new object for constructors / patch `thisArg` to `capture_p` for regular functions.
+        - OR: `<this-arg (explicit)> <callee> <args...>` -> for methods!
+      - `CALLEE_RSBP = CALLER_RSP - ARGC`
+      - Returns set `RSP = CALLEE_RSBP - 1` where the result should be.
       - ~~The `NativeFunction` and `Lambda` classes _must_ follow this new convention!~~
       - ~~All leftover natives _must_ follow the new convention!~~
     - ~~Add `stdlib/polyfill.js` prelude pasted before every script source.~~
