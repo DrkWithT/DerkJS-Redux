@@ -327,6 +327,7 @@ export namespace DerkJS {
                                 m_previous.start + m_previous.length,
                                 ExprNodeTag::primitive
                             ),
+                            .pass_key_raw = false
                         },
                         0,
                         snippet_begin,
@@ -343,7 +344,8 @@ export namespace DerkJS {
                     lhs_primary = std::make_unique<Expr>(
                         MemberAccess {
                             .target = std::move(lhs_primary),
-                            .key = std::move(enclosed_expr)
+                            .key = std::move(enclosed_expr),
+                            .pass_key_raw = true
                         },
                         0,
                         snippet_begin,

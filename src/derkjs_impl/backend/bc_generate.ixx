@@ -38,7 +38,6 @@ namespace DerkJS::Backend {
 
     export struct CodeGenScope {
         std::flat_map<std::string, Arg> locals; // Map names to variables.
-        std::vector<int> callee_self_refs;      // Positions of self-calls by name.
         int next_local_id;                      // Tracks next stack slot for a local variable value.
         int block_level;                        // Tracks depth of currently emitted block statement.
     };
@@ -126,6 +125,9 @@ namespace DerkJS::Backend {
 
         // Whether an object's property is being accessed from the parent.
         bool m_accessing_property;
+
+        /// SEE: frontend/ast.ixx at `MemberAccess` decl.
+        bool m_pass_key_raw;
 
         bool m_has_call;
 
@@ -366,7 +368,7 @@ namespace DerkJS::Backend {
         }
 
         BytecodeEmitterContext()
-        : m_global_consts_map {}, m_key_consts_map {}, m_base_prototypes {}, m_local_maps {}, m_heap {}, m_consts {}, m_code_blobs {}, m_callee_name {}, m_chunk_offsets {}, m_member_depth {0}, m_in_callable {false}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_has_call {false}, m_prepass_vars {true} {}
+        : m_global_consts_map {}, m_key_consts_map {}, m_base_prototypes {}, m_local_maps {}, m_heap {}, m_consts {}, m_code_blobs {}, m_callee_name {}, m_chunk_offsets {}, m_member_depth {0}, m_in_callable {false}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_pass_key_raw {false}, m_has_call {false}, m_prepass_vars {true} {}
 
         void add_expr_emitter(ExprNodeTag expr_type_tag, std::unique_ptr<ExprEmitterBase<Expr>> helper) noexcept {
             const auto expr_helper_index = static_cast<std::size_t>(expr_type_tag);
@@ -444,8 +446,8 @@ namespace DerkJS::Backend {
             // 3. Prepare initial mapping of symbols & code buffer to build.
             m_local_maps.emplace_back(CodeGenScope {
                 .locals = {},
-                .callee_self_refs = {},
-                .next_local_id = 0,
+                // regular locals start from offset 1, yet -1 is a thisArg & 0 is the callee
+                .next_local_id = 1,
                 .block_level = -1
             });
             m_code_blobs.emplace_front();

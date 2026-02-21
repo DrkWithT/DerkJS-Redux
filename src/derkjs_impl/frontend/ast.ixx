@@ -131,6 +131,7 @@ export namespace DerkJS {
     struct MemberAccess {
         ExprPtr target;
         ExprPtr key;
+        bool pass_key_raw; // true if target[key] syntax is used
     };
 
     struct Unary {

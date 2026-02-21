@@ -62,7 +62,7 @@ namespace DerkJS::Backend {
                     // Case 1: property keys are always constant strings.
                     if (context.m_callee_name == atom_lexeme && !context.m_accessing_property && context.m_has_call) {
                         return Arg { .n = -1, .tag = Location::end, .is_str_literal = false, .from_closure = false };
-                    } else if (pmt_is_key) {
+                    } else if (pmt_is_key && !context.m_pass_key_raw) {
                         return context.record_symbol(atom_lexeme, atom_lexeme, FindKeyConstOpt {});
                     } else {
                         // Case 2.1: The name is for a global native / local variable.
@@ -96,9 +96,8 @@ namespace DerkJS::Backend {
             } else if (primitive_locate_type == Location::heap_obj && primitive_locator->n == -3) {
                 context.encode_instruction(Opcode::djs_put_proto_key);
             } else if (primitive_locate_type == Location::end && primitive_locator->n == -1) {
-                // Put dud instruction where self-load should be before a `djs_object_call`.
-                context.m_local_maps.back().callee_self_refs.emplace_back(static_cast<int>(context.m_code_blobs.front().size()));
-                context.encode_instruction(Opcode::djs_nop);
+                /// NOTE: Put local:0 to reference the callee for self-recursive calls.
+                context.encode_instruction(Opcode::djs_dup_local); // argument-0 is defaulted to 0
             }
 
             return true;
@@ -182,8 +181,7 @@ namespace DerkJS::Backend {
             // 1. Begin lambda code emission, but let's note that this nested "code scope" place a new buffer as the currently filling one before it's done & craps out a Lambda object... Which gets moved into the bytecode `Program` later.
             context.m_local_maps.emplace_back(CodeGenScope {
                 .locals = {},
-                .callee_self_refs = {},
-                .next_local_id = 0,
+                .next_local_id = 1,
                 .block_level = 0
             });
             context.m_code_blobs.emplace_front();
@@ -219,14 +217,6 @@ namespace DerkJS::Backend {
                 .tag = Location::constant
             };
 
-            // 3. Patch bytecode NOP stubs where self-calls should be.
-            for (const auto& dud_self_call_offsets = context.m_local_maps.back().callee_self_refs; const auto call_stub_pos : dud_self_call_offsets) {
-                context.m_code_blobs.front().at(call_stub_pos) = Instruction {
-                    .args = {next_global_ref_const_id, 0},
-                    .op = Opcode::djs_put_const
-                };
-            }
-
             Lambda temp_callable {
                 std::move(context.m_code_blobs.front()),
                 context.m_base_prototypes.at(static_cast<unsigned int>(BasePrototypeID::function)),
@@ -259,16 +249,20 @@ namespace DerkJS::Backend {
         MemberAccessEmitter() noexcept = default;
 
         [[nodiscard]] auto emit(BytecodeEmitterContext& context, const Expr& node, const std::string& source) -> bool override {
-            const auto& [target_expr, key_expr] = std::get<MemberAccess>(node.data);
+            const auto& [target_expr, key_expr, pass_key_raw_flag] = std::get<MemberAccess>(node.data);
+            const auto parent_is_passing_key_raw = pass_key_raw_flag;
 
             // 1. Emit the target and then the key evaluations. The `djs_get_prop` opcode takes the target and the property key (PropertyHandle<Value>) on top... These two are "popped" and the property reference takes their place in the VM. If the top callee expr has a calling property, the target object is emitted again (member-access-depth == 1).
             context.m_accessing_property = true;
             context.m_member_depth++;
+            context.m_pass_key_raw = pass_key_raw_flag;
 
             // For possible this object on member calls OR the parent object reference itself...
             if (!context.emit_expr(*target_expr, source)) {
                 return false;
             }
+
+            context.m_pass_key_raw = parent_is_passing_key_raw;
 
             // If a property call is enclosing the member access: The callee's parent object is over the copied reference for `this`...
             if (context.m_has_call && context.m_member_depth <= 1) {
@@ -280,6 +274,7 @@ namespace DerkJS::Backend {
             }
 
             context.m_member_depth--;
+            context.m_pass_key_raw = false;
 
             /// NOTE: If assignment (lvalues apply) pass `1` for defaulting flag so the RHS goes somewhere legitimate.
             context.encode_instruction(
@@ -540,14 +535,21 @@ namespace DerkJS::Backend {
             context.m_has_call = true;
             context.m_access_as_lval = true;
 
+            auto has_extra_this_arg = context.m_has_call && std::holds_alternative<MemberAccess>(expr_callee->data);
+
+            // For all plain / ctor. functions, put a placeholder `thisArg`. At this point, the VM doesn't have enough information to normalize `thisArg`.
+            if (!has_extra_this_arg) {
+                context.encode_instruction(Opcode::djs_put_const, context.lookup_symbol("undefined", FindGlobalConstsOpt {}).value());
+            }
+
+            // When an explicit this argument is present, a method is calling & its parent object is already duped- The lower copy of the object reference is `thisArg`.
             if (!context.emit_expr(*expr_callee, source)) {
                 return false;
             }
 
-            auto has_extra_this_arg = context.m_has_call && std::holds_alternative<MemberAccess>(expr_callee->data);
-
             context.m_access_as_lval = false;
             context.m_member_depth = 0;
+            context.m_has_call = false;
 
             for (const auto& arg_p : expr_args) {
                 if (!context.emit_expr(*arg_p, source)) {
@@ -568,8 +570,6 @@ namespace DerkJS::Backend {
                 );
                 context.m_has_new_applied = false;
             }
-
-            context.m_has_call = false;
 
             return true;
         }
