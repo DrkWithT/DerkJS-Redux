@@ -3,14 +3,14 @@
 var ok = 0;
 var junk = [null, 69, 420];
 
-if (junk.indexOf(69) === 1) {
+if (junk.indexOf(69, 0) === 1) {
     ok = ok + 1;
 } else {
     console.log("Failed junk.indexOf(69).");
 }
 
 /* 2 */
-if (junk.lastIndexOf(69) === 1) {
+if (junk.lastIndexOf(69, -1) === 1) {
     ok = ok + 1;
 } else {
     console.log("Failed junk.lastIndexOf(69).");

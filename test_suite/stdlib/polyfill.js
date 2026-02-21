@@ -14,19 +14,24 @@ Array.prototype.at = function(index) {
 // push is native
 
 Array.prototype.pop = function() {
-    var oldLen = this.length;
+    var old = this.at(-1);
 
-    --this.length;
-    return oldLen;
+    this.length = this.length - 1;
+
+    return old;
 };
 
 Array.prototype.indexOf = function (item, fromIndex) {
-    var pos = fromIndex || 0;
-    var end = item.length;
+    var pos = fromIndex;
+    var end = this.length;
     var result = -1;
 
+    if (!pos || pos < 0) {
+        pos = 0;
+    }
+
     while (pos < end) {
-        if (this[pos] === item) {
+        if (this.at(pos) === item) {
             result = pos;
             break;
         }
@@ -42,7 +47,7 @@ Array.prototype.lastIndexOf = function (item, fromIndex) {
     var end = -1;
     var result = -1;
 
-    if (fromIndex === undefined) {
+    if (fromIndex === undefined || fromIndex === null) {
         pos = this.length - 1;
     } else if (fromIndex >= 0) {
         pos = +fromIndex;
