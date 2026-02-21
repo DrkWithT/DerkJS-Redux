@@ -246,7 +246,7 @@ export namespace DerkJS {
             return !this->operator<(other);
         }
 
-        [[nodiscard]] auto increment() noexcept -> Value& {
+        [[maybe_unused]] auto increment() noexcept -> Value& {
             switch (m_tag) {
             case ValueTag::null:
                 m_data.i = 1;
@@ -277,7 +277,7 @@ export namespace DerkJS {
             return *this;
         }
 
-        [[nodiscard]] auto decrement() noexcept -> Value& {
+        [[maybe_unused]] auto decrement() noexcept -> Value& {
             switch (m_tag) {
             case ValueTag::null:
                 m_data.i = -1;
