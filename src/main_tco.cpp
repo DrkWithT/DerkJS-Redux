@@ -52,6 +52,55 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    /// String.prototype natives
+    Core::NativePropertyStub str_props[] {
+        Core::NativePropertyStub {
+            .name_str = "constructor",
+            .item = std::make_unique<NativeFunction>(
+                DerkJS::native_str_ctor,
+                nullptr,
+                driver.get_length_key_str_p(),
+                Value {1}
+            ),
+        },
+        Core::NativePropertyStub {
+            .name_str = "charCodeAt",
+            .item = std::make_unique<NativeFunction>(
+                DerkJS::native_str_charcode_at,
+                nullptr,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        },
+        Core::NativePropertyStub {
+            .name_str = "substr",
+            .item = std::make_unique<NativeFunction>(
+                DerkJS::native_str_substr,
+                nullptr,
+                driver.get_length_key_str_p(),
+                Value {2}
+            )
+        },
+        Core::NativePropertyStub {
+            .name_str = "substring",
+            .item = std::make_unique<NativeFunction>(
+                DerkJS::native_str_substring,
+                nullptr,
+                driver.get_length_key_str_p(),
+                Value {2}
+            )
+        },
+        Core::NativePropertyStub {
+            .name_str = "trim",
+            .item = std::make_unique<NativeFunction>(
+                DerkJS::native_str_trim,
+                nullptr,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        }
+    };
+
     /// 2. Register keywords, operators, etc. for parser's lexer. This makes the lexer's configuration flexible. ///
     driver.add_js_lexical("var", TokenTag::keyword_var);
     driver.add_js_lexical("if", TokenTag::keyword_if);
@@ -122,55 +171,6 @@ int main(int argc, char* argv[]) {
         std::println(std::cerr, "SETUP ERROR: failed to allocate String.prototype object.");
         return 1;
     }
-
-    /// String.prototype natives
-    Core::NativePropertyStub str_props[] {
-        Core::NativePropertyStub {
-            .name_str = "constructor",
-            .item = std::make_unique<NativeFunction>(
-                DerkJS::native_str_ctor,
-                nullptr,
-                driver.get_length_key_str_p(),
-                Value {1}
-            ),
-        },
-        Core::NativePropertyStub {
-            .name_str = "charCodeAt",
-            .item = std::make_unique<NativeFunction>(
-                DerkJS::native_str_charcode_at,
-                nullptr,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
-        },
-        Core::NativePropertyStub {
-            .name_str = "substr",
-            .item = std::make_unique<NativeFunction>(
-                DerkJS::native_str_substr,
-                nullptr,
-                driver.get_length_key_str_p(),
-                Value {2}
-            )
-        },
-        Core::NativePropertyStub {
-            .name_str = "substring",
-            .item = std::make_unique<NativeFunction>(
-                DerkJS::native_str_substring,
-                nullptr,
-                driver.get_length_key_str_p(),
-                Value {2}
-            )
-        },
-        Core::NativePropertyStub {
-            .name_str = "trim",
-            .item = std::make_unique<NativeFunction>(
-                DerkJS::native_str_trim,
-                nullptr,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
-        }
-    };
 
     /// Function.prototype natives
     Core::NativePropertyStub function_helper_props[] {
@@ -254,7 +254,7 @@ int main(int argc, char* argv[]) {
             .item = std::make_unique<NativeFunction>(
                 DerkJS::native_console_log,
                 nullptr,
-                driver.get_length_key_p(),
+                driver.get_length_key_str_p(),
                 Value {1}
             )
         },
@@ -263,7 +263,7 @@ int main(int argc, char* argv[]) {
             .item = std::make_unique<NativeFunction>(
                 DerkJS::native_console_read_line,
                 nullptr,
-                driver.get_length_key_p(),
+                driver.get_length_key_str_p(),
                 Value {1}
             )
         }
@@ -275,7 +275,7 @@ int main(int argc, char* argv[]) {
             .item = std::make_unique<NativeFunction>(
                 DerkJS::clock_time_now,
                 nullptr,
-                driver.get_length_key_p(),
+                driver.get_length_key_str_p(),
                 Value {1}
             )
         }
@@ -304,7 +304,9 @@ int main(int argc, char* argv[]) {
     driver.add_native_global<NativeFunction>(
         "Array",
         DerkJS::native_array_ctor,
-        array_prototype_object_p
+        array_prototype_object_p,
+        driver.get_length_key_str_p(),
+        Value {1}
     );
 
     auto object_interface_prototype_p = driver.setup_basic_prototype(
