@@ -246,6 +246,68 @@ export namespace DerkJS {
             return !this->operator<(other);
         }
 
+        [[maybe_unused]] auto increment() noexcept -> Value& {
+            switch (m_tag) {
+            case ValueTag::null:
+                m_data.i = 1;
+                m_tag = ValueTag::num_i32;
+                break;
+            case ValueTag::boolean:
+                m_data.i = static_cast<int>(m_data.b) + 1;
+                m_tag = ValueTag::num_i32;
+                break;
+            case ValueTag::num_i32:
+                ++m_data.i;
+                break;
+            case ValueTag::num_f64:
+                ++m_data.d;
+                break;
+            case ValueTag::object:
+                m_data.dud = dud_nan_char_v;
+                m_tag = ValueTag::num_nan;
+                break;
+            case ValueTag::val_ref:
+                return m_data.ref_p->increment();
+            default:
+                m_data.dud = dud_nan_char_v;
+                m_tag = ValueTag::num_nan;
+                break;
+            }
+
+            return *this;
+        }
+
+        [[maybe_unused]] auto decrement() noexcept -> Value& {
+            switch (m_tag) {
+            case ValueTag::null:
+                m_data.i = -1;
+                m_tag = ValueTag::num_i32;
+                break;
+            case ValueTag::boolean:
+                m_data.i = static_cast<int>(m_data.b) - 1;
+                m_tag = ValueTag::num_i32;
+                break;
+            case ValueTag::num_i32:
+                --m_data.i;
+                break;
+            case ValueTag::num_f64:
+                --m_data.d;
+                break;
+            case ValueTag::object:
+                m_data.dud = dud_nan_char_v;
+                m_tag = ValueTag::num_nan;
+                break;
+            case ValueTag::val_ref:
+                return m_data.ref_p->decrement();
+            default:
+                m_data.dud = dud_nan_char_v;
+                m_tag = ValueTag::num_nan;
+                break;
+            }
+
+            return *this;
+        }
+
         /// NOTE: This is an ad-hoc implementation for now, so I'll fix this later by the ES5 spec.
         [[nodiscard]] auto operator%(const Value& other) -> Value {
             const auto lhs_tag = get_tag();

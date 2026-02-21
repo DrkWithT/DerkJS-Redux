@@ -54,7 +54,25 @@
  26. ~~Add `array.length` with side-effects!~~
  27. ~~Make `String` a constructor function & add some methods.~~
  28. ~~Refactor bytecode gen to Dep. Inj. modules for generating each expr / stmt.~~
- 29. Add prefix increment & decrement operator.
- 30. Add `+=, -=, *=, /=, %=` operators. Side Quest: syntax error on `==` or `!=` for mandating migration of old JS code to new JS.
- 31. Add Array methods: `forEach(arr, thisArg), filter(predicateFn, thisArg), map(callbackFn, thisArg), concat(args...)`
- 32. Add Object methods: `hasOwnProperty(key), isPrototypeOf(obj)`
+ 29. ~~Add prefix increment & decrement operator.~~
+ 30. Polyfills!
+    - ~~Add `Function` prototype methods & immutable length accessor.~~ (WIP)
+    - ~~Refactor `NativeFunction` & `Lambda` to take `length` value on initialization.~~
+    - ~~Modify bytecode "calling convention":~~
+      - Actual local variables start at offset `1` (thisArg defaults to undefined or object, requiring a swap of callee and thisArg beforehand) _yet_ offset `-1` is `this`. `0` is the callee reference.
+        - `<thisArg (undefined)> <callee> <args...>` -> patch `thisArg` to a new object for constructors / patch `thisArg` to `capture_p` for regular functions.
+        - OR: `<this-arg (explicit)> <callee> <args...>` -> for methods!
+      - `CALLEE_RSBP = CALLER_RSP - ARGC`
+      - Returns set `RSP = CALLEE_RSBP - 1` where the result should be.
+      - ~~The `NativeFunction` and `Lambda` classes _must_ follow this new convention!~~
+      - ~~All leftover natives _must_ follow the new convention!~~
+    - ~~Add `stdlib/polyfill.js` prelude pasted before every script source.~~
+    - Polyfills for:
+      - `Array.prototype`: `pop, indexOf, lastIndexOf, reverse, forEach(arr, thisArg), filter(predicateFn, thisArg), map(callbackFn, thisArg)`
+    - Keep natives for:
+      - `parseInt`, `parseFloat`
+      - `constructor`s of `Object`, `Array`, `String`
+      - `Array.prototype`: push, join, toString
+      - `Object.prototype`: hasOwnProperty, isPrototypeOf, toString, freeze
+      - `String.prototype`: hasOwnProperty, isPrototypeOf, charCodeAt, trim, split
+      - `Function.prototype`: call

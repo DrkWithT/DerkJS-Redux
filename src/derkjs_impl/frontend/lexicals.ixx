@@ -34,6 +34,8 @@ export namespace DerkJS {
         literal_int,
         literal_real,
         literal_string,
+        symbol_two_pluses,      // '++' prefix operator
+        symbol_two_minuses,     // '--' prefix operator
         symbol_percent,
         symbol_times,
         symbol_slash,
@@ -48,8 +50,8 @@ export namespace DerkJS {
         symbol_less_equal,
         symbol_greater,
         symbol_greater_equal,
-        symbol_amps, // `&&` symbol
-        symbol_pipes, // `||` symbol
+        symbol_amps,            // `&&` symbol
+        symbol_pipes,           // `||` symbol
         symbol_assign,
         symbol_percent_assign,
         symbol_times_assign,
@@ -239,7 +241,7 @@ export namespace DerkJS {
             bool closed = false;
 
             while (!at_eof()) {
-                if (const auto c = source.at(m_pos), c_past = source.at(m_pos + 1); c == '\n') {
+                if (const auto c = source.at(m_pos); c == '\n') {
                     // end line comment with LF
                     closed = true;
                     break;
@@ -398,7 +400,7 @@ export namespace DerkJS {
 
         [[nodiscard]] auto operator()(const std::string& source) -> Token {
             if (at_eof()) {
-                return {TokenTag::eof, m_end, m_line, m_column};
+                return {TokenTag::eof, 0, m_line, m_column};
             }
 
             const auto peek_0 = source.at(m_pos);

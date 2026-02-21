@@ -203,7 +203,8 @@ export namespace DerkJS {
                     },
                     0,
                     object_lexeme_begin,
-                    m_current.start - object_lexeme_begin + 1
+                    m_current.start - object_lexeme_begin + 1,
+                    ExprNodeTag::object_literal
                 );
             }
 
@@ -323,8 +324,10 @@ export namespace DerkJS {
                                 Primitive { .token = m_previous, .is_key = true },
                                 0,
                                 m_previous.start,
-                                m_previous.start + m_previous.length
+                                m_previous.start + m_previous.length,
+                                ExprNodeTag::primitive
                             ),
+                            .pass_key_raw = false
                         },
                         0,
                         snippet_begin,
@@ -341,7 +344,8 @@ export namespace DerkJS {
                     lhs_primary = std::make_unique<Expr>(
                         MemberAccess {
                             .target = std::move(lhs_primary),
-                            .key = std::move(enclosed_expr)
+                            .key = std::move(enclosed_expr),
+                            .pass_key_raw = true
                         },
                         0,
                         snippet_begin,
@@ -450,6 +454,8 @@ export namespace DerkJS {
                 switch (tag) {
                 case TokenTag::symbol_bang: return AstOp::ast_op_bang;
                 case TokenTag::symbol_plus: return AstOp::ast_op_plus;
+                case TokenTag::symbol_two_pluses: return AstOp::ast_op_prefix_inc;
+                case TokenTag::symbol_two_minuses: return AstOp::ast_op_prefix_dec;
                 case TokenTag::keyword_typeof: return AstOp::ast_op_typeof;
                 case TokenTag::keyword_void: return AstOp::ast_op_void;
                 default: return AstOp::ast_op_noop;
@@ -969,14 +975,14 @@ export namespace DerkJS {
             m_syntax = SyntaxTag::stmt_expr;
 
             const auto snippet_begin = m_current.start;
-            auto lhs_maybe_call = parse_call(lexer, source);
+            auto lhs_expr = parse_unary(lexer, source);
 
             if (!m_current.match_tag_to(TokenTag::symbol_assign)) {
                 consume(lexer, source, TokenTag::semicolon);
 
                 return std::make_unique<Stmt>(
                     ExprStmt {
-                        .expr = std::move(lhs_maybe_call),
+                        .expr = std::move(lhs_expr),
                     },
                     0,
                     snippet_begin,
@@ -995,7 +1001,7 @@ export namespace DerkJS {
                 ExprStmt {
                     .expr = std::make_unique<Expr>(Expr {
                         Assign {
-                            .lhs = std::move(lhs_maybe_call),
+                            .lhs = std::move(lhs_expr),
                             .rhs = std::move(rhs)
                         },
                         0,

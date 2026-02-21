@@ -34,7 +34,12 @@ namespace DerkJS::Backend {
         [[nodiscard]] auto emit_var_decl(BytecodeEmitterContext& context, const VarDecl& stmt, const std::string& source) -> bool {
             const auto& [var_name_token, var_init_expr] = stmt;
             std::string var_name = var_name_token.as_string(source);
-            context.m_callee_name = var_name;
+
+            if (var_init_expr->tag == ExprNodeTag::lambda_literal) {
+                context.m_callee_name = var_name; // handle possibly self-recursing callee here...
+            } else {
+                context.m_callee_name.clear();
+            }
 
             auto var_local_slot = context.record_symbol(var_name, RecordLocalOpt {}, FindLocalsOpt {});
             
@@ -57,6 +62,7 @@ namespace DerkJS::Backend {
             context.encode_instruction(Opcode::djs_store_upval);
             context.m_member_depth = 0;
             context.encode_instruction(Opcode::djs_emplace);
+            context.m_callee_name.clear();
 
             return true;
         }

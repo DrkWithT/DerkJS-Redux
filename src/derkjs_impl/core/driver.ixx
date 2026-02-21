@@ -79,13 +79,16 @@ export namespace DerkJS::Core {
                 src_buffer << src_line << '\n';
             }
 
-            std::vector<int> a;
+            src_buffer << '\n';
 
             return src_buffer.str();
         }
 
-        [[nodiscard]] auto parse_script(const std::string& file_path, std::string file_source) -> std::optional<ASTUnit> {
-            m_src_map.emplace_back(std::move(file_source)); // Source 0 is <main>.js
+        [[nodiscard]] auto parse_script(const std::string& file_path, const std::string& polyfill_file_path) -> std::optional<ASTUnit> {
+            std::string source_with_prelude = read_script(polyfill_file_path);
+            source_with_prelude.append_range(read_script(file_path));
+
+            m_src_map.emplace_back(std::move(source_with_prelude));
 
             Lexer lexer {m_src_map.at(0), std::move(m_js_lexicals)};
             Parser parser;
@@ -99,7 +102,18 @@ export namespace DerkJS::Core {
 
     public:
         Driver(DriverInfo info, int max_heap_object_count)
-        : m_compile_state {}, m_js_lexicals {}, m_src_map {}, m_app_name {info.name}, m_app_author {info.author}, m_length_str_length_key_p {}, m_version_major {info.version_major}, m_version_minor {info.version_minor}, m_version_patch {info.version_patch}, m_max_heap_object_n {max_heap_object_count}, m_allow_bytecode_dump {false} {}
+        : m_compile_state {}, m_js_lexicals {}, m_src_map {}, m_app_name {info.name}, m_app_author {info.author}, m_length_str_length_key_p {}, m_version_major {info.version_major}, m_version_minor {info.version_minor}, m_version_patch {info.version_patch}, m_max_heap_object_n {max_heap_object_count}, m_allow_bytecode_dump {false} {
+            // 1.1: hack in "length" here as a special key that could be used for strings (but also arrays).
+            auto length_str_length_key_p = std::make_unique<DynamicString>(nullptr, Value {nullptr}, std::string {"length"}); // the property name value string itself- only to check against!
+            m_length_str_length_key_p = length_str_length_key_p.get();
+            length_str_length_key_p->patch_length_property(Value {m_length_str_length_key_p}, 6); // backpatch "length" string literal with length property key-value
+
+            m_preloads.emplace_back(Backend::PreloadItem {
+                .lexeme = "length",
+                .entity = std::move(length_str_length_key_p),
+                .location = Location::key_str
+            });
+        }
 
         void add_js_lexical(std::string_view lexeme, TokenTag tag) {
             m_js_lexicals[lexeme] = tag;
@@ -111,6 +125,10 @@ export namespace DerkJS::Core {
 
         void add_stmt_emitter(StmtNodeTag stmt_type_tag, std::unique_ptr<Backend::StmtEmitterBase<Stmt>> helper) {
             m_compile_state.add_stmt_emitter(stmt_type_tag, std::move(helper));
+        }
+
+        [[nodiscard]] auto get_length_key_str_p() noexcept -> ObjectBase<Value>* {
+            return m_length_str_length_key_p;
         }
 
         template <typename ObjectSubType, typename ... CtorArgs>
@@ -195,13 +213,8 @@ export namespace DerkJS::Core {
         }
 
         template <std::size_t N>
-        [[nodiscard]] auto setup_string_prototype(std::array<NativePropertyStub, N> prop_list) -> ObjectBase<Value>* {
-            // 1.1: hack in "length" here as a special key that could be used for strings (but also arrays).
-            auto length_str_length_key_p = std::make_unique<DynamicString>(nullptr, Value {nullptr}, std::string {"length"}); // the property name value string itself- only to check against!
-            m_length_str_length_key_p = length_str_length_key_p.get();
-            length_str_length_key_p->patch_length_property(Value {m_length_str_length_key_p}, 7); // backpatch "length" string literal with length property key-value
-
-            // 1.2: Create dud String.prototype.
+        auto setup_string_prototype(std::array<NativePropertyStub, N> prop_list) -> ObjectBase<Value>* {
+            // 1. Create dud String.prototype.
             auto str_prototype_object_p = std::make_unique<Object>(nullptr);
             auto str_prototype_raw_p = str_prototype_object_p.get();
 
@@ -243,12 +256,6 @@ export namespace DerkJS::Core {
             }
 
             m_preloads.emplace_back(Backend::PreloadItem {
-                .lexeme = "length",
-                .entity = std::move(length_str_length_key_p),
-                .location = Location::key_str
-            });
-
-            m_preloads.emplace_back(Backend::PreloadItem {
                 .lexeme = "String::prototype",
                 .entity = std::move(str_prototype_object_p),
                 .location = Location::heap_obj
@@ -258,7 +265,7 @@ export namespace DerkJS::Core {
         }
 
         template <std::size_t N>
-        [[nodiscard]] auto setup_basic_prototype(ObjectBase<Value>* string_proto, std::string name, std::array<NativePropertyStub, N> prop_list) -> ObjectBase<Value>* {
+        auto setup_basic_prototype(ObjectBase<Value>* string_proto, std::string name, std::array<NativePropertyStub, N> prop_list) -> ObjectBase<Value>* {
             auto proto_object_p = std::make_unique<Object>(nullptr);
             auto proto_raw_p = proto_object_p.get();
 
@@ -315,8 +322,8 @@ export namespace DerkJS::Core {
             return DriverInfo {m_app_name, m_app_author, m_version_major, m_version_minor, m_version_patch};
         }
 
-        [[nodiscard]] auto run(const std::string& file_path, std::size_t gc_threshold) -> int {
-            auto script_ast = parse_script(file_path, read_script(file_path));
+        [[nodiscard]] auto run(const std::string& file_path, const std::string& polyfill_file_path, std::size_t gc_threshold) -> int {
+            auto script_ast = parse_script(file_path, polyfill_file_path);
 
             if (!script_ast) {
                 return 1;
@@ -336,7 +343,7 @@ export namespace DerkJS::Core {
             auto& prgm_ref = prgm.value();
             DerkJS::VM vm {prgm_ref, default_stack_size, default_call_depth_limit, gc_threshold};
 
-            vm();
+            vm.run();
 
             switch (const auto vm_status = vm.peek_status(); vm_status) {
             case VMErrcode::pending:

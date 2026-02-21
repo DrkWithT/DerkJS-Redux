@@ -41,6 +41,8 @@ export namespace DerkJS {
         djs_del_prop, // TODO!
         djs_numify, // converts the VM stack's top value to a number
         djs_strcat, // concatenates 2 string copies since the ref-wrapping `Value` is decoupled from VM state --> Stack placement: <STRING-1> <STRING-2> --> <NEW-STRING>
+        djs_pre_inc, // puts the VM stack's top value copy, increments, then clones it
+        djs_pre_dec, // puts the VM stack's top value copy, decrements, then clones it
         djs_mod,
         djs_mul,
         djs_div,
@@ -125,6 +127,8 @@ export namespace DerkJS {
             "djs_del_prop", // SEE: djs_get_prop for stack args passing...
             "djs_numify",
             "djs_strcat",
+            "djs_pre_inc",
+            "djs_pre_dec",
             "djs_mod",
             "djs_mul",
             "djs_div",

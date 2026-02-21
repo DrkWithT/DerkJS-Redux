@@ -27,6 +27,8 @@ export namespace DerkJS {
 
     enum class AstOp : uint8_t {
         ast_op_noop,
+        ast_op_prefix_inc,      // prefix '++' operator
+        ast_op_prefix_dec,      // prefix '--' operator
         ast_op_new,             // 'new' for objects
         ast_op_void,            // 'void' for discarded evaluations
         ast_op_typeof,          // `typeof` for getting a typename string of exprs.
@@ -129,6 +131,7 @@ export namespace DerkJS {
     struct MemberAccess {
         ExprPtr target;
         ExprPtr key;
+        bool pass_key_raw; // true if target[key] syntax is used
     };
 
     struct Unary {

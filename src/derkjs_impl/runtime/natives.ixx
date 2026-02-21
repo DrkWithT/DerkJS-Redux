@@ -20,14 +20,23 @@ export namespace DerkJS {
     //// BEGIN global functions:
 
     [[nodiscard]] auto native_parse_int(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        constexpr auto min_radix = 2;
+        constexpr auto max_radix = 16;
+        constexpr auto default_radix = 10;
+
         const int passed_rsbp = ctx->rsbp;
-        std::string temp_str = ctx->stack[passed_rsbp].to_string().value_or("");
+        std::string temp_str = ctx->stack.at(passed_rsbp + 1).to_string().value_or("");
+        auto radix_n = (argc == 2) ? static_cast<std::size_t>(ctx->stack.at(passed_rsbp + 2).to_num_i32().value_or(10)) : default_radix;
+
+        if (radix_n < min_radix || radix_n > max_radix) {
+            radix_n = default_radix;
+        }
 
         try {
-            ctx->stack[passed_rsbp] = Value {std::stoi(temp_str)};
+            ctx->stack.at(passed_rsbp - 1) = Value {std::stoi(temp_str, nullptr, radix_n)};
         } catch (const std::exception& err) {
             std::println(std::cerr, "parseInt: String is not a valid integer literal.");
-            ctx->stack[passed_rsbp] = Value {JSNaNOpt {}};
+            ctx->stack.at(passed_rsbp - 1) = Value {JSNaNOpt {}};
         }
 
         return true;
@@ -38,14 +47,13 @@ export namespace DerkJS {
     /// From: ES5 - 15.5.2.1
     [[nodiscard]] auto native_str_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
-        const auto& arg_value = ctx->stack[passed_rsbp];
 
         if (auto temp_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::make_unique<DynamicString>(
             ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
             ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
-            arg_value.to_string().value()
+            ctx->stack.at(passed_rsbp + 1).to_string().value()
         )); temp_str_p) {
-            ctx->stack[passed_rsbp] = Value {temp_str_p};
+            ctx->stack.at(passed_rsbp - 1) = Value {temp_str_p};
             return true;
         } else {
             ctx->status = VMErrcode::bad_heap_alloc;   
@@ -56,17 +64,15 @@ export namespace DerkJS {
     [[nodiscard]] auto native_str_charcode_at(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
         const auto str_this_p = dynamic_cast<const StringBase*>(
-            (ctx->stack[passed_rsbp + argc].get_tag() == ValueTag::val_ref)
-                ? ctx->stack[passed_rsbp + argc].get_value_ref()->to_object()
-                : ctx->stack[passed_rsbp + argc].to_object()
+            ctx->stack.at(passed_rsbp - 1).to_object()
         );
-        const int str_at_pos = ctx->stack[passed_rsbp].to_num_i32().value_or(-1);
+        const int str_at_pos = ctx->stack.at(passed_rsbp + 1).to_num_i32().value_or(-1);
         std::string_view chars_view = str_this_p->as_str_view();
 
         if (const int chars_n = chars_view.length(); str_at_pos < 0 || str_at_pos >= chars_n) {
-            ctx->stack[passed_rsbp] = Value {JSNaNOpt {}}; // get undefined for invalid char positions
+            ctx->stack.at(passed_rsbp - 1) = Value {JSNaNOpt {}}; // get NaN for invalid char positions
         } else {
-            ctx->stack[passed_rsbp] = Value {static_cast<int>(chars_view[str_at_pos])};
+            ctx->stack.at(passed_rsbp - 1) = Value {static_cast<int>(chars_view[str_at_pos])};
         }
 
         return true;
@@ -75,13 +81,15 @@ export namespace DerkJS {
     // ES5 15.5.4.15 - Create a substring with start & end indices of an original string.
     [[nodiscard]] auto native_str_substring(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
-        std::string old_source {ctx->stack[passed_rsbp + argc].to_string().value()};
-        
-        /// TODO: normalize start and end substring bounds as 0 minimum TO (N - 1) maximum
-        const int old_length = old_source.length();
+        const auto str_this_p = dynamic_cast<const StringBase*>(
+            ctx->stack.at(passed_rsbp - 1).to_object()
+        );
+
+        /// NOTE: normalize start and end substring bounds as 0 minimum TO (N - 1) maximum
+        const int old_length = str_this_p->as_str_view().length();
         const int final_start = std::min(
             std::max(
-                ctx->stack.at(passed_rsbp).to_num_i32().value_or(0), // start index (NaNs -> 0)
+                ctx->stack.at(passed_rsbp + 1).to_num_i32().value_or(0), // start index (NaNs -> 0)
                 0
             ),
             old_length
@@ -89,7 +97,7 @@ export namespace DerkJS {
         const int final_end = std::min(
             std::max(
                 // end index (NaNs -> 0)
-                (argc > 1) ? ctx->stack.at(passed_rsbp + 1).to_num_i32().value_or(0) : old_length,
+                (argc > 1) ? ctx->stack.at(passed_rsbp + 2).to_num_i32().value_or(0) : old_length,
                 0
             ),
             old_length
@@ -102,12 +110,13 @@ export namespace DerkJS {
             std::make_unique<DynamicString>(
                 ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
                 ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
-                old_source.substr(from_index, to_index - from_index)
+                std::string_view {str_this_p->as_str_view().substr(from_index, to_index - from_index)}
             )
         )) {
-            ctx->stack[passed_rsbp] = Value {substring_p};
+            ctx->stack.at(passed_rsbp - 1) = Value {substring_p};
             return true;
         } else {
+            ctx->status = VMErrcode::bad_heap_alloc;
             return false;
         }
     }
@@ -115,7 +124,13 @@ export namespace DerkJS {
     // ES5 - 15.5.4.20: remove fringe spaces.
     [[nodiscard]] auto native_str_trim(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
-        std::string old_source {ctx->stack[passed_rsbp + argc].to_string().value()};
+        const auto str_this_p = dynamic_cast<const StringBase*>(
+            ctx->stack.at(passed_rsbp - 1).to_object()
+        );
+
+        std::string old_source;
+        old_source.append_range(str_this_p->as_str_view());
+
         const int first_no_space_index = old_source.find_first_not_of(' ');
         const int last_no_space_index = old_source.find_last_not_of(' ');
 
@@ -124,7 +139,7 @@ export namespace DerkJS {
             ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
             old_source.substr(first_no_space_index, last_no_space_index - first_no_space_index + 1)
         )); trimmed_string_p) {
-            ctx->stack.at(passed_rsbp) = Value {trimmed_string_p};
+            ctx->stack.at(passed_rsbp - 1) = Value {trimmed_string_p};
             return true;
         }
 
@@ -135,29 +150,32 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_str_substr(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
-        auto str_as_obj_p = ctx->stack[passed_rsbp + argc].to_object();
-        const auto str_this_p = dynamic_cast<const StringBase*>(str_as_obj_p);
-        const int substr_begin = ctx->stack[passed_rsbp].to_num_i32().value_or(0);
-        const int substr_len = ctx->stack[passed_rsbp + 1].to_num_i32().value_or(0);
+        const auto str_this_p = dynamic_cast<const StringBase*>(
+            ctx->stack.at(passed_rsbp - 1).to_object()
+        );
+        const int substr_begin = ctx->stack.at(passed_rsbp + 1).to_num_i32().value_or(0);
+        const int substr_len = ctx->stack.at(passed_rsbp + 2).to_num_i32().value_or(0);
 
-        std::string_view chars_view = str_this_p->as_str_view().substr(substr_begin, substr_len);
         std::string temp_substr;
-        temp_substr.append_range(chars_view);
+        temp_substr.append_range(
+            str_this_p->as_str_view().substr(substr_begin, substr_len)
+        );
 
         if (auto created_str_p = ctx->heap.add_item(
             ctx->heap.get_next_id(),
             DynamicString {
-                str_as_obj_p->get_prototype(),
+                ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
                 Value {ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))},
-                temp_substr}
-            ); created_str_p) {
-            ctx->stack[passed_rsbp] = Value {created_str_p};
+                temp_substr
+            }); created_str_p) {
+            ctx->stack.at(passed_rsbp - 1) = Value {created_str_p};
             return true;
-        } else {
-            std::println(std::cerr, "Failed to allocate JS sub-string on the heap.");
-            ctx->stack[passed_rsbp] = Value {JSNullOpt {}};
-            return false;
         }
+
+        ctx->status = VMErrcode::bad_heap_alloc;
+        std::println(std::cerr, "Failed to allocate JS sub-string on the heap.");
+    
+        return false;
     }
 
     //// BEGIN console impls:
@@ -166,10 +184,15 @@ export namespace DerkJS {
         const int passed_rsbp = ctx->rsbp;
 
         for (auto passed_arg_local_offset = 0; passed_arg_local_offset < argc; ++passed_arg_local_offset) {
-            std::print("{} ", ctx->stack[passed_rsbp + passed_arg_local_offset].to_string().value());
+            std::print(
+                "{} ",
+                ctx->stack.at(passed_rsbp + passed_arg_local_offset + 1).to_string().value()
+            );
         }
 
         std::println();
+
+        ctx->stack.at(passed_rsbp - 1) = Value {};
 
         return true;
     }
@@ -177,15 +200,9 @@ export namespace DerkJS {
     [[nodiscard]] auto native_console_read_line(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {    
         /// NOTE: Show user the passed-in prompt string: It MUST be the 1st argument on the stack.
         const auto passed_rsbp = ctx->rsbp;
-        const auto prompt_str_p = ctx->stack[passed_rsbp].to_object();
-        ObjectBase<Value>* prompt_str_prototype = prompt_str_p->get_prototype();
+        const auto& prompt_value = ctx->stack.at(passed_rsbp + 1);
 
-        if (!prompt_str_p || prompt_str_p->get_class_name() != "string") {
-            ctx->stack[passed_rsbp] = Value {};
-            return false;
-        }
-
-        std::print("{}", prompt_str_p->as_string());
+        std::print("{}", prompt_value.to_string().value());
 
         std::string temp_line;
         std::getline(std::cin, temp_line);
@@ -193,18 +210,18 @@ export namespace DerkJS {
         ObjectBase<Value>* line_str_p = ctx->heap.add_item(
             ctx->heap.get_next_id(),
             DynamicString {
-                prompt_str_prototype,
+                ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
                 Value {ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))},
                 temp_line
             }
         );
 
         if (!line_str_p) {
+            ctx->status = VMErrcode::bad_heap_alloc;
             std::println(std::cerr, "Failed to allocate input string on the heap.");
-            ctx->stack[passed_rsbp] = Value {};
             return false;
-        } else {            
-            ctx->stack[passed_rsbp] = Value {line_str_p};
+        } else {
+            ctx->stack.at(passed_rsbp - 1) = Value {line_str_p};
             return true;
         }
     }
@@ -217,7 +234,7 @@ export namespace DerkJS {
         const std::chrono::duration<double, std::milli> current_time_ms = std::chrono::steady_clock::now().time_since_epoch();
 
         /// NOTE: the VM's `djs_native_call` opcode will restore RSP -> callee RBP automtically, so the result would have to be placed there for other code.
-        ctx->stack[passed_rsbp] = Value {current_time_ms.count()};
+        ctx->stack.at(passed_rsbp - 1) = Value {current_time_ms.count()};
 
         return true;
     }
@@ -230,7 +247,7 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_array_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        int maybe_fill_count = ctx->stack[passed_rsbp].to_num_i32().value_or(0);
+        int maybe_fill_count = ctx->stack.at(passed_rsbp + 1).to_num_i32().value_or(0);
 
         if (argc == 0) {
             maybe_fill_count = 0;
@@ -248,147 +265,42 @@ export namespace DerkJS {
         // 2. Fill with N temporary arguments OR fill with N undefined values.
         if (argc > 1) {
             for (int temp_item_offset = 0; temp_item_offset < argc; temp_item_offset++) {
-                temp_array->items().emplace_back(ctx->stack[passed_rsbp + temp_item_offset]);
+                temp_array->items().emplace_back(ctx->stack.at(passed_rsbp + 1 + temp_item_offset));
             }
         } else if (argc == 1) {
             for (int temp_item_count = 0; temp_item_count < maybe_fill_count; temp_item_count++) {
                 temp_array->items().emplace_back(Value {});
             }
-        } else {
-            ;
         }
 
         // 3. Record array to VM heap
         ObjectBase<Value>* temp_array_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::move(temp_array));
 
         if (temp_array_p) {
-            // 3. Put reference to array
-            ctx->stack[passed_rsbp] = Value {temp_array_p};
+            ctx->stack.at(passed_rsbp - 1) = Value {temp_array_p};
             return true;
-        } else {
-            std::println(std::cerr, "Failed to allocate JS array on the heap.");
-            ctx->stack[passed_rsbp] = Value {};
-            return false;
         }
+
+        ctx->status = VMErrcode::bad_heap_alloc;
+        std::println(std::cerr, "Failed to allocate JS array on the heap.");
+
+        return false;
     }
 
     [[nodiscard]] auto native_array_push(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object()); // consume an array object by reference off the stack for mutation
+        auto array_this_p = dynamic_cast<Array*>(
+            ctx->stack.at(passed_rsbp - 1).to_object()
+        );
+        Value* array_length_p = array_this_p->get_length();
 
         for (int temp_item_offset = 0; temp_item_offset < argc; temp_item_offset++) {
-            array_this_p->items().emplace_back(ctx->stack[passed_rsbp + temp_item_offset]);
+            array_this_p->items().emplace_back(ctx->stack.at(passed_rsbp + 1 + temp_item_offset));
+            array_length_p->increment();
         }
 
-        /// NOTE: By MDN, Array.prototype.push returns a new length.
-        ctx->stack[passed_rsbp] = Value {
-            static_cast<int>(array_this_p->items().size())
-        };
-
-        return true;
-    }
-
-    [[nodiscard]] auto native_array_pop(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
-        const auto passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object());
-
-        /// NOTE: By MDN, Array.prototype.pop returns the last element if possible, but this implementation returns undefined otherwise.
-        if (array_this_p->items().empty()) {
-            ctx->stack[passed_rsbp] = Value {};
-        } else {
-            ctx->stack[passed_rsbp] = array_this_p->items().back();
-            array_this_p->items().pop_back();
-        }
-
-        return true;
-    }
-
-    [[nodiscard]] auto native_array_at(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
-        const auto passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object());
-        auto actual_index_opt = ctx->stack[passed_rsbp].to_num_i32();
-        const int items_n = array_this_p->items().size(); 
-
-        /// NOTE: For now, just return undefined on non-numeric indices.
-        if (!actual_index_opt) {
-            ctx->stack[passed_rsbp] = Value {};
-            return false;
-        }
-
-        /// NOTE: By MDN, Array.prototype.at returns from the 0th position for unsigned indices, BUT negative indices offset backwards from N (the length).
-        if (auto actual_index = *actual_index_opt; actual_index >= 0 && actual_index < items_n) {
-            ctx->stack[passed_rsbp] = array_this_p->items().at(actual_index);
-        } else if (actual_index < 0 && items_n > 0) {
-            ctx->stack[passed_rsbp] = array_this_p->items().at(items_n + actual_index);
-        } else {
-            // Handle negative index on empty array
-            ctx->stack[passed_rsbp] = Value {};
-        } 
-
-        return true;
-    }
-
-    [[nodiscard]] auto native_array_index_of(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
-        const auto passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object());
-        const auto& array_items_view = *array_this_p->get_seq_items();
-        const auto& target_item = ctx->stack.at(passed_rsbp);
-        auto found_pos = -1;
-
-        for (int pos = 0; const auto& item_value : array_items_view) {
-            if (item_value == target_item) {
-                found_pos = pos;
-                break;
-            }
-
-            pos++;
-        }
-
-        ctx->stack.at(passed_rsbp) = Value {found_pos};
-
-        return true;
-    }
-    
-    /// SEE: ES5-15.4.4.14
-    [[nodiscard]] auto native_array_last_index_of(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
-        const auto passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object());
-
-        if (!array_this_p) {
-            std::println(std::cerr, "Array.lastIndexOf: Non-array argument.");
-            ctx->status = VMErrcode::bad_operation;
-            return false;
-        }
-
-        if (array_this_p->items().empty()) {
-            ctx->stack.at(passed_rsbp) = Value {-1};
-            return true;
-        }
-        
-        const auto& target = ctx->stack.at(passed_rsbp);
-        const int self_len = array_this_p->items().size();
-        int search_pos = (argc == 2) ? ctx->stack.at(passed_rsbp).to_num_i32().value_or(0) : self_len - 1 ;
-        search_pos = (search_pos < 0) ? self_len - std::abs(search_pos) : std::min(search_pos, self_len - 1);
-
-        for (; search_pos >= 0; search_pos--) {
-            if (array_this_p->items().at(search_pos) == target) {
-                ctx->stack.at(passed_rsbp) = Value {search_pos};
-                return true;
-            }
-        }
-
-        ctx->stack.at(passed_rsbp) = Value {-1};
-        return true;
-    }
-
-    [[nodiscard]] auto native_array_reverse(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
-        const auto passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<Array*>(ctx->stack.at(passed_rsbp + argc).to_object());
-        auto& array_items_view = array_this_p->items();
-
-        std::ranges::reverse(array_items_view);
-
-        ctx->stack[passed_rsbp] = Value {array_this_p};
+        /// NOTE: By MDN, Array.prototype.push returns the updated length.
+        ctx->stack.at(passed_rsbp - 1) = array_length_p->deep_clone();
 
         return true;
     }
@@ -396,45 +308,36 @@ export namespace DerkJS {
     /// SEE: ES5-15.4.4.5
     [[nodiscard]] auto native_array_join(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
-        auto array_this_p = dynamic_cast<const Array*>(ctx->stack[passed_rsbp + argc].to_object());
+        auto array_this_p = dynamic_cast<Array*>(
+            ctx->stack.at(passed_rsbp - 1).to_object()
+        );
         auto temp_str = std::make_unique<DynamicString>(
             ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
             Value {ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))},
             std::string_view {}
         );
 
-        if (array_this_p->items().empty()) {
-            auto empty_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::move(temp_str));
+        if (!array_this_p->items().empty()) {
+            std::string delim = (argc == 1) ? ctx->stack.at(passed_rsbp + 1).to_string().value_or(",") : ",";
 
-            if (!empty_str_p) {
-                ctx->status = VMErrcode::bad_heap_alloc;
-                return false;
-            }
+            temp_str->append_back(array_this_p->items().front().to_string().value());
 
-            ctx->stack.at(passed_rsbp) = Value {empty_str_p};
+            for (int more_count = 1, self_len = array_this_p->items().size(); more_count < self_len; more_count++) {
+                temp_str->append_back(delim);
 
-            return true;
-        }
-
-        std::string delim = (argc == 1) ? ctx->stack.at(passed_rsbp).to_string().value_or(",") : ",";
-        
-        temp_str->append_back(array_this_p->items().front().to_string().value());
-
-        for (int more_count = 1, self_len = array_this_p->items().size(); more_count < self_len; more_count++) {
-            temp_str->append_back(delim);
-
-            if (const auto& next_item = array_this_p->items().at(more_count); next_item.get_tag() != ValueTag::undefined && next_item.get_tag() != ValueTag::null) {
-                temp_str->append_back(next_item.to_string().value());
+                if (const auto& next_item = array_this_p->items().at(more_count); next_item.get_tag() != ValueTag::undefined && next_item.get_tag() != ValueTag::null) {
+                    temp_str->append_back(next_item.to_string().value());
+                }
             }
         }
 
         if (auto filled_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::move(temp_str)); filled_str_p) {
-            ctx->stack.at(passed_rsbp) = Value {filled_str_p};
+            ctx->stack.at(passed_rsbp - 1) = Value {filled_str_p};
             return true;
-        } else {
-            ctx->status = VMErrcode::bad_heap_alloc;
-            return false;
         }
+
+        ctx->status = VMErrcode::bad_heap_alloc;
+        return false;
     }
 
     [[nodiscard]] auto native_array_concat(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
@@ -447,40 +350,90 @@ export namespace DerkJS {
     /// TODO: fix this to wrap primitives in object form / forward objects as-is.
     [[nodiscard]] auto native_object_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        Value target_arg = ctx->stack.at(passed_rsbp);
+        Value target_arg = ctx->stack.at(passed_rsbp + 1);
 
-        if (auto target_as_object_p = target_arg.to_object(); !target_as_object_p) {
-            std::println(std::cerr, "Object.constructor: Non-object arguments to Object ctor are unsupported.");
-            ctx->status = VMErrcode::bad_operation;
-            return false;
-        } else {
-            ctx->stack.at(passed_rsbp) = Value {target_as_object_p};
+        if (auto target_as_object_p = target_arg.to_object(); target_as_object_p) {   
+            ctx->stack.at(passed_rsbp - 1) = Value {target_as_object_p};
             return true;
         }
+
+        ctx->status = VMErrcode::bad_operation;
+        std::println(std::cerr, "Object.constructor: Non-object arguments to Object ctor are unsupported.");
+
+        return false;
     }
 
     [[nodiscard]] auto native_object_create(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        auto taken_proto_p = ctx->stack.at(passed_rsbp).to_object();
+        auto taken_proto_p = ctx->stack.at(passed_rsbp + 1).to_object();
 
         if (auto result_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::make_unique<Object>(taken_proto_p)); result_p) {
-            ctx->stack.at(passed_rsbp) = Value {result_p};
+            ctx->stack.at(passed_rsbp - 1) = Value {result_p};
             return true;
-        } else {
-            std::println(std::cerr, "Failed to allocate JS object on the heap.");
-            ctx->stack.at(passed_rsbp) = Value {JSNullOpt {}};
-            ctx->status = VMErrcode::bad_heap_alloc;
-            return false;
         }
+
+        ctx->status = VMErrcode::bad_heap_alloc;
+        std::println(std::cerr, "Failed to allocate JS object on the heap.");
+
+        return false;
     }
 
     [[nodiscard]] auto native_object_freeze(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        auto target_object_p = ctx->stack.at(passed_rsbp).to_object();
+        ObjectBase<Value>* target_this_p = (argc == 0)
+            ? ctx->stack.at(passed_rsbp - 1).to_object()
+            : ctx->stack.at(passed_rsbp + 1).to_object();
 
-        if (target_object_p != nullptr) {
-            target_object_p->freeze();
+        if (target_this_p != nullptr) {
+            target_this_p->freeze();
         }
+
+        return true;
+    }
+
+    /// Function.prototype impls.
+
+    [[nodiscard]] auto native_function_call(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const auto passed_rsbp = ctx->rsbp;
+        ObjectBase<Value>* maybe_callable_p = ctx->stack.at(passed_rsbp - 1).to_object();
+        const auto old_vm_frame_n = ctx->ending_frame_depth;
+        const auto old_vm_status = ctx->status;
+
+        if (!maybe_callable_p) {
+            std::println(std::cerr, "Function.call: Cannot invoke invalid object reference.");
+            ctx->status = VMErrcode::bad_operation;
+            return false;
+        }
+
+        /// NOTE: See below diagram & mandate `thisArg` for now!
+        // foo.call(self, 1) becomes:
+        // STACK pre-call: <ref:foo> <ref:foo.call> <passed-thisArg> <args...>
+        // NEXT: swap ref:foo with foo.call
+        // NEXT: swap ref:foo with passed-thisArg
+        // STACK for call: <ref:foo.call> <passed-thisArg> <ref:foo> <args...>
+        std::swap(ctx->stack.at(passed_rsbp - 1), ctx->stack.at(passed_rsbp));
+        std::swap(ctx->stack.at(passed_rsbp), ctx->stack.at(passed_rsbp + 1));
+        
+        /// NOTE: ensure exit of just the callback when its frame is popped...
+        ctx->ending_frame_depth = ctx->frames.size();
+
+        if (!maybe_callable_p->call(ctx, argc - 1, true)) {
+            std::println(std::cerr, "Function.call: Cannot invoke non-function object.");
+            ctx->status = VMErrcode::bad_operation;
+            return false;
+        }
+
+        dispatch_op(*ctx, ctx->rip_p->args[0], ctx->rip_p->args[1]);
+
+        if (ctx->status != VMErrcode::ok) {
+            std::println(std::cerr, "Function.call: fatal error in callback body.");
+            return false;
+        }
+
+        /// NOTE: Restore old exiting frame depth for VM.
+        ctx->ending_frame_depth = old_vm_frame_n;
+        ctx->status = old_vm_status;
+        ctx->stack.at(passed_rsbp - 1) = ctx->stack.at(passed_rsbp);
 
         return true;
     }
