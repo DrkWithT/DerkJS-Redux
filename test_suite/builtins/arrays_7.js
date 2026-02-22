@@ -19,8 +19,8 @@ if (foo.length === 1) {
 
 if (foo.at(100) === undefined) {
     ok = ok + 1;
-} else {
+}/* else {
     console.log("Unexpected foo[100], should be undefined:", foo.at(100));
-}
+}*/
 
 console.log("PASS:", ok === 3);
