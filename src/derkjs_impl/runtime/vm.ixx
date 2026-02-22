@@ -259,12 +259,8 @@ namespace DerkJS {
     }
 
     inline void op_deref(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        if (auto& ref_value_ref = ctx.stack[ctx.rsp]; ref_value_ref.get_tag() == ValueTag::val_ref || ref_value_ref.get_tag() == ValueTag::object) {
-            ctx.stack[ctx.rsp] = ref_value_ref.deep_clone();
-            ctx.rip_p++;
-        } else {
-            ctx.status = VMErrcode::vm_abort;
-        }
+        ctx.stack.at(ctx.rsp) = ctx.stack.at(ctx.rsp).deep_clone();
+        ctx.rip_p++;
 
         [[clang::musttail]]
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
