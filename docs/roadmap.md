@@ -71,8 +71,10 @@
       - `Array.prototype`: `pop, indexOf, lastIndexOf, reverse, forEach(arr, thisArg), filter(predicateFn, thisArg), map(callbackFn, thisArg)`
     - Keep natives for:
       - `parseInt`, `parseFloat`
-      - `constructor`s of `Object`, `Array`, `String`
+      - `constructor`s of `Object`, `Array`, `String`, `Number`, `Boolean`
       - `Array.prototype`: push, join, toString
       - `Object.prototype`: hasOwnProperty, isPrototypeOf, toString, freeze
       - `String.prototype`: hasOwnProperty, isPrototypeOf, charCodeAt, trim, split
+      - `Number.prototype`: ??
+      - `Boolean.prototype`: valueOf, toString
       - `Function.prototype`: call
