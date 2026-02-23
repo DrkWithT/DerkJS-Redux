@@ -204,6 +204,9 @@ export namespace DerkJS {
         virtual auto is_prototype() const noexcept -> bool = 0;
 
         virtual auto get_prototype() noexcept -> ObjectBase<V>* = 0;
+
+        virtual auto get_instance_prototype() noexcept -> ObjectBase<V>* = 0;
+
         virtual auto get_seq_items() noexcept -> std::vector<V>* = 0;
         virtual auto get_own_prop_pool() noexcept -> PropPool<V, V>& = 0;
         virtual auto get_property_value(const V& key, bool allow_filler) -> PropertyDescriptor<V> = 0;

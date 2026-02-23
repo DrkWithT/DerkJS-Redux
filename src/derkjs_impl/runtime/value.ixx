@@ -665,6 +665,10 @@ export namespace DerkJS {
             return m_prototype.to_object();
         }
 
+        [[nodiscard]] auto get_instance_prototype() noexcept -> ObjectBase<Value>* override {
+            return nullptr;
+        }
+
         [[nodiscard]] auto get_seq_items() noexcept -> std::vector<Value>* override {
             return nullptr;
         }
@@ -675,6 +679,7 @@ export namespace DerkJS {
 
         [[nodiscard]] auto get_property_value(const Value& key, bool allow_filler) -> PropertyDescriptor<Value> override {
             if (key.is_prototype_key()) {
+                /// TODO: fix this to not get __proto__- instead get a new m_instance_prototype field.
                 return PropertyDescriptor<Value> {&key, &m_prototype, this, m_flags};
             } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
                 return prop.key == key;

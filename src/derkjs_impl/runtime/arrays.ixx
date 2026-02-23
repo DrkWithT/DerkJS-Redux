@@ -118,6 +118,10 @@ export namespace DerkJS {
             return m_prototype.to_object();
         }
 
+        [[nodiscard]] auto get_instance_prototype() noexcept -> ObjectBase<Value>* override {
+            return nullptr;
+        }
+
         [[nodiscard]] auto get_seq_items() noexcept -> std::vector<Value>* override {
             return &m_items;
         }
