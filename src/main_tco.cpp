@@ -350,6 +350,7 @@ int main(int argc, char* argv[]) {
         driver.get_length_key_str_p(),
         Value {1}
     );
+
     auto parse_int_fn_p = driver.add_native_object<NativeFunction>(
         "",
         function_prototype_p,
@@ -357,6 +358,15 @@ int main(int argc, char* argv[]) {
         function_prototype_p,
         driver.get_length_key_str_p(),
         Value {2}
+    );
+
+    auto parse_float_fn_p = driver.add_native_object<NativeFunction>(
+        "",
+        function_prototype_p,
+        DerkJS::native_parse_float,
+        function_prototype_p,
+        driver.get_length_key_str_p(),
+        Value {1}
     );
 
     /// Patch prototypes & alias built-in globals ///
@@ -383,6 +393,7 @@ int main(int argc, char* argv[]) {
 
     driver.add_native_object_alias("isNaN", is_nan_fn_p);
     driver.add_native_object_alias("parseInt", parse_int_fn_p);
+    driver.add_native_object_alias("parseFloat", parse_float_fn_p);
 
     /// 6. Run the script after all configuration. ///
 

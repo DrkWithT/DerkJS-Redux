@@ -62,6 +62,20 @@ export namespace DerkJS {
         return true;
     }
 
+    [[nodiscard]] auto native_parse_float(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const int passed_rsbp = ctx->rsbp;
+        std::string temp_str = ctx->stack.at(passed_rsbp + 1).to_string().value_or("");
+
+        try {
+            ctx->stack.at(passed_rsbp - 1) = Value {std::stod(temp_str)};
+        } catch (const std::exception& err) {
+            std::println(std::cerr, "parseFloat: string is not a valid floating-point literal.");
+            ctx->stack.at(passed_rsbp - 1) = Value {JSNaNOpt {}};
+        }
+
+        return true;
+    }
+
     /// BEGIN Boolean impls:
 
     [[nodiscard]] auto native_boolean_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
