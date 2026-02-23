@@ -20,6 +20,25 @@ import runtime.vm;
 export namespace DerkJS {
     //// BEGIN global functions:
 
+    [[nodiscard]] auto native_is_nan(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const int passed_rsbp = ctx->rsbp;
+        Value arg = ctx->stack.at(passed_rsbp + 1).deep_clone();
+
+        if (const ObjectBase<Value>* arg_as_object_p = arg.to_object(); arg_as_object_p) {
+            if (dynamic_cast<const Array*>(arg_as_object_p) != nullptr) {
+                ctx->stack.at(passed_rsbp - 1) = Value {false};
+            } else {
+                ctx->stack.at(passed_rsbp - 1) = Value {!arg.to_num_f64()};
+            }
+        } else {
+            ctx->stack.at(passed_rsbp - 1) = Value {
+                arg.get_tag() == ValueTag::num_nan || arg.get_tag() == ValueTag::undefined
+            };
+        }
+
+        return true;
+    }
+
     [[nodiscard]] auto native_parse_int(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         constexpr auto min_radix = 2;
         constexpr auto max_radix = 16;

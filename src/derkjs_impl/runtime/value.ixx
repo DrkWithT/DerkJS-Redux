@@ -409,7 +409,7 @@ export namespace DerkJS {
             } else if (lhs_tag == ValueTag::num_i32) {
                 if (auto rhs_i32_v = other.to_num_i32(); !rhs_i32_v) {
                     return Value {JSNaNOpt {}};
-                } else if (*rhs_i32_v == 0) {
+                } else if (*rhs_i32_v == 0.0) {
                     return Value {JSNaNOpt {}};
                 } else {   
                     return Value {*rhs_i32_v / rhs_i32_v.value()};
@@ -448,7 +448,7 @@ export namespace DerkJS {
                 if (auto rhs_f64_v = other.to_num_f64(); !rhs_f64_v) {
                     m_data.dud = dud_nan_char_v;
                     m_tag = ValueTag::num_nan;
-                } else if (*rhs_f64_v == 0) {
+                } else if (*rhs_f64_v == 0.0) {
                     m_data.dud = dud_nan_char_v;
                     m_tag = ValueTag::num_nan;
                 } else {

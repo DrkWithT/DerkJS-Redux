@@ -341,6 +341,15 @@ int main(int argc, char* argv[]) {
 
     auto console_p = driver.add_native_object<Object>("", object_prototype_p);
     auto date_p = driver.add_native_object<Object>("", object_prototype_p);
+
+    auto is_nan_fn_p = driver.add_native_object<NativeFunction>(
+        "",
+        function_prototype_p,
+        DerkJS::native_is_nan,
+        function_prototype_p,
+        driver.get_length_key_str_p(),
+        Value {1}
+    );
     auto parse_int_fn_p = driver.add_native_object<NativeFunction>(
         "",
         function_prototype_p,
@@ -372,6 +381,7 @@ int main(int argc, char* argv[]) {
     driver.patch_native_object(date_p, string_prototype_p, std::to_array(std::move(date_props)));
     driver.add_native_object_alias("Date", date_p);
 
+    driver.add_native_object_alias("isNaN", is_nan_fn_p);
     driver.add_native_object_alias("parseInt", parse_int_fn_p);
 
     /// 6. Run the script after all configuration. ///
