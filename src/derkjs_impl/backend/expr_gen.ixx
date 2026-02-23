@@ -217,7 +217,12 @@ namespace DerkJS::Backend {
                 .tag = Location::constant
             };
 
+            auto dud_instance_prototype_p = context.m_heap.add_item(context.m_heap.get_next_id(), std::make_unique<Object>(
+                context.m_base_prototypes.at(static_cast<unsigned int>(BasePrototypeID::object))
+            ));
+
             Lambda temp_callable {
+                dud_instance_prototype_p,
                 std::move(context.m_code_blobs.front()),
                 context.m_base_prototypes.at(static_cast<unsigned int>(BasePrototypeID::function)),
                 context.m_base_prototypes.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
