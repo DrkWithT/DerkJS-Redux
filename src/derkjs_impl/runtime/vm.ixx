@@ -328,7 +328,10 @@ namespace DerkJS {
     inline void op_put_obj_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.gc(ctx.heap, ctx.stack, ctx.rsp);
 
-        auto obj_ref_p = ctx.heap.add_item(ctx.heap.get_next_id(), Object {nullptr});
+        auto obj_ref_p = ctx.heap.add_item(ctx.heap.get_next_id(), Object {
+            /// NOTE: {}.__proto__ === Object.prototype
+            ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::object))
+        });
 
         if (obj_ref_p) {
             ctx.stack[ctx.rsp + 1] = Value {obj_ref_p};
@@ -346,10 +349,9 @@ namespace DerkJS {
         ctx.gc(ctx.heap, ctx.stack, ctx.rsp);
 
         auto array_p = new Array {
+            /// NOTE: [].__proto__ === Array.prototype
             ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::array)),
-            Value {
-                ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))
-            },
+            Value { ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)) },
             Value {a0}
         };
         

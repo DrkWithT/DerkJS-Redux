@@ -476,6 +476,50 @@ export namespace DerkJS {
         return false;
     }
 
+    [[nodiscard]] auto native_object_has_own_property(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const auto passed_rsbp = ctx->rsbp;
+        ObjectBase<Value>* target_this_p = ctx->stack.at(passed_rsbp - 1).to_object();
+
+        if (!target_this_p) {
+            ctx->status = VMErrcode::bad_operation;
+            std::println(std::cerr, "Object.hasOwnProperty: cannot invoke for non-object.");
+            return false;
+        }
+
+        const auto& search_key = ctx->stack.at(passed_rsbp + 1);
+        const auto& target_items = target_this_p->get_own_prop_pool();
+
+        ctx->stack.at(passed_rsbp - 1) = Value {
+            std::ranges::find_if(
+                target_items,
+                [&search_key] (const auto& prop_entry) -> bool {
+                    return search_key == prop_entry.key;
+                }
+            ) != target_items.end()
+        };
+
+        return true;
+    }
+
+    [[nodiscard]] auto native_object_is_prototype_of(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const auto passed_rsbp = ctx->rsbp;
+        ObjectBase<Value>* self_maybe_prototype_p = ctx->stack.at(passed_rsbp - 1).to_object();
+        ObjectBase<Value>* current_prototype_p = ctx->stack.at(passed_rsbp + 1).to_object()->get_prototype();
+        auto found_in_prototype_chain = false;
+
+        while (current_prototype_p != nullptr) {
+            if (self_maybe_prototype_p == current_prototype_p) {
+                found_in_prototype_chain = true;
+                break;
+            }
+
+            current_prototype_p = current_prototype_p->get_prototype();
+        }
+
+        ctx->stack.at(passed_rsbp - 1) = Value {found_in_prototype_chain};
+        return true;
+    }
+
     [[nodiscard]] auto native_object_freeze(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
         ObjectBase<Value>* target_this_p = (argc == 0)
