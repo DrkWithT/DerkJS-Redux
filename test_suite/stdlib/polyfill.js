@@ -169,3 +169,7 @@ Array.prototype.some = function (predicateFn, thisArg) {
 
     return ok;
 };
+
+Array.prototype.toString = function () {
+    return this.join();
+};
