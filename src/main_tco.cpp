@@ -1,6 +1,7 @@
 #include <string>
 #include <string_view>
 #include <array>
+#include <variant>
 #include <print>
 #include <iostream>
 
@@ -25,7 +26,7 @@ int main(int argc, char* argv[]) {
             .name = fancy_name,
             .author = "DrkWithT (GitHub)",
             .version_major = 0,
-            .version_minor = 4,
+            .version_minor = 5,
             .version_patch = 1
         },
         derkjs_heap_count // increase object count limit for VM if needed
@@ -51,55 +52,6 @@ int main(int argc, char* argv[]) {
         std::println(std::cerr, "usage: ./derkjs [-h | -v | [-d | -r] <script name>]\n\t-h: show help\n\t-v: show version & author");
         return 1;
     }
-
-    /// String.prototype natives
-    Core::NativePropertyStub str_props[] {
-        Core::NativePropertyStub {
-            .name_str = "constructor",
-            .item = std::make_unique<NativeFunction>(
-                DerkJS::native_str_ctor,
-                nullptr,
-                driver.get_length_key_str_p(),
-                Value {1}
-            ),
-        },
-        Core::NativePropertyStub {
-            .name_str = "charCodeAt",
-            .item = std::make_unique<NativeFunction>(
-                DerkJS::native_str_charcode_at,
-                nullptr,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
-        },
-        Core::NativePropertyStub {
-            .name_str = "substr",
-            .item = std::make_unique<NativeFunction>(
-                DerkJS::native_str_substr,
-                nullptr,
-                driver.get_length_key_str_p(),
-                Value {2}
-            )
-        },
-        Core::NativePropertyStub {
-            .name_str = "substring",
-            .item = std::make_unique<NativeFunction>(
-                DerkJS::native_str_substring,
-                nullptr,
-                driver.get_length_key_str_p(),
-                Value {2}
-            )
-        },
-        Core::NativePropertyStub {
-            .name_str = "trim",
-            .item = std::make_unique<NativeFunction>(
-                DerkJS::native_str_trim,
-                nullptr,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
-        }
-    };
 
     /// 2. Register keywords, operators, etc. for parser's lexer. This makes the lexer's configuration flexible. ///
     driver.add_js_lexical("var", TokenTag::keyword_var);
@@ -164,65 +116,25 @@ int main(int argc, char* argv[]) {
     driver.add_stmt_emitter(StmtNodeTag::stmt_continue, std::make_unique<Backend::ContinueEmitter>());
     driver.add_stmt_emitter(StmtNodeTag::stmt_block, std::make_unique<Backend::BlockEmitter>());
 
-    /// 4. Prepare native objects alongside prototypes of Object, Array, etc. These are VERY important for DerkJS to interpret certain scripts properly. ///
-    auto string_prototype_p = driver.setup_string_prototype(std::to_array(std::move(str_props)));
+    /// 4.1 Prepare native prototypes as stubs. ///
 
-    if (!string_prototype_p) {
-        std::println(std::cerr, "SETUP ERROR: failed to allocate String.prototype object.");
-        return 1;
-    }
+    auto object_prototype_p = driver.add_native_object<Object>("Object::prototype", nullptr);
+    auto boolean_prototype_p = driver.add_native_object<Object>("Boolean::prototype", object_prototype_p);
+    // auto number_prototype_p = nullptr;
+    auto string_prototype_p = driver.add_native_object<Object>("String::prototype", object_prototype_p);
+    auto array_prototype_p = driver.add_native_object<Object>("Array::prototype", object_prototype_p);
+    auto function_prototype_p = driver.add_native_object<Object>("Function::prototype", object_prototype_p);
 
-    /// Function.prototype natives
-    Core::NativePropertyStub function_helper_props[] {
-        Core::NativePropertyStub {
-            .name_str = "call",
-            .item = std::make_unique<NativeFunction>(
-                DerkJS::native_function_call,
-                nullptr,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
-        }
-    };
+    /// 4.2 Patch properties of native prototypes. These are VERY important for DerkJS to interpret certain scripts properly. ///
 
-    /// Array.prototype natives
-    Core::NativePropertyStub array_obj_props[] {
+    /// Object.prototype items
+    Core::NativePropertyStub object_prototype_props[] {
         Core::NativePropertyStub {
             .name_str = "constructor",
             .item = std::make_unique<NativeFunction>(
-                DerkJS::native_array_ctor,
-                nullptr,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
-        },
-        Core::NativePropertyStub {
-            .name_str = "push",
-            .item = std::make_unique<NativeFunction>(
-                DerkJS::native_array_push,
-                nullptr,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
-        },
-        Core::NativePropertyStub {
-            .name_str = "join",
-            .item = std::make_unique<NativeFunction>(
-                DerkJS::native_array_join,
-                nullptr,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
-        },
-    };
-
-    /// Object.prototype natives
-    Core::NativePropertyStub object_helper_props[] {
-        Core::NativePropertyStub {
-            .name_str = "constructor",
-            .item = std::make_unique<NativeFunction>(
+                object_prototype_p,
                 DerkJS::native_object_ctor,
-                nullptr,
+                function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
             )
@@ -230,8 +142,29 @@ int main(int argc, char* argv[]) {
         Core::NativePropertyStub {
             .name_str = "create",
             .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
                 DerkJS::native_object_create,
-                nullptr,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        },
+        Core::NativePropertyStub {
+            .name_str = "hasOwnProperty",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJS::native_object_has_own_property,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        },
+        Core::NativePropertyStub {
+            .name_str = "isPrototypeOf",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJS::native_object_is_prototype_of,
+                function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
             )
@@ -239,21 +172,208 @@ int main(int argc, char* argv[]) {
         Core::NativePropertyStub {
             .name_str = "freeze",
             .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
                 DerkJS::native_object_freeze,
-                nullptr,
+                function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
             )
         }
     };
 
-    /// Console methods
-    Core::NativePropertyStub console_obj_props[] {
+    Core::NativePropertyStub boolean_prototype_props[] {
+        Core::NativePropertyStub {
+            .name_str = "constructor",
+            .item = std::make_unique<NativeFunction>(
+                boolean_prototype_p,
+                DerkJS::native_boolean_ctor,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        },
+        Core::NativePropertyStub {
+            .name_str = "hasOwnProperty",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJS::native_object_has_own_property,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        },
+        Core::NativePropertyStub {
+            .name_str = "valueOf",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJS::native_boolean_value_of,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        },
+        Core::NativePropertyStub {
+            .name_str = "toString",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJS::native_boolean_to_string,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        }
+    };
+
+    /// String.prototype items
+    Core::NativePropertyStub string_prototype_props[] {
+        Core::NativePropertyStub {
+            .name_str = "constructor",
+            .item = std::make_unique<NativeFunction>(
+                string_prototype_p,
+                DerkJS::native_str_ctor,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        },
+        Core::NativePropertyStub {
+            .name_str = "hasOwnProperty",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJS::native_object_has_own_property,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        },
+        Core::NativePropertyStub {
+            .name_str = "charCodeAt",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJS::native_str_charcode_at,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        },
+        Core::NativePropertyStub {
+            .name_str = "substr",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJS::native_str_substr,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {2}
+            )
+        },
+        Core::NativePropertyStub {
+            .name_str = "substring",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJS::native_str_substring,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {2}
+            )
+        },
+        Core::NativePropertyStub {
+            .name_str = "trim",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJS::native_str_trim,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        }
+    };
+
+    /// Function.prototype items
+    Core::NativePropertyStub function_prototype_props[] {
+        Core::NativePropertyStub {
+            .name_str = "hasOwnProperty",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJS::native_object_has_own_property,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        },
+        Core::NativePropertyStub {
+            .name_str = "call",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJS::native_function_call,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        }
+    };
+
+    /// Array.prototype items
+    Core::NativePropertyStub array_prototype_props[] {
+        Core::NativePropertyStub {
+            .name_str = "constructor",
+            .item = std::make_unique<NativeFunction>(
+                array_prototype_p,
+                DerkJS::native_array_ctor,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        },
+        Core::NativePropertyStub {
+            .name_str = "hasOwnProperty",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJS::native_object_has_own_property,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        },
+        Core::NativePropertyStub {
+            .name_str = "push",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJS::native_array_push,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        },
+        Core::NativePropertyStub {
+            .name_str = "join",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJS::native_array_join,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        },
+    };
+
+    /// Console items
+    Core::NativePropertyStub console_props[] {
+        Core::NativePropertyStub {
+            .name_str = "hasOwnProperty",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJS::native_object_has_own_property,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        },
         Core::NativePropertyStub {
             .name_str = "log",
             .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
                 DerkJS::native_console_log,
-                nullptr,
+                function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
             )
@@ -261,102 +381,101 @@ int main(int argc, char* argv[]) {
         Core::NativePropertyStub {
             .name_str = "readln",
             .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
                 DerkJS::native_console_read_line,
-                nullptr,
+                function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
             )
         }
     };
 
-    Core::NativePropertyStub date_obj_props[] {
+    /// Date items
+    Core::NativePropertyStub date_props[] {
+        Core::NativePropertyStub {
+            .name_str = "hasOwnProperty",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJS::native_object_has_own_property,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        },
         Core::NativePropertyStub {
             .name_str = "now",
             .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
                 DerkJS::clock_time_now,
-                nullptr,
+                function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
             )
         }
     };
 
-    driver.add_native_global<NativeFunction>(
-        "String",
-        DerkJS::native_str_ctor,
-        string_prototype_p,
+    ObjectBase<Value>* object_ctor_p = std::get<std::unique_ptr<ObjectBase<Value>>>(object_prototype_props[0].item).get();
+    ObjectBase<Value>* boolean_ctor_p = std::get<std::unique_ptr<ObjectBase<Value>>>(boolean_prototype_props[0].item).get();
+    ObjectBase<Value>* string_ctor_p = std::get<std::unique_ptr<ObjectBase<Value>>>(string_prototype_props[0].item).get();
+    ObjectBase<Value>* array_ctor_p = std::get<std::unique_ptr<ObjectBase<Value>>>(array_prototype_props[0].item).get();
+
+    auto console_p = driver.add_native_object<Object>("", object_prototype_p);
+    auto date_p = driver.add_native_object<Object>("", object_prototype_p);
+
+    auto is_nan_fn_p = driver.add_native_object<NativeFunction>(
+        "",
+        function_prototype_p,
+        DerkJS::native_is_nan,
+        function_prototype_p,
         driver.get_length_key_str_p(),
         Value {1}
     );
 
-    // Add `Array.prototype` object here!
-    auto array_prototype_object_p = driver.setup_basic_prototype(
-        string_prototype_p,
-        "Array::prototype",
-        std::to_array(std::move(array_obj_props))
-    );
-
-    if (!array_prototype_object_p) {
-        std::println(std::cerr, "SETUP ERROR: failed to allocate Array.prototype object.");
-        return 1;
-    }
-
-    driver.add_native_global<NativeFunction>(
-        "Array",
-        DerkJS::native_array_ctor,
-        array_prototype_object_p,
-        driver.get_length_key_str_p(),
-        Value {1}
-    );
-
-    auto object_interface_prototype_p = driver.setup_basic_prototype(
-        string_prototype_p,
-        "Object::prototype",
-        std::to_array(std::move(object_helper_props))
-    );
-
-    if (!object_interface_prototype_p) {
-        std::println(std::cerr, "SETUP ERROR: failed to allocate Object.prototype object.");
-        return 1;
-    }
-
-    driver.add_native_global<NativeFunction>(
-        "Object",
-        DerkJS::native_object_ctor,
-        object_interface_prototype_p,
-        driver.get_length_key_str_p(),
-        Value {1}
-    );
-
-    /// TODO: add Function ctor, const length accessor for functions, etc.
-    driver.setup_basic_prototype(
-        string_prototype_p,
-        "Function::prototype",
-        std::to_array(std::move(function_helper_props))
-    );
-
-    driver.add_native_object<Object>(
-        string_prototype_p,
-        "console",
-        std::to_array(std::move(console_obj_props)),
-        object_interface_prototype_p
-    );
-
-    driver.add_native_object<Object>(
-        string_prototype_p,
-        "Date",
-        std::to_array(std::move(date_obj_props)),
-        object_interface_prototype_p
-    );
-
-    driver.add_native_global<NativeFunction>(
-        "parseInt",
+    auto parse_int_fn_p = driver.add_native_object<NativeFunction>(
+        "",
+        function_prototype_p,
         DerkJS::native_parse_int,
-        nullptr,
+        function_prototype_p,
         driver.get_length_key_str_p(),
         Value {2}
     );
 
-    /// 4. Run the script after all configuration. ///
+    auto parse_float_fn_p = driver.add_native_object<NativeFunction>(
+        "",
+        function_prototype_p,
+        DerkJS::native_parse_float,
+        function_prototype_p,
+        driver.get_length_key_str_p(),
+        Value {1}
+    );
+
+    /// Patch prototypes & alias built-in globals ///
+
+    driver.patch_native_object(object_prototype_p, string_prototype_p, std::to_array(std::move(object_prototype_props)));
+    driver.add_native_object_alias("Object", object_ctor_p);
+
+    driver.patch_native_object(boolean_prototype_p, string_prototype_p, std::to_array(std::move(boolean_prototype_props)));
+    driver.add_native_object_alias("Boolean", boolean_ctor_p);
+
+    driver.patch_native_object(string_prototype_p, string_prototype_p, std::to_array(std::move(string_prototype_props)));
+    driver.add_native_object_alias("String", string_ctor_p);
+
+    driver.patch_native_object(array_prototype_p, string_prototype_p, std::to_array(std::move(array_prototype_props)));
+    driver.add_native_object_alias("Array", array_ctor_p);
+
+    driver.patch_native_object(function_prototype_p, string_prototype_p, std::to_array(std::move(function_prototype_props)));
+
+    driver.patch_native_object(console_p, string_prototype_p, std::to_array(std::move(console_props)));
+    driver.add_native_object_alias("console", console_p);
+
+    driver.patch_native_object(date_p, string_prototype_p, std::to_array(std::move(date_props)));
+    driver.add_native_object_alias("Date", date_p);
+
+    driver.add_native_object_alias("isNaN", is_nan_fn_p);
+    driver.add_native_object_alias("parseInt", parse_int_fn_p);
+    driver.add_native_object_alias("parseFloat", parse_float_fn_p);
+
+    /// 6. Run the script after all configuration. ///
+
     return driver.run(source_path, polyfill_path, derkjs_gc_threshold);
 }

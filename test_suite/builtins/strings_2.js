@@ -4,8 +4,8 @@ var ok = 0;
 
 if (String.prototype.constructor === String) {
     ok = ok + 1;
-} else { 
-    console.log("String.prototype.constructor invalid:", String.prototype.constructor);
+} else {
+    console.log("String.prototype.constructor invalid:", String.prototype.constructor, String);
 }
 
 // The String ctor argument must be stringified.

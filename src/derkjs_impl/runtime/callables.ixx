@@ -26,25 +26,30 @@ export namespace DerkJS {
 
     private:
         PropPool<Value, Value> m_own_properties;
-        Value m_prototype;
+        Value m_prototype; // __proto__
+        Value m_instance_prototype; // prototype 
         native_func_p m_native_ptr;
         int16_t m_min_arity;
         uint8_t m_flags;
 
     public:
-        NativeFunction(native_func_p procedure_ptr, ObjectBase<Value>* prototype_p, const Value& length_key, const Value& length_value) noexcept
-        : m_own_properties {}, m_prototype {(prototype_p) ? Value {prototype_p} : Value {}}, m_native_ptr {procedure_ptr}, m_min_arity {static_cast<int16_t>(length_value.to_num_i32().value_or(0))}, m_flags {std::to_underlying(AttrMask::unused)} {
+        NativeFunction(ObjectBase<Value>* instance_prototype_p, native_func_p procedure_ptr, ObjectBase<Value>* prototype_p, const Value& length_key, const Value& length_value) noexcept
+        : m_own_properties {}, m_prototype {(prototype_p) ? Value {prototype_p} : Value {}}, m_instance_prototype {(instance_prototype_p) ? Value {instance_prototype_p} : Value {}}, m_native_ptr {procedure_ptr}, m_min_arity {static_cast<int16_t>(length_value.to_num_i32().value_or(0))}, m_flags {std::to_underlying(AttrMask::unused)} {
             m_prototype.update_parent_flags(m_flags);
             m_own_properties.emplace_back(length_key, length_value, std::to_underlying(AttrMask::immutable));
         }
 
+        /// NativeFunction impls:
+
         [[nodiscard]] auto min_arity(this auto&& self) noexcept -> int16_t {
             return self.m_min_arity;
-        } 
+        }
 
         [[nodiscard]] auto get_native_fn_addr() const noexcept -> const void* {
             return reinterpret_cast<const void*>(m_native_ptr);
         }
+
+        /// ObjectBase<Value> impls:
 
         [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
             return this;
@@ -70,6 +75,10 @@ export namespace DerkJS {
             return m_prototype.to_object();
         }
 
+        [[nodiscard]] auto get_instance_prototype() noexcept -> ObjectBase<Value>* override {
+            return m_instance_prototype.to_object();
+        }
+
         [[nodiscard]] auto get_seq_items() noexcept -> std::vector<Value>* override {
             return nullptr;
         }
@@ -78,10 +87,9 @@ export namespace DerkJS {
             return m_own_properties;
         }
 
-        [[nodiscard]] auto get_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
-            /// NOTE: for now, I'll cheese this to get Object methods working: Just get / search the prototype.
-            if (key.is_prototype_key()) {
-                return PropertyDescriptor<Value> {&key, &m_prototype, this, m_flags};
+        [[nodiscard]] auto get_property_value(const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
+            if (key.is_prototype_key()) { // For prototype, not __proto__!
+                return PropertyDescriptor<Value> {&key, &m_instance_prototype, this, m_flags};
             } else if (auto prototype_p = m_prototype.to_object(); prototype_p) {
                 return prototype_p->get_property_value(key, allow_filler);
             }
@@ -100,6 +108,10 @@ export namespace DerkJS {
 
             if (auto prototype_object_p = m_prototype.to_object(); prototype_object_p) {
                 prototype_object_p->freeze();
+            }
+
+            if (auto instance_prototype_object_p = m_instance_prototype.to_object(); instance_prototype_object_p) {
+                instance_prototype_object_p->freeze();
             }
         }
 
@@ -276,12 +288,13 @@ export namespace DerkJS {
         PropPool<Value, Value> m_own_properties;
         std::vector<Instruction> m_code;
         Value m_prototype;
+        Value m_instance_prototype;
         int16_t m_min_arity;
         uint8_t m_flags;
 
     public:
-        Lambda(std::vector<Instruction> code, ObjectBase<Value>* prototype_p, const Value& length_key, const Value& length_value) noexcept
-        : m_own_properties {}, m_code (std::move(code)), m_prototype {prototype_p}, m_min_arity {static_cast<int16_t>(length_value.to_num_i32().value_or(0))}, m_flags {std::to_underlying(AttrMask::unused)} {
+        Lambda(ObjectBase<Value>* instance_prototype_p, std::vector<Instruction> code, ObjectBase<Value>* prototype_p, const Value& length_key, const Value& length_value) noexcept
+        : m_own_properties {}, m_code (std::move(code)), m_prototype {(prototype_p) ? Value {prototype_p} : Value {}}, m_instance_prototype {(instance_prototype_p) ? Value {instance_prototype_p} : Value {}}, m_min_arity {static_cast<int16_t>(length_value.to_num_i32().value_or(0))}, m_flags {std::to_underlying(AttrMask::unused)} {
             m_prototype.update_parent_flags(m_flags);
             m_own_properties.emplace_back(length_key, length_value, std::to_underlying(AttrMask::immutable));
         }
@@ -314,6 +327,10 @@ export namespace DerkJS {
             return m_prototype.to_object();
         }
 
+        [[nodiscard]] auto get_instance_prototype() noexcept -> ObjectBase<Value>* override {
+            return m_instance_prototype.to_object();
+        }
+
         [[nodiscard]] auto get_seq_items() noexcept -> std::vector<Value>* override {
             return nullptr;
         }
@@ -323,8 +340,8 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto get_property_value(const Value& key, bool allow_filler) -> PropertyDescriptor<Value> override {
-            if (key.is_prototype_key()) {
-                return PropertyDescriptor<Value> {&key, &m_prototype, this, m_flags};
+            if (key.is_prototype_key()) { // For prototype, not __proto__!
+                return PropertyDescriptor<Value> {&key, &m_instance_prototype, this, m_flags};
             } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
                 return prop.key == key;
             }); property_entry_it != m_own_properties.end()) {
@@ -353,6 +370,10 @@ export namespace DerkJS {
 
             if (auto prototype_object_p = m_prototype.to_object(); prototype_object_p) {
                 prototype_object_p->freeze();
+            }
+
+            if (auto instance_prototype_object_p = m_instance_prototype.to_object(); instance_prototype_object_p) {
+                instance_prototype_object_p->freeze();
             }
         }
 

@@ -1,7 +1,7 @@
 /// Test a slightly modified example case from zoo.js.org which Flathead would fail... Except that top-level returns as exits are kinda cool.
 
 var ok = true;
-function Obj() { this.x = 1; return this; }
+function Obj() { this.x = 1; }
 
 function f() { return this.x; }
 

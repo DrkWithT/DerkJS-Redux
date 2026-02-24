@@ -9,8 +9,8 @@ My latest attempt at implmenting JavaScript under version ES5 in modern C++.
  - Ninja
 
 ### Caveats
- - `use strict` is the locked default.
  - No automatic semicolon insertion.
+ - No BigInt.
 
 #### Demo: Function Expressions
 <img src="imgs/DerkJS_lambda_test.png" size="25%">

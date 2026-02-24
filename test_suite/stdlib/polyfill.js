@@ -3,6 +3,9 @@
  * @summary Implements ES5 polyfills for everything that doesn't need the DerkJS VM API.
  */
 
+// Workaround for a bug within DerkJS setup: native function this-ptr mysteriously mutates before runtime.
+String.prototype.constructor = String;
+
 Array.prototype.at = function(index) {
     if (index < 0) {
         index = index + this.length;
@@ -165,4 +168,8 @@ Array.prototype.some = function (predicateFn, thisArg) {
     }
 
     return ok;
+};
+
+Array.prototype.toString = function () {
+    return this.join();
 };

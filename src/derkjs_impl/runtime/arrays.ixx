@@ -118,6 +118,10 @@ export namespace DerkJS {
             return m_prototype.to_object();
         }
 
+        [[nodiscard]] auto get_instance_prototype() noexcept -> ObjectBase<Value>* override {
+            return nullptr;
+        }
+
         [[nodiscard]] auto get_seq_items() noexcept -> std::vector<Value>* override {
             return &m_items;
         }
@@ -135,7 +139,7 @@ export namespace DerkJS {
                 return prop.key == key;
             }); property_entry_it != m_own_properties.end()) {
                 return PropertyDescriptor<Value> {&key, &property_entry_it->item, this, static_cast<uint8_t>(m_flags & property_entry_it->flags)};
-            } else if ((m_flags & std::to_underlying(AttrMask::writable)) && !m_prototype && allow_filler) {
+            } else if ((m_flags & std::to_underlying(AttrMask::writable)) && allow_filler) {
                 return PropertyDescriptor<Value> {
                     &key,
                     &m_own_properties.emplace_back(
@@ -231,26 +235,25 @@ export namespace DerkJS {
             return sout.str();
         }
 
-        /// TODO: Add ordered Object / Array iterators via `get_property_iterator(PropSearchPolicy p)` for this, avoiding a dynamic_cast.
         [[nodiscard]] auto operator==(const ObjectBase& other) const noexcept -> bool override {
             if (&other == this) {
                 return true;
             }
 
-            auto self_iter = OpaqueIterator {reinterpret_cast<const std::byte*>(m_items.data()), m_items.size() * sizeof(decltype(*m_items.data()))};
-            auto other_iter = other.opaque_iter();
+            auto other_as_array = dynamic_cast<const Array*>(&other);
 
-            if (self_iter.count() != other_iter.count()) {
+            if (!other_as_array) {
                 return false;
-            }
+            } else if (const auto& other_items = other_as_array->items(); m_items.size() != other_items.size()) {
+                return false;
+            } else {
+                for (int parallel_pos = 0; const auto& other_item : other_items) {
+                    if (other_item != m_items.at(parallel_pos)) {
+                        return false;
+                    }
 
-            while (self_iter.alive()) {
-                if (self_iter != other_iter) {
-                    return false;
+                    ++parallel_pos;
                 }
-
-                ++self_iter;
-                ++other_iter;
             }
 
             return true;

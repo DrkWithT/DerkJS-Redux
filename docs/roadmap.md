@@ -43,12 +43,6 @@
       - Show all properties recursively.
  23. ~~Update `Object` and `Array` built-ins to be more conformant:~~
     - ~~`Object` is a function that makes objects- `new Object(proto)` is the object constructor BUT `Object()` should box primitives later & no-op return existing objects.~~
-      - ~~All object literals should have `this.prototype = Object.prototype`.~~
-      - ~~`Object.prototype.constructor` must be the `Object` function itself.~~
-    - ~~`Array` is a function that makes arrays- `new Array(args...)` and `Array(args...)` should behave identically.~~
-      - ~~All array objects should have `this.prototype = Array.prototype`.~~
-      - ~~`Array.prototype.constructor` must be the `Array` function itself.~~
-    - Add more methods from the ES5 specification.
  24. ~~Add `typeof` and `void` operators.~~
  25. ~~Add implicit `ret` opcode on omitted returns- it yields a `this` reference on ctor-mode calls, discarding any regular expr result.~~
  26. ~~Add `array.length` with side-effects!~~
@@ -67,12 +61,13 @@
       - ~~The `NativeFunction` and `Lambda` classes _must_ follow this new convention!~~
       - ~~All leftover natives _must_ follow the new convention!~~
     - ~~Add `stdlib/polyfill.js` prelude pasted before every script source.~~
-    - Polyfills for:
-      - `Array.prototype`: `pop, indexOf, lastIndexOf, reverse, forEach(arr, thisArg), filter(predicateFn, thisArg), map(callbackFn, thisArg)`
-    - Keep natives for:
-      - `parseInt`, `parseFloat`
-      - `constructor`s of `Object`, `Array`, `String`
-      - `Array.prototype`: push, join, toString
-      - `Object.prototype`: hasOwnProperty, isPrototypeOf, toString, freeze
-      - `String.prototype`: hasOwnProperty, isPrototypeOf, charCodeAt, trim, split
-      - `Function.prototype`: call
+    - Implement:
+      - `Object.prototype`: toString
+      - `Boolean.prototype`: constructor, valueOf, toString
+      - `Number.prototype`: constructor, valueOf, toFixed, toString
+      - `String.prototype`: split, toString
+  31. Add `__proto__` support:
+    - Add `__proto__` to parsing.
+    - Add `__proto__` support to bytecode & compiler.
+    - Add `__proto__` support to `Value` & VM.
+    - Add `__proto__` test cases.

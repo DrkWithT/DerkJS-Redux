@@ -11,6 +11,7 @@ module;
 
 export module runtime.natives;
 
+import runtime.boolean;
 import runtime.arrays;
 import runtime.strings;
 import runtime.value;
@@ -18,6 +19,25 @@ import runtime.vm;
 
 export namespace DerkJS {
     //// BEGIN global functions:
+
+    [[nodiscard]] auto native_is_nan(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const int passed_rsbp = ctx->rsbp;
+        Value arg = ctx->stack.at(passed_rsbp + 1).deep_clone();
+
+        if (const ObjectBase<Value>* arg_as_object_p = arg.to_object(); arg_as_object_p) {
+            if (dynamic_cast<const Array*>(arg_as_object_p) != nullptr) {
+                ctx->stack.at(passed_rsbp - 1) = Value {false};
+            } else {
+                ctx->stack.at(passed_rsbp - 1) = Value {!arg.to_num_f64()};
+            }
+        } else {
+            ctx->stack.at(passed_rsbp - 1) = Value {
+                arg.get_tag() == ValueTag::num_nan || arg.get_tag() == ValueTag::undefined
+            };
+        }
+
+        return true;
+    }
 
     [[nodiscard]] auto native_parse_int(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         constexpr auto min_radix = 2;
@@ -42,23 +62,100 @@ export namespace DerkJS {
         return true;
     }
 
+    [[nodiscard]] auto native_parse_float(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const int passed_rsbp = ctx->rsbp;
+        std::string temp_str = ctx->stack.at(passed_rsbp + 1).to_string().value_or("");
+
+        try {
+            ctx->stack.at(passed_rsbp - 1) = Value {std::stod(temp_str)};
+        } catch (const std::exception& err) {
+            std::println(std::cerr, "parseFloat: string is not a valid floating-point literal.");
+            ctx->stack.at(passed_rsbp - 1) = Value {JSNaNOpt {}};
+        }
+
+        return true;
+    }
+
+    /// BEGIN Boolean impls:
+
+    [[nodiscard]] auto native_boolean_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const int passed_rsbp = ctx->rsbp;
+        ObjectBase<Value>* instance_prototype_p = ctx->stack.at(passed_rsbp).to_object()->get_instance_prototype();
+        const auto& coercing_value = ctx->stack.at(passed_rsbp + 1);
+
+        if (auto temp_boolean_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::make_unique<BooleanBox>(
+            coercing_value.is_truthy(),
+            instance_prototype_p
+        )); temp_boolean_p) {
+            ctx->stack.at(passed_rsbp - 1) = Value {temp_boolean_p};
+            return true;
+        }
+
+        ctx->status = VMErrcode::bad_heap_alloc;
+        return false;
+    }
+
+    [[nodiscard]] auto native_boolean_value_of(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const int passed_rsbp = ctx->rsbp;
+        const auto boolean_this_p = dynamic_cast<const BooleanBox*>(
+            ctx->stack.at(passed_rsbp - 1).to_object()
+        );
+
+        if (!boolean_this_p) {
+            ctx->status = VMErrcode::bad_operation;
+            std::println(std::cerr, "Boolean.valueOf: Invalid this, expected a Boolean.");
+            return false;
+        }
+
+        ctx->stack.at(passed_rsbp - 1) = boolean_this_p->get_native_value();
+        return true;
+    }
+
+    [[nodiscard]] auto native_boolean_to_string(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const int passed_rsbp = ctx->rsbp;
+        const auto boolean_this_p = dynamic_cast<const BooleanBox*>(
+            ctx->stack.at(passed_rsbp - 1).to_object()
+        );
+
+        if (!boolean_this_p) {
+            ctx->status = VMErrcode::bad_operation;
+            std::println(std::cerr, "Boolean.valueOf: Invalid this, expected a Boolean.");
+            return false;
+        }
+
+        if (auto boolean_as_string_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::make_unique<DynamicString>(
+            ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
+            ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
+            boolean_this_p->to_str_view()
+        )); boolean_as_string_p) {
+            ctx->stack.at(passed_rsbp - 1) = Value {boolean_as_string_p};
+            return true;
+        }
+
+        ctx->status = VMErrcode::bad_heap_alloc;
+        return false;
+    }
+
+    /// BEGIN Number impls: TODO!
+
     /// BEGIN string impls:
 
     /// From: ES5 - 15.5.2.1
     [[nodiscard]] auto native_str_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
+        ObjectBase<Value>* instance_prototype_p = ctx->stack.at(passed_rsbp).to_object()->get_instance_prototype();
 
         if (auto temp_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::make_unique<DynamicString>(
-            ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
+            instance_prototype_p,
             ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
             ctx->stack.at(passed_rsbp + 1).to_string().value()
         )); temp_str_p) {
             ctx->stack.at(passed_rsbp - 1) = Value {temp_str_p};
             return true;
-        } else {
-            ctx->status = VMErrcode::bad_heap_alloc;   
-            return false;
         }
+
+        ctx->status = VMErrcode::bad_heap_alloc;   
+        return false;
     }
 
     [[nodiscard]] auto native_str_charcode_at(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
@@ -247,6 +344,7 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_array_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
+        ObjectBase<Value>* instance_prototype_p = ctx->stack.at(passed_rsbp).to_object()->get_instance_prototype();
         int maybe_fill_count = ctx->stack.at(passed_rsbp + 1).to_num_i32().value_or(0);
 
         if (argc == 0) {
@@ -257,7 +355,7 @@ export namespace DerkJS {
 
         // 1. Create blank JS array with the appropriate prototype
         auto temp_array = std::make_unique<Array>(
-            ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::array)),
+            instance_prototype_p,
             Value {ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))},
             Value {(argc > 1) ? argc : maybe_fill_count}
         );
@@ -376,6 +474,50 @@ export namespace DerkJS {
         std::println(std::cerr, "Failed to allocate JS object on the heap.");
 
         return false;
+    }
+
+    [[nodiscard]] auto native_object_has_own_property(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const auto passed_rsbp = ctx->rsbp;
+        ObjectBase<Value>* target_this_p = ctx->stack.at(passed_rsbp - 1).to_object();
+
+        if (!target_this_p) {
+            ctx->status = VMErrcode::bad_operation;
+            std::println(std::cerr, "Object.hasOwnProperty: cannot invoke for non-object.");
+            return false;
+        }
+
+        const auto& search_key = ctx->stack.at(passed_rsbp + 1);
+        const auto& target_items = target_this_p->get_own_prop_pool();
+
+        ctx->stack.at(passed_rsbp - 1) = Value {
+            std::ranges::find_if(
+                target_items,
+                [&search_key] (const auto& prop_entry) -> bool {
+                    return search_key == prop_entry.key;
+                }
+            ) != target_items.end()
+        };
+
+        return true;
+    }
+
+    [[nodiscard]] auto native_object_is_prototype_of(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const auto passed_rsbp = ctx->rsbp;
+        ObjectBase<Value>* self_maybe_prototype_p = ctx->stack.at(passed_rsbp - 1).to_object();
+        ObjectBase<Value>* current_prototype_p = ctx->stack.at(passed_rsbp + 1).to_object()->get_prototype();
+        auto found_in_prototype_chain = false;
+
+        while (current_prototype_p != nullptr) {
+            if (self_maybe_prototype_p == current_prototype_p) {
+                found_in_prototype_chain = true;
+                break;
+            }
+
+            current_prototype_p = current_prototype_p->get_prototype();
+        }
+
+        ctx->stack.at(passed_rsbp - 1) = Value {found_in_prototype_chain};
+        return true;
     }
 
     [[nodiscard]] auto native_object_freeze(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
