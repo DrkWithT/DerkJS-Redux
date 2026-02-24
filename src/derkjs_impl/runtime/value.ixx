@@ -685,7 +685,7 @@ export namespace DerkJS {
                 return prop.key == key;
             }); property_entry_it != m_own_properties.end()) {
                 return PropertyDescriptor<Value> {&key, &property_entry_it->item, this, static_cast<uint8_t>(m_flags & property_entry_it->flags)};
-            } else if ((m_flags & std::to_underlying(AttrMask::writable)) && !m_prototype && allow_filler) {
+            } else if ((m_flags & std::to_underlying(AttrMask::writable)) && allow_filler) {
                 return PropertyDescriptor<Value> {
                     &key,
                     &m_own_properties.emplace_back(
@@ -736,8 +736,8 @@ export namespace DerkJS {
             return false;
         }
 
+        /// NOTE: Due to the Value repr needing a non-owning but mutable ObjectBase<Value>* pointer to something managed by a heap cell's unique ptr, having a raw pointer is unavoidable. This may not be so bad since the PolyPool<ObjectBase<Value>> in the VM can quickly manage it once it arrives via `PolyPool<ObjectBase<V>>::add_item()`.
         [[nodiscard]] auto clone() -> ObjectBase<Value>* override {
-            // Due to the Value repr needing an ObjectBase<Value>* ptr, the Value clone method returns a Value vs. `std::unique_ptr<Value>`, and the VM only stores Value-s on its stack, having a raw pointer is unavoidable. This may not be so bad since the PolyPool<ObjectBase<Value>> in the VM can quickly own it via `add_item()`.
             auto self_clone = new Object {m_prototype.to_object()};
 
             self_clone->get_own_prop_pool() = m_own_properties;
