@@ -3,8 +3,35 @@
  * @summary Implements ES5 polyfills for everything that doesn't need the DerkJS VM API.
  */
 
+
+/// Patch polyfills for built-in prototypes / functions:
+
+function isNaN(arg) {
+    return arg !== arg;
+}
+
+Object.prototype.toString = function () {
+    if (this === undefined) {
+        return "[object Undefined]";
+    } else if (this === null) {
+        return "[object Null]";
+    } else {
+        return "[object Object]";
+    }
+};
+
+Object.prototype.constructor = Object;
+
+Boolean.prototype.constructor == Boolean;
+
+Number.prototype.constructor = Number;
+
 // Workaround for a bug within DerkJS setup: native function this-ptr mysteriously mutates before runtime.
 String.prototype.constructor = String;
+
+String.prototype.toString = function () {
+    return new String(this);
+};
 
 Array.prototype.at = function(index) {
     if (index < 0) {
@@ -173,3 +200,17 @@ Array.prototype.some = function (predicateFn, thisArg) {
 Array.prototype.toString = function () {
     return this.join();
 };
+
+Array.prototype.constructor = Array;
+
+Function.prototype.constructor = Function;
+
+
+/// By the spec, freeze built-in prototypes:
+
+Object.prototype.freeze();
+Boolean.prototype.freeze();
+Number.prototype.freeze();
+String.prototype.freeze();
+Array.prototype.freeze();
+Function.prototype.freeze();
