@@ -1023,11 +1023,13 @@ export namespace DerkJS {
             m_current = advance(lexer, source);
             m_error_count = 0;
             m_syntax = SyntaxTag::program_top;
+            m_primitive_as_key = false;
         }
 
     public:
         Parser() noexcept
         : m_previous {}, m_current {}, m_error_count {0}, m_syntax {SyntaxTag::program_top}, m_primitive_as_key {false} {}
+
 
         /// TODO: add source mapping IDs here when requires are added.
         [[nodiscard]] auto operator()(Lexer& lexer, std::string file_name, const std::string& source) -> std::optional<ASTUnit> {

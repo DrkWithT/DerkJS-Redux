@@ -51,7 +51,9 @@ export namespace DerkJS::Core {
 
     private:
         Backend::BytecodeEmitterContext m_compile_state;
- 
+        Parser m_parser;
+        Lexer m_lexer;
+        
         std::flat_map<std::string_view, TokenTag> m_js_lexicals;
         std::vector<Backend::PreloadItem> m_preloads;
         std::vector<std::string> m_src_map;
@@ -90,10 +92,9 @@ export namespace DerkJS::Core {
 
             m_src_map.emplace_back(std::move(source_with_prelude));
 
-            Lexer lexer {m_src_map.at(0), std::move(m_js_lexicals)};
-            Parser parser;
+            m_lexer = Lexer {m_src_map.at(0), std::move(m_js_lexicals)};
 
-            return parser(lexer, file_path, m_src_map.at(0));
+            return m_parser(m_lexer, file_path, m_src_map.at(0));
         }
 
         [[nodiscard]] auto compile_script(const ASTUnit& ast) -> std::optional<Program> {
@@ -102,7 +103,7 @@ export namespace DerkJS::Core {
 
     public:
         Driver(DriverInfo info, int max_heap_object_count)
-        : m_compile_state {}, m_js_lexicals {}, m_src_map {}, m_app_name {info.name}, m_app_author {info.author}, m_length_str_length_key_p {}, m_version_major {info.version_major}, m_version_minor {info.version_minor}, m_version_patch {info.version_patch}, m_max_heap_object_n {max_heap_object_count}, m_allow_bytecode_dump {false} {
+        : m_compile_state {}, m_parser {}, m_lexer {}, m_js_lexicals {}, m_src_map {}, m_app_name {info.name}, m_app_author {info.author}, m_length_str_length_key_p {}, m_version_major {info.version_major}, m_version_minor {info.version_minor}, m_version_patch {info.version_patch}, m_max_heap_object_n {max_heap_object_count}, m_allow_bytecode_dump {false} {
             // 1.1: hack in "length" here as a special key that could be used for strings (but also arrays).
             auto length_str_length_key_p = std::make_unique<DynamicString>(nullptr, Value {nullptr}, std::string {"length"}); // the property name value string itself- only to check against!
             m_length_str_length_key_p = length_str_length_key_p.get();
@@ -225,7 +226,11 @@ export namespace DerkJS::Core {
             }
 
             auto& prgm_ref = prgm.value();
-            DerkJS::VM vm {prgm_ref, default_stack_size, default_call_depth_limit, gc_threshold};
+            DerkJS::VM vm {
+                prgm_ref,
+                default_stack_size, default_call_depth_limit, gc_threshold,
+                &m_lexer, &m_parser, &m_compile_state, Backend::compile_snippet_helper
+            };
 
             vm.run();
 
