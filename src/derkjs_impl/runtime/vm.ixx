@@ -69,12 +69,19 @@ namespace DerkJS {
     /// NOTE: This type decouples the internal state of the bytecode VM. It's used when the `DispatchPolicy::tco` specialization is used with a opcode dispatch table and dispatch TCO'd function internally apply in `VM<DispatchPolicy::tco>`. However, this is only enabled on LLVM Clang 20+ to be safe.
     export struct ExternVMCtx {
         using call_frame_type = CallFrame;
+        using runtime_object_ptr = ObjectBase<Value>*;
+        using compile_snippet_fn = runtime_object_ptr (*) (void*, void*, void*, void*, const std::span<Value>&);
 
         GC gc;
         PolyPool<ObjectBase<Value>> heap;
         std::array<ObjectBase<Value>*, static_cast<std::size_t>(BasePrototypeID::last)> base_protos;
         std::vector<Value> stack;
         std::vector<CallFrame> frames;
+
+        void* lexer_p;
+        void* parser_p;
+        void* compile_state_p;
+        compile_snippet_fn compile_proc;
 
         Value* consts_view;
 
@@ -99,8 +106,8 @@ namespace DerkJS {
 
         VMErrcode status;
 
-        ExternVMCtx(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit, std::size_t gc_heap_threshold)
-        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), base_protos(std::move(prgm.base_protos)), stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, ending_frame_depth {0}, rsbp {-1}, rsp {-1}, /*dispatch_allowance {100},*/ status {VMErrcode::pending} {
+        ExternVMCtx(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit, std::size_t gc_heap_threshold, void* lexer_ptr, void* parser_ptr, void* compile_state_ptr, compile_snippet_fn compile_proc_ptr)
+        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), base_protos(std::move(prgm.base_protos)), stack {}, frames {}, lexer_p {lexer_ptr}, parser_p {parser_ptr}, compile_state_p {compile_state_ptr}, compile_proc {compile_proc_ptr}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, ending_frame_depth {0}, rsbp {-1}, rsp {-1}, /*dispatch_allowance {100},*/ status {VMErrcode::pending} {
             stack.reserve(stack_length_limit);
             stack.resize(stack_length_limit);
             frames.reserve(call_frame_limit);
@@ -704,8 +711,8 @@ namespace DerkJS {
         /// NOTE: This SHOULD NOT be modified directly!
         ExternVMCtx m_ctx;
 
-        explicit VM(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit, std::size_t gc_threshold)
-        : m_ctx {prgm, stack_length_limit, call_frame_limit, gc_threshold} {}
+        explicit VM(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit, std::size_t gc_threshold, void* lexer_ptr, void* parser_ptr, void* compile_state_ptr, ExternVMCtx::compile_snippet_fn compile_proc_ptr)
+        : m_ctx {prgm, stack_length_limit, call_frame_limit, gc_threshold, lexer_ptr, parser_ptr, compile_state_ptr, compile_proc_ptr} {}
 
         [[nodiscard]] auto peek_final_result() const noexcept -> const Value& {
             return m_ctx.stack[0];
