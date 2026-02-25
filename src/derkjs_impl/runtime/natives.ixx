@@ -672,6 +672,10 @@ export namespace DerkJS {
         
         /// NOTE: ensure exit of just the callback when its frame is popped...
         ctx->ending_frame_depth = ctx->frames.size();
+        /// NOTE: For the change in ES3, an undefined / null thisArg must default to globalThis, accessible in DerkJS via ctx->stack.at(0).
+        if (const auto this_arg_tag = ctx->stack.at(passed_rsbp).get_tag(); this_arg_tag == ValueTag::undefined || this_arg_tag == ValueTag::null) {
+            ctx->stack.at(passed_rsbp) = ctx->stack.at(0);
+        }
 
         if (!maybe_callable_p->call(ctx, argc - 1, true)) {
             std::println(std::cerr, "Function.call: Cannot invoke non-function object.");
