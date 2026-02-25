@@ -304,6 +304,14 @@ export namespace DerkJS {
             return recycled_id;
         }
 
+        [[nodiscard]] auto get_newest_item() noexcept -> ItemBase* {
+            if (m_next_id > 0) {
+                return m_items[m_next_id - 1].get();
+            }
+
+            return nullptr;
+        }
+
         [[nodiscard]] auto get_item(int id) noexcept -> ItemBase* {
             if (id < 0 || id >= static_cast<int>(m_items.size())) {
                 return nullptr;
