@@ -22,7 +22,7 @@ Object.prototype.toString = function () {
 
 Object.prototype.constructor = Object;
 
-Boolean.prototype.constructor == Boolean;
+Boolean.prototype.constructor = Boolean;
 
 Number.prototype.constructor = Number;
 

@@ -61,13 +61,9 @@
       - ~~The `NativeFunction` and `Lambda` classes _must_ follow this new convention!~~
       - ~~All leftover natives _must_ follow the new convention!~~
     - ~~Add `stdlib/polyfill.js` prelude pasted before every script source.~~
-    - Implement:
-      - `Object.prototype`: toString
-      - `Boolean.prototype`: constructor, valueOf, toString
-      - `Number.prototype`: constructor, valueOf, toFixed, toString
-      - `String.prototype`: split, toString
-  31. Add `__proto__` support:
+  31. Add `__proto__` AKA `[[prototype]]` support:
     - Add `__proto__` to parsing.
     - Add `__proto__` support to bytecode & compiler.
     - Add `__proto__` support to `Value` & VM.
     - Add `__proto__` test cases.
+  32. Implement a simple `Function(argNames..., bodyCode)` constructor.
