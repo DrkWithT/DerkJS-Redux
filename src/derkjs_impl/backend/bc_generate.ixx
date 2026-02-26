@@ -35,6 +35,7 @@ namespace DerkJS::Backend {
     export struct FindKeyConstOpt {};
     export struct FindLocalsOpt {};
     export struct FindCaptureOpt {};
+    export struct FindErrorVarOpt {};
 
     export struct RecordLocalOpt {};
     export struct RecordSpecialThisOpt {};
@@ -136,6 +137,8 @@ namespace DerkJS::Backend {
 
         bool m_has_call;
 
+        bool m_in_try_block;
+
         // Whether to emit any `var a = ...;` declaration as an undefined stub first. Otherwise, the `var a = ...;` declarations are treated as assignments.
         bool m_prepass_vars;
 
@@ -180,6 +183,14 @@ namespace DerkJS::Backend {
                     .is_str_literal = fn_local_opt->second.is_str_literal,
                     .from_closure = true
                 };
+            }
+
+            return {};
+        }
+
+        [[nodiscard]] auto lookup_symbol(const std::string& symbol, [[maybe_unused]] FindErrorVarOpt opt) -> std::optional<Arg> {
+            if (auto error_local_opt = m_local_maps.back().locals.find(symbol); error_local_opt != m_local_maps.back().locals.end()) {
+                return error_local_opt->second;
             }
 
             return {};
@@ -308,6 +319,16 @@ namespace DerkJS::Backend {
                 ++m_local_maps.back().next_local_id;
 
                 return next_local_loc;
+            } else if constexpr (std::is_same_v<plain_item_type, RecordLocalOpt> && std::is_same_v<RecordOpt, FindErrorVarOpt>) {
+                Arg next_error_loc {
+                    .n = 0,
+                    .tag = Location::error_var
+                };
+
+                m_local_maps.back().locals[symbol] = next_error_loc;
+                ++m_local_maps.back().next_local_id;
+
+                return next_error_loc;
             }
 
             return {};
@@ -338,6 +359,8 @@ namespace DerkJS::Backend {
                     m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::array)] = heap_native_object_p;
                 } else if (symbol == "Function::prototype") {
                     m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::function)] = heap_native_object_p;
+                } else if (symbol == "Error::prototype") {
+                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::error)] = heap_native_object_p;
                 } else {
                     return false;
                 }
@@ -373,7 +396,7 @@ namespace DerkJS::Backend {
         }
 
         BytecodeEmitterContext()
-        : m_global_consts_map {}, m_key_consts_map {}, m_base_prototypes {}, m_local_maps {}, m_heap {}, m_consts {}, m_code_blobs {}, m_callee_name {}, m_chunk_offsets {}, m_runtime_heap_ptr {nullptr}, m_member_depth {0}, m_in_callable {false}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_pass_key_raw {false}, m_has_call {false}, m_prepass_vars {true} {}
+        : m_global_consts_map {}, m_key_consts_map {}, m_base_prototypes {}, m_local_maps {}, m_heap {}, m_consts {}, m_code_blobs {}, m_callee_name {}, m_chunk_offsets {}, m_runtime_heap_ptr {nullptr}, m_member_depth {0}, m_in_callable {false}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_pass_key_raw {false}, m_has_call {false}, m_in_try_block {false}, m_prepass_vars {true} {}
 
         void add_expr_emitter(ExprNodeTag expr_type_tag, std::unique_ptr<ExprEmitterBase<Expr>> helper) noexcept {
             const auto expr_helper_index = static_cast<std::size_t>(expr_type_tag);
@@ -426,6 +449,7 @@ namespace DerkJS::Backend {
             m_accessing_property = false;
             m_pass_key_raw = false;
             m_has_call = false;
+            m_in_try_block = false;
             m_prepass_vars = true;
 
             lexer.reset(snippet_code);
@@ -508,7 +532,13 @@ namespace DerkJS::Backend {
 
             // 2.2: Add "length" for array accessor name.
             const int length_key_const_id = lookup_symbol("length", FindKeyConstOpt {})->n;
-            m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::extra_length_key)] = m_consts.at(length_key_const_id).to_object();
+            m_base_prototypes[static_cast<unsigned int>(BasePrototypeID::extra_length_key)] = m_consts.at(length_key_const_id).to_object();
+
+            const int message_key_const_id = lookup_symbol("message", FindKeyConstOpt {})->n;
+            m_base_prototypes[static_cast<unsigned int>(BasePrototypeID::extra_msg_key)] = m_consts.at(message_key_const_id).to_object();
+
+            const int name_key_const_id = lookup_symbol("name", FindKeyConstOpt {})->n;
+            m_base_prototypes[static_cast<unsigned int>(BasePrototypeID::extra_name_key)] = m_consts.at(name_key_const_id).to_object();
 
             // 3. Prepare initial mapping of symbols & code buffer to build.
             m_local_maps.emplace_back(CodeGenScope {

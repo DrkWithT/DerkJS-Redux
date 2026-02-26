@@ -100,6 +100,8 @@ namespace DerkJS::Backend {
             } else if (primitive_locate_type == Location::end && primitive_locator->n == -1) {
                 /// NOTE: Put local:0 to reference the callee for self-recursive calls.
                 context.encode_instruction(Opcode::djs_dup_local); // argument-0 is defaulted to 0
+            } else if (primitive_locate_type == Location::error_var) {
+                context.encode_instruction(Opcode::djs_ref_error);
             }
 
             return true;

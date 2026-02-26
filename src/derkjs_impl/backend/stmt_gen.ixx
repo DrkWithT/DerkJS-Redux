@@ -298,4 +298,62 @@ namespace DerkJS::Backend {
             return true;
         }
     };
+
+    export class ThrowEmitter : public StmtEmitterBase<Stmt> {
+    public:
+        ThrowEmitter() noexcept = default;
+
+        [[nodiscard]] auto emit(BytecodeEmitterContext& context, const Stmt& node, const std::string& source) -> bool override {
+            const auto& [error_data_expr] = std::get<Throw>(node.data);
+
+            if (!context.emit_expr(*error_data_expr, source)) {
+                return false;
+            }
+
+            context.encode_instruction(Opcode::djs_throw, Arg {
+                .n = static_cast<int16_t>(context.m_in_try_block),
+                .tag = Location::immediate,
+                .is_str_literal = false,
+                .from_closure = false
+            });
+
+            return true;
+        }
+    };
+
+    export class TryCatchEmitter : public StmtEmitterBase<Stmt> {
+    public:
+        TryCatchEmitter() noexcept = default;
+
+        [[nodiscard]] auto emit(BytecodeEmitterContext& context, const Stmt& node, const std::string& source) -> bool override {
+            const auto& [error_name_token, block_try, block_catch] = std::get<TryCatch>(node.data);
+
+            context.m_in_try_block = true;
+
+            if (!context.emit_stmt(*block_try, source)) {
+                return false;
+            }
+
+            context.m_in_try_block = false;
+
+            const int skip_catch_jump_pos = context.m_code_blobs.front().size();
+            context.encode_instruction(Opcode::djs_jump);
+
+            // 3. Emit catch block (error name 1st)...
+            context.record_symbol(error_name_token.as_string(source), RecordLocalOpt {}, FindErrorVarOpt {});
+            context.encode_instruction(Opcode::djs_catch);
+
+            if (!context.emit_stmt(*block_catch, source)) {
+                return false;
+            }
+
+            const int end_catch_pos = context.m_code_blobs.front().size();
+            context.encode_instruction(Opcode::djs_nop);
+
+            // 4. backpatch try's jump over the catch for non-errorneous runs.
+            context.m_code_blobs.front().at(skip_catch_jump_pos).args[0] = end_catch_pos - skip_catch_jump_pos;
+
+            return true;
+        }
+    };
 }
