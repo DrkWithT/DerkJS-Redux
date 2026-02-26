@@ -152,6 +152,10 @@ export namespace DerkJS {
             return self.m_parent_flags == 0x00;
         }
 
+        [[nodiscard]] constexpr auto get_parent_flags(this auto&& self) noexcept -> uint8_t {
+            return self.m_parent_flags;
+        }
+
         constexpr void update_parent_flags(uint8_t parent_object_flags) noexcept {
             m_parent_flags = parent_object_flags;
         }
