@@ -22,6 +22,7 @@ export namespace DerkJS {
         stmt_expr_stmt,
         stmt_variables,
         stmt_if, stmt_return, stmt_while, stmt_break, stmt_continue, stmt_block,
+        stmt_throw, stmt_try_catch,
         last
     };
 
@@ -77,8 +78,10 @@ export namespace DerkJS {
     struct Break;
     struct Continue;
     struct Block;
+    struct Throw;
+    struct TryCatch;
 
-    using Stmt = StmtNode<ExprStmt, Variables, If, Return, While, Break, Continue, Block>;
+    using Stmt = StmtNode<ExprStmt, Variables, If, Return, While, Break, Continue, Block, Throw, TryCatch>;
     using StmtPtr = std::unique_ptr<Stmt>;
 
     template <typename ... ExprKind>
@@ -190,6 +193,16 @@ export namespace DerkJS {
 
     struct Block {
         std::vector<StmtPtr> items;
+    };
+
+    struct Throw {
+        ExprPtr error_expr;
+    };
+
+    struct TryCatch {
+        Token error_name;
+        StmtPtr body_try;
+        StmtPtr body_catch;
     };
 
     /// BEGIN AST WRAPPER ///

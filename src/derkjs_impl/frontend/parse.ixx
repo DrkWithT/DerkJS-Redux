@@ -693,6 +693,10 @@ export namespace DerkJS {
                 return parse_break(lexer, source);
             } else if (stmt_keyword == TokenTag::keyword_continue) {
                 return parse_continue(lexer, source);
+            } else if (stmt_keyword == TokenTag::keyword_throw) {
+                return parse_throw(lexer, source);
+            } else if (stmt_keyword == TokenTag::keyword_try) {
+                return parse_try_catch(lexer, source);
             } else if (stmt_keyword == TokenTag::keyword_function) {
                 return parse_function(lexer, source);
             } else {
@@ -887,6 +891,54 @@ export namespace DerkJS {
             );
         }
 
+        [[nodiscard]] auto parse_throw(Lexer& lexer, const std::string& source) -> StmtPtr {
+            const auto snippet_begin = m_current.start;
+            consume_any(lexer, source); // skip 'throw'
+
+            auto throwable_expr = parse_logical_or(lexer, source);
+
+            consume(lexer, source, TokenTag::semicolon);
+
+            return std::make_unique<Stmt>(
+                Throw {
+                    .error_expr = std::move(throwable_expr)
+                },
+                0,
+                snippet_begin,
+                m_current.start - snippet_begin + 1,
+                StmtNodeTag::stmt_throw
+            );
+        }
+
+        [[nodiscard]] auto parse_try_catch(Lexer& lexer, const std::string& source) -> StmtPtr {
+            const auto snippet_begin = m_current.start;
+            consume_any(lexer, source); // skip 'try'
+
+            auto block_try = parse_block(lexer, source);
+
+            consume(lexer, source, TokenTag::keyword_catch);
+            consume(lexer, source, TokenTag::left_paren);
+
+            consume(lexer, source, TokenTag::identifier);
+            auto error_name_token = m_previous;
+
+            consume(lexer, source, TokenTag::right_paren);
+
+            auto block_catch = parse_block(lexer, source);
+
+            return std::make_unique<Stmt>(
+                TryCatch {
+                    .error_name = error_name_token,
+                    .body_try = std::move(block_try),
+                    .body_catch = std::move(block_catch)
+                },
+                0,
+                snippet_begin,
+                m_current.start - snippet_begin + 1,
+                StmtNodeTag::stmt_try_catch
+            );
+        }
+
         [[nodiscard]] auto parse_function(Lexer& lexer, const std::string& source) -> StmtPtr {
             m_syntax = SyntaxTag::stmt_function;
 
@@ -1023,11 +1075,13 @@ export namespace DerkJS {
             m_current = advance(lexer, source);
             m_error_count = 0;
             m_syntax = SyntaxTag::program_top;
+            m_primitive_as_key = false;
         }
 
     public:
         Parser() noexcept
         : m_previous {}, m_current {}, m_error_count {0}, m_syntax {SyntaxTag::program_top}, m_primitive_as_key {false} {}
+
 
         /// TODO: add source mapping IDs here when requires are added.
         [[nodiscard]] auto operator()(Lexer& lexer, std::string file_name, const std::string& source) -> std::optional<ASTUnit> {

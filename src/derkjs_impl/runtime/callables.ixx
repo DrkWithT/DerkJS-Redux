@@ -252,6 +252,7 @@ export namespace DerkJS {
             "djs_pop",
             "djs_emplace",
             "djs_put_this",
+            "djs_ref_error",
             "djs_discard",
             "djs_typename",
             "djs_put_obj_dud",
@@ -282,6 +283,8 @@ export namespace DerkJS {
             "djs_object_call",
             "djs_ctor_call",
             "djs_ret",
+            "djs_throw",
+            "djs_catch",
             "djs_halt",
         };
 

@@ -2,6 +2,7 @@ module;
 
 #include <type_traits>
 #include <utility>
+#include <span>
 
 #include <optional>
 #include <string>
@@ -10,12 +11,14 @@ module;
 #include <vector>
 #include <variant>
 #include <flat_map>
+#include <sstream>
 #include <iostream>
 #include <print>
 
 export module backend.bc_generate;
 
 export import frontend.ast;
+import frontend.parse;
 export import runtime.strings;
 export import runtime.callables;
 export import runtime.value;
@@ -32,6 +35,7 @@ namespace DerkJS::Backend {
     export struct FindKeyConstOpt {};
     export struct FindLocalsOpt {};
     export struct FindCaptureOpt {};
+    export struct FindErrorVarOpt {};
 
     export struct RecordLocalOpt {};
     export struct RecordSpecialThisOpt {};
@@ -109,6 +113,8 @@ namespace DerkJS::Backend {
         // filled with global function IDs -> absolute offsets into the bytecode blob
         std::vector<int> m_chunk_offsets;
 
+        PolyPool<ObjectBase<Value>>* m_runtime_heap_ptr;
+
         int m_member_depth;
 
         // Whether AST visitation is in a callable- Used in the check for implicit returns within functions.
@@ -130,6 +136,8 @@ namespace DerkJS::Backend {
         bool m_pass_key_raw;
 
         bool m_has_call;
+
+        bool m_in_try_block;
 
         // Whether to emit any `var a = ...;` declaration as an undefined stub first. Otherwise, the `var a = ...;` declarations are treated as assignments.
         bool m_prepass_vars;
@@ -175,6 +183,14 @@ namespace DerkJS::Backend {
                     .is_str_literal = fn_local_opt->second.is_str_literal,
                     .from_closure = true
                 };
+            }
+
+            return {};
+        }
+
+        [[nodiscard]] auto lookup_symbol(const std::string& symbol, [[maybe_unused]] FindErrorVarOpt opt) -> std::optional<Arg> {
+            if (auto error_local_opt = m_local_maps.back().locals.find(symbol); error_local_opt != m_local_maps.back().locals.end()) {
+                return error_local_opt->second;
             }
 
             return {};
@@ -303,6 +319,16 @@ namespace DerkJS::Backend {
                 ++m_local_maps.back().next_local_id;
 
                 return next_local_loc;
+            } else if constexpr (std::is_same_v<plain_item_type, RecordLocalOpt> && std::is_same_v<RecordOpt, FindErrorVarOpt>) {
+                Arg next_error_loc {
+                    .n = 0,
+                    .tag = Location::error_var
+                };
+
+                m_local_maps.back().locals[symbol] = next_error_loc;
+                ++m_local_maps.back().next_local_id;
+
+                return next_error_loc;
             }
 
             return {};
@@ -333,6 +359,8 @@ namespace DerkJS::Backend {
                     m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::array)] = heap_native_object_p;
                 } else if (symbol == "Function::prototype") {
                     m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::function)] = heap_native_object_p;
+                } else if (symbol == "Error::prototype") {
+                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::error)] = heap_native_object_p;
                 } else {
                     return false;
                 }
@@ -368,7 +396,7 @@ namespace DerkJS::Backend {
         }
 
         BytecodeEmitterContext()
-        : m_global_consts_map {}, m_key_consts_map {}, m_base_prototypes {}, m_local_maps {}, m_heap {}, m_consts {}, m_code_blobs {}, m_callee_name {}, m_chunk_offsets {}, m_member_depth {0}, m_in_callable {false}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_pass_key_raw {false}, m_has_call {false}, m_prepass_vars {true} {}
+        : m_global_consts_map {}, m_key_consts_map {}, m_base_prototypes {}, m_local_maps {}, m_heap {}, m_consts {}, m_code_blobs {}, m_callee_name {}, m_chunk_offsets {}, m_runtime_heap_ptr {nullptr}, m_member_depth {0}, m_in_callable {false}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_pass_key_raw {false}, m_has_call {false}, m_in_try_block {false}, m_prepass_vars {true} {}
 
         void add_expr_emitter(ExprNodeTag expr_type_tag, std::unique_ptr<ExprEmitterBase<Expr>> helper) noexcept {
             const auto expr_helper_index = static_cast<std::size_t>(expr_type_tag);
@@ -406,6 +434,69 @@ namespace DerkJS::Backend {
             return false;
         }
 
+        /// NOTE: use this for `Function()`.
+        [[nodiscard]] auto compile_function_snippet(const std::string& snippet_code, Lexer& lexer, Parser& parser, PolyPool<ObjectBase<Value>>& vm_heap) -> ObjectBase<Value>* {
+            m_local_maps.clear();
+            m_code_blobs.clear();
+            m_callee_name.clear();
+            m_chunk_offsets.clear();
+            m_runtime_heap_ptr = &vm_heap;
+            m_member_depth = 0;
+            m_in_callable = false;
+            m_has_string_ops = false;
+            m_has_new_applied = false;
+            m_access_as_lval = false;
+            m_accessing_property = false;
+            m_pass_key_raw = false;
+            m_has_call = false;
+            m_in_try_block = false;
+            m_prepass_vars = true;
+
+            lexer.reset(snippet_code);
+
+            auto snippet_tu = parser(lexer, "source:anonymous", snippet_code);
+
+            if (!snippet_tu) {
+                std::println(std::cerr, "Failed to parse function snippet:\n\nsource:anonymous:\n\n{}\n", snippet_code);
+                return nullptr;
+            }
+
+            m_local_maps.emplace_back(CodeGenScope {
+                .locals = {},
+                // regular locals start from offset 1, yet -1 is a thisArg & 0 is the callee
+                .next_local_id = 1,
+                .block_level = -1
+            });
+            m_code_blobs.emplace_front();
+
+            const auto& snippet_decl_variant = snippet_tu->at(0).decl->data; // StmtPtr
+
+            /// NOTE: add trailing ';' to expr-stmt with lambda within.
+            const auto parent_expr_stmt_p = std::get_if<DerkJS::ExprStmt>(&snippet_decl_variant);
+
+            if (!parent_expr_stmt_p) {
+                std::println(std::cerr, "Expected an expr-stmt.");
+                return nullptr;
+            }
+
+            const auto lambda_literal_p = std::get_if<LambdaLiteral>(&parent_expr_stmt_p->expr->data);
+
+            if (!lambda_literal_p) {
+                std::println(std::cerr, "Expected an expr-stmt with valid lambda syntax.");
+                return nullptr;
+            }
+
+            if (!m_expr_emitters.at(static_cast<std::size_t>(ExprNodeTag::lambda_literal))->emit(*this, *parent_expr_stmt_p->expr, snippet_code)) {
+                std::println(std::cerr, "Failed to compile function snippet:\n\nsource:anonymous:\n\n{}\n", snippet_code);
+                return nullptr;
+            }
+
+            const int expected_lambda_arity = lambda_literal_p->params.size();
+
+            return m_runtime_heap_ptr->get_newest_item();
+        }
+
+        /// NOTE: Use this for initial compilation of the program.
         [[nodiscard]] auto compile_script(std::vector<PreloadItem> preloadables, int heap_object_capacity, const ASTUnit& tu, const std::vector<std::string>& source_map) -> std::optional<Program> {
             // 1.1: Setup heap of desired capacity for future VM use.
             m_heap = PolyPool<ObjectBase<Value>> {heap_object_capacity};
@@ -441,7 +532,13 @@ namespace DerkJS::Backend {
 
             // 2.2: Add "length" for array accessor name.
             const int length_key_const_id = lookup_symbol("length", FindKeyConstOpt {})->n;
-            m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::extra_length_key)] = m_consts.at(length_key_const_id).to_object();
+            m_base_prototypes[static_cast<unsigned int>(BasePrototypeID::extra_length_key)] = m_consts.at(length_key_const_id).to_object();
+
+            const int message_key_const_id = lookup_symbol("message", FindKeyConstOpt {})->n;
+            m_base_prototypes[static_cast<unsigned int>(BasePrototypeID::extra_msg_key)] = m_consts.at(message_key_const_id).to_object();
+
+            const int name_key_const_id = lookup_symbol("name", FindKeyConstOpt {})->n;
+            m_base_prototypes[static_cast<unsigned int>(BasePrototypeID::extra_name_key)] = m_consts.at(name_key_const_id).to_object();
 
             // 3. Prepare initial mapping of symbols & code buffer to build.
             m_local_maps.emplace_back(CodeGenScope {
@@ -493,4 +590,29 @@ namespace DerkJS::Backend {
             };
         }
     };
+
+    export [[nodiscard]] auto compile_snippet_helper(void* lexer_p, void* parser_p, void* compiler_ctx_p, void* vm_heap_p, const std::span<Value>& string_args) -> ObjectBase<Value>* {
+        auto lexer_ptr = reinterpret_cast<Lexer*>(lexer_p);
+        auto parser_ptr = reinterpret_cast<Parser*>(parser_p);
+        auto compiler_ptr = reinterpret_cast<BytecodeEmitterContext*>(compiler_ctx_p);
+        auto vm_heap_ptr = reinterpret_cast<PolyPool<ObjectBase<Value>>*>(vm_heap_p);
+
+        std::ostringstream sout;
+        const int string_argc = string_args.size();
+        const int param_names_n = string_argc - 1;
+
+        sout << "(function (";
+
+        if (param_names_n >= 1) {
+            sout << string_args.front().to_string().value();
+        }
+
+        for (int arg_pos = 1; arg_pos < param_names_n; arg_pos++) {
+            sout << ", " << string_args[arg_pos].to_string().value();
+        }
+
+        sout << ") {" << string_args.back().to_string().value() << "});";
+
+        return compiler_ptr->compile_function_snippet(sout.str(), *lexer_ptr, *parser_ptr, *vm_heap_ptr);
+    }
 }

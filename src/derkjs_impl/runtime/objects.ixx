@@ -182,6 +182,9 @@ export namespace DerkJS {
         array,
         function,
         extra_length_key, // Not a prototype, but I have to make "length" easily accessible for array creations.
+        extra_msg_key, // Not a prototype, but patched in for `NativeError`.
+        extra_name_key, // Not a prototype either, but patched in for `NativeError`.
+        error,
         last
     };
 
@@ -215,6 +218,7 @@ export namespace DerkJS {
 
         virtual auto set_property_value(const V& key, const V& value) -> V* = 0;
         virtual auto del_property_value(const V& key) -> bool = 0;
+        /// NOTE: update this to take a const V& key parameter 1st.
         virtual void update_on_accessor_mut(V* accessor_value_p, const V& value) = 0;
 
         virtual auto call(void* opaque_ctx_p, int argc, bool has_this_arg) -> bool = 0;
@@ -302,6 +306,14 @@ export namespace DerkJS {
             m_free_slots.pop_back();
 
             return recycled_id;
+        }
+
+        [[nodiscard]] auto get_newest_item() noexcept -> ItemBase* {
+            if (m_next_id > 0) {
+                return m_items[m_next_id - 1].get();
+            }
+
+            return nullptr;
         }
 
         [[nodiscard]] auto get_item(int id) noexcept -> ItemBase* {

@@ -7,6 +7,8 @@ module;
 #include <variant>
 #include <forward_list>
 #include <string>
+#include <iostream>
+#include <print>
 
 export module backend.expr_gen;
 
@@ -98,6 +100,8 @@ namespace DerkJS::Backend {
             } else if (primitive_locate_type == Location::end && primitive_locator->n == -1) {
                 /// NOTE: Put local:0 to reference the callee for self-recursive calls.
                 context.encode_instruction(Opcode::djs_dup_local); // argument-0 is defaulted to 0
+            } else if (primitive_locate_type == Location::error_var) {
+                context.encode_instruction(Opcode::djs_ref_error);
             }
 
             return true;
@@ -190,6 +194,7 @@ namespace DerkJS::Backend {
                 std::string param_name = param_token.as_string(source);
 
                 if (!context.record_symbol(param_name, RecordLocalOpt {}, FindLocalsOpt {})) {
+                    std::println(std::cerr, "Compile Error: Failed to record local parameter symbol '{}'", param_name);
                     return false;
                 }
             }
@@ -199,12 +204,14 @@ namespace DerkJS::Backend {
             context.m_in_callable = true;
 
             if (!context.emit_stmt(*lambda_body, source)) {
+                std::println(std::cerr, "Note: Failed to pre-pass over lambda body vars.");
                 return false;
             }
 
             context.m_prepass_vars = false;
 
             if (!context.emit_stmt(*lambda_body, source)) {
+                std::println(std::cerr, "Note: Failed to emit lambda body statements.");
                 return false;
             }
 
@@ -232,6 +239,8 @@ namespace DerkJS::Backend {
             if (auto lambda_object_ptr = context.m_heap.add_item(context.m_heap.get_next_id(), std::move(temp_callable)); lambda_object_ptr) {
                 // As per any DerkJS object, the real thing is owned by the VM heap but is referenced by many non-owning raw pointers to its base: `ObjectBase<Value>*`.
                 context.m_consts.emplace_back(Value {lambda_object_ptr});
+            } else if (context.m_runtime_heap_ptr) {
+                context.m_runtime_heap_ptr->add_item(context.m_runtime_heap_ptr->get_next_id(), std::move(temp_callable));
             } else {
                 return false;
             }
@@ -397,6 +406,7 @@ namespace DerkJS::Backend {
 
             // 1. Emit LHS evaluation
             if (!context.emit_expr(*lhs, source)) {
+                std::println(std::cerr, "Compile Error: Failed to emit LHS of binary-expr.");
                 return false;
             }
 
@@ -428,6 +438,7 @@ namespace DerkJS::Backend {
 
             // 3. Emit RHS evaluation
             if (!context.emit_expr(*rhs, source)) {
+                std::println(std::cerr, "Compile Error: Failed to emit RHS of binary-expr.");
                 return false;
             }
 

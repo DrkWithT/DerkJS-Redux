@@ -1,13 +1,11 @@
+var secret = 1;
+
 var data = {
     secret: 2
 };
 
 function test(a) {
-    if (!this) {
-        return a + 1;
-    } else {
-        return a + this.secret;
-    }
+    return a + this.secret;
 }
 
 var ok = 0;

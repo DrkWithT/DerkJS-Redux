@@ -61,6 +61,9 @@ int main(int argc, char* argv[]) {
     driver.add_js_lexical("while", TokenTag::keyword_while);
     driver.add_js_lexical("break", TokenTag::keyword_break);
     driver.add_js_lexical("continue", TokenTag::keyword_continue);
+    driver.add_js_lexical("throw", TokenTag::keyword_throw);
+    driver.add_js_lexical("try", TokenTag::keyword_try);
+    driver.add_js_lexical("catch", TokenTag::keyword_catch);
     driver.add_js_lexical("function", TokenTag::keyword_function);
     driver.add_js_lexical("prototype", TokenTag::keyword_prototype);
     driver.add_js_lexical("this", TokenTag::keyword_this);
@@ -115,30 +118,23 @@ int main(int argc, char* argv[]) {
     driver.add_stmt_emitter(StmtNodeTag::stmt_break, std::make_unique<Backend::BreakEmitter>());
     driver.add_stmt_emitter(StmtNodeTag::stmt_continue, std::make_unique<Backend::ContinueEmitter>());
     driver.add_stmt_emitter(StmtNodeTag::stmt_block, std::make_unique<Backend::BlockEmitter>());
+    driver.add_stmt_emitter(StmtNodeTag::stmt_throw, std::make_unique<Backend::ThrowEmitter>());
+    driver.add_stmt_emitter(StmtNodeTag::stmt_try_catch, std::make_unique<Backend::TryCatchEmitter>());
 
     /// 4.1 Prepare native prototypes as stubs. ///
 
     auto object_prototype_p = driver.add_native_object<Object>("Object::prototype", nullptr);
     auto boolean_prototype_p = driver.add_native_object<Object>("Boolean::prototype", object_prototype_p);
-    // auto number_prototype_p = nullptr;
+    auto number_prototype_p = driver.add_native_object<Object>("Number::prototype", object_prototype_p);
     auto string_prototype_p = driver.add_native_object<Object>("String::prototype", object_prototype_p);
     auto array_prototype_p = driver.add_native_object<Object>("Array::prototype", object_prototype_p);
     auto function_prototype_p = driver.add_native_object<Object>("Function::prototype", object_prototype_p);
+    auto error_prototype_p = driver.add_native_object<Object>("Error::prototype", object_prototype_p);
 
     /// 4.2 Patch properties of native prototypes. These are VERY important for DerkJS to interpret certain scripts properly. ///
 
     /// Object.prototype items
     Core::NativePropertyStub object_prototype_props[] {
-        Core::NativePropertyStub {
-            .name_str = "constructor",
-            .item = std::make_unique<NativeFunction>(
-                object_prototype_p,
-                DerkJS::native_object_ctor,
-                function_prototype_p,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
-        },
         Core::NativePropertyStub {
             .name_str = "create",
             .item = std::make_unique<NativeFunction>(
@@ -183,16 +179,6 @@ int main(int argc, char* argv[]) {
 
     Core::NativePropertyStub boolean_prototype_props[] {
         Core::NativePropertyStub {
-            .name_str = "constructor",
-            .item = std::make_unique<NativeFunction>(
-                boolean_prototype_p,
-                DerkJS::native_boolean_ctor,
-                function_prototype_p,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
-        },
-        Core::NativePropertyStub {
             .name_str = "hasOwnProperty",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
@@ -224,18 +210,32 @@ int main(int argc, char* argv[]) {
         }
     };
 
-    /// String.prototype items
-    Core::NativePropertyStub string_prototype_props[] {
+    /// Number.prototype items
+    Core::NativePropertyStub number_prototype_props[] {
         Core::NativePropertyStub {
-            .name_str = "constructor",
+            .name_str = "valueOf",
             .item = std::make_unique<NativeFunction>(
-                string_prototype_p,
-                DerkJS::native_str_ctor,
+                function_prototype_p,
+                DerkJS::native_number_value_of,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
             )
         },
+        Core::NativePropertyStub {
+            .name_str = "toFixed",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJS::native_number_to_fixed,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        }
+    };
+
+    /// String.prototype items
+    Core::NativePropertyStub string_prototype_props[] {
         Core::NativePropertyStub {
             .name_str = "hasOwnProperty",
             .item = std::make_unique<NativeFunction>(
@@ -314,16 +314,6 @@ int main(int argc, char* argv[]) {
 
     /// Array.prototype items
     Core::NativePropertyStub array_prototype_props[] {
-        Core::NativePropertyStub {
-            .name_str = "constructor",
-            .item = std::make_unique<NativeFunction>(
-                array_prototype_p,
-                DerkJS::native_array_ctor,
-                function_prototype_p,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
-        },
         Core::NativePropertyStub {
             .name_str = "hasOwnProperty",
             .item = std::make_unique<NativeFunction>(
@@ -414,22 +404,71 @@ int main(int argc, char* argv[]) {
         }
     };
 
-    ObjectBase<Value>* object_ctor_p = std::get<std::unique_ptr<ObjectBase<Value>>>(object_prototype_props[0].item).get();
-    ObjectBase<Value>* boolean_ctor_p = std::get<std::unique_ptr<ObjectBase<Value>>>(boolean_prototype_props[0].item).get();
-    ObjectBase<Value>* string_ctor_p = std::get<std::unique_ptr<ObjectBase<Value>>>(string_prototype_props[0].item).get();
-    ObjectBase<Value>* array_ctor_p = std::get<std::unique_ptr<ObjectBase<Value>>>(array_prototype_props[0].item).get();
-
-    auto console_p = driver.add_native_object<Object>("", object_prototype_p);
-    auto date_p = driver.add_native_object<Object>("", object_prototype_p);
-
-    auto is_nan_fn_p = driver.add_native_object<NativeFunction>(
+    auto object_ctor_p = driver.add_native_object<NativeFunction>(
         "",
-        function_prototype_p,
-        DerkJS::native_is_nan,
+        object_prototype_p,
+        DerkJS::native_object_ctor,
         function_prototype_p,
         driver.get_length_key_str_p(),
         Value {1}
     );
+
+    auto boolean_ctor_p = driver.add_native_object<NativeFunction>(
+        "",
+        boolean_prototype_p,
+        DerkJS::native_boolean_ctor,
+        function_prototype_p,
+        driver.get_length_key_str_p(),
+        Value {1}
+    );
+
+    auto number_ctor_p = driver.add_native_object<NativeFunction>(
+        "",
+        number_prototype_p,
+        DerkJS::native_number_ctor,
+        function_prototype_p,
+        driver.get_length_key_str_p(),
+        Value {1}
+    );
+
+    auto string_ctor_p = driver.add_native_object<NativeFunction>(
+        "",
+        string_prototype_p,
+        DerkJS::native_str_ctor,
+        function_prototype_p,
+        driver.get_length_key_str_p(),
+        Value {1}
+    );
+
+    auto array_ctor_p = driver.add_native_object<NativeFunction>(
+        "",
+        array_prototype_p,
+        DerkJS::native_array_ctor,
+        function_prototype_p,
+        driver.get_length_key_str_p(),
+        Value {1}
+    );
+
+    auto function_ctor_p = driver.add_native_object<NativeFunction>(
+        "",
+        function_prototype_p,
+        DerkJS::native_function_ctor,
+        function_prototype_p,
+        driver.get_length_key_str_p(),
+        Value {1}
+    );
+
+    auto error_ctor_p = driver.add_native_object<NativeFunction>(
+        "",
+        error_prototype_p,
+        DerkJS::native_error_ctor,
+        function_prototype_p,
+        driver.get_length_key_str_p(),
+        Value {1}
+    );
+
+    auto console_p = driver.add_native_object<Object>("", object_prototype_p);
+    auto date_p = driver.add_native_object<Object>("", object_prototype_p);
 
     auto parse_int_fn_p = driver.add_native_object<NativeFunction>(
         "",
@@ -457,6 +496,9 @@ int main(int argc, char* argv[]) {
     driver.patch_native_object(boolean_prototype_p, string_prototype_p, std::to_array(std::move(boolean_prototype_props)));
     driver.add_native_object_alias("Boolean", boolean_ctor_p);
 
+    driver.patch_native_object(number_prototype_p, string_prototype_p, std::to_array(std::move(number_prototype_props)));
+    driver.add_native_object_alias("Number", number_ctor_p);
+
     driver.patch_native_object(string_prototype_p, string_prototype_p, std::to_array(std::move(string_prototype_props)));
     driver.add_native_object_alias("String", string_ctor_p);
 
@@ -464,6 +506,10 @@ int main(int argc, char* argv[]) {
     driver.add_native_object_alias("Array", array_ctor_p);
 
     driver.patch_native_object(function_prototype_p, string_prototype_p, std::to_array(std::move(function_prototype_props)));
+    driver.add_native_object_alias("Function", function_ctor_p);
+
+    // driver.patch_native_object(error_prototype_p, string_prototype_p, std::to_array(std::move(error_prototype_props)));
+    driver.add_native_object_alias("Error", error_ctor_p);
 
     driver.patch_native_object(console_p, string_prototype_p, std::to_array(std::move(console_props)));
     driver.add_native_object_alias("console", console_p);
@@ -471,7 +517,6 @@ int main(int argc, char* argv[]) {
     driver.patch_native_object(date_p, string_prototype_p, std::to_array(std::move(date_props)));
     driver.add_native_object_alias("Date", date_p);
 
-    driver.add_native_object_alias("isNaN", is_nan_fn_p);
     driver.add_native_object_alias("parseInt", parse_int_fn_p);
     driver.add_native_object_alias("parseFloat", parse_float_fn_p);
 

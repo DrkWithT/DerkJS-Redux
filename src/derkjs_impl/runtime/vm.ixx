@@ -11,6 +11,7 @@ export module runtime.vm;
 import runtime.value;
 import runtime.arrays;
 import runtime.strings;
+import runtime.errors;
 import runtime.gc;
 import runtime.bytecode;
 
@@ -21,6 +22,7 @@ namespace DerkJS {
         bad_operation,
         bad_heap_alloc,
         vm_abort,
+        uncaught_error,
         ok,
         last
     };
@@ -69,6 +71,8 @@ namespace DerkJS {
     /// NOTE: This type decouples the internal state of the bytecode VM. It's used when the `DispatchPolicy::tco` specialization is used with a opcode dispatch table and dispatch TCO'd function internally apply in `VM<DispatchPolicy::tco>`. However, this is only enabled on LLVM Clang 20+ to be safe.
     export struct ExternVMCtx {
         using call_frame_type = CallFrame;
+        using runtime_object_ptr = ObjectBase<Value>*;
+        using compile_snippet_fn = runtime_object_ptr (*) (void*, void*, void*, void*, const std::span<Value>&);
 
         GC gc;
         PolyPool<ObjectBase<Value>> heap;
@@ -76,7 +80,15 @@ namespace DerkJS {
         std::vector<Value> stack;
         std::vector<CallFrame> frames;
 
+        void* lexer_p;
+        void* parser_p;
+        void* compile_state_p;
+        compile_snippet_fn compile_proc;
+
         Value* consts_view;
+
+        /// NOTE: holds a non-owning pointer to a currently thrown exception object e.g `NativeError`.
+        ObjectBase<Value>* current_error;
 
         /// NOTE: holds base of bytecode blob, starts at position 0 to access offsets from.
         const Instruction* code_bp;
@@ -99,8 +111,8 @@ namespace DerkJS {
 
         VMErrcode status;
 
-        ExternVMCtx(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit, std::size_t gc_heap_threshold)
-        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), base_protos(std::move(prgm.base_protos)), stack {}, frames {}, consts_view {prgm.consts.data()}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, ending_frame_depth {0}, rsbp {-1}, rsp {-1}, /*dispatch_allowance {100},*/ status {VMErrcode::pending} {
+        ExternVMCtx(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit, std::size_t gc_heap_threshold, void* lexer_ptr, void* parser_ptr, void* compile_state_ptr, compile_snippet_fn compile_proc_ptr)
+        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), base_protos(std::move(prgm.base_protos)), stack {}, frames {}, lexer_p {lexer_ptr}, parser_p {parser_ptr}, compile_state_p {compile_state_ptr}, compile_proc {compile_proc_ptr}, consts_view {prgm.consts.data()}, current_error {nullptr}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, ending_frame_depth {0}, rsbp {-1}, rsp {-1}, /*dispatch_allowance {100},*/ status {VMErrcode::pending} {
             stack.reserve(stack_length_limit);
             stack.resize(stack_length_limit);
             frames.reserve(call_frame_limit);
@@ -124,6 +136,34 @@ namespace DerkJS {
                 rsbp = rsp;
             }
         }
+
+        /// NOTE: Only use this for "throwing" exceptions in the VM!
+        [[nodiscard]] auto try_recover(ObjectBase<Value>* error_ptr, bool is_throw_within_try) -> VMErrcode {
+            current_error = error_ptr;
+
+            auto search_for_catch = is_throw_within_try;
+            auto peek_rip_p = rip_p;
+
+            for (; !frames.empty() && peek_rip_p != nullptr; peek_rip_p++) {
+                if (search_for_catch && peek_rip_p->op == Opcode::djs_catch) {
+                    rip_p = peek_rip_p;
+                    return VMErrcode::pending;
+                }
+
+                if (const auto& [caller_ret_ip, caller_addr, caller_capture_p, callee_sbp, caller_sbp, calling_flags] = frames.back(); peek_rip_p->op == Opcode::djs_ret) {
+                    rsbp = caller_sbp;
+                    rsp = callee_sbp;
+                    rip_p = caller_ret_ip;
+                    peek_rip_p = caller_ret_ip;
+
+                    frames.pop_back();
+
+                    search_for_catch = true;
+                }
+            }
+
+            return VMErrcode::uncaught_error;
+        }
     };
 
     inline void op_nop(ExternVMCtx& ctx, int16_t a0, int16_t a1);
@@ -137,6 +177,7 @@ namespace DerkJS {
     inline void op_pop(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_emplace(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_put_this(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_ref_error(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_discard(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_typename(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_put_obj_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1);
@@ -167,6 +208,8 @@ namespace DerkJS {
     inline void op_object_call(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_ctor_call(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_throw(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_catch(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     export inline void dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1);
 
@@ -174,11 +217,12 @@ namespace DerkJS {
     constexpr tco_opcode_fn tco_opcodes[static_cast<std::size_t>(Opcode::last)] = {
         op_nop,
         op_dup, op_dup_local, op_ref_local, op_store_upval, op_ref_upval, op_put_const, op_deref, op_pop, op_emplace,
-        op_put_this, op_discard, op_typename, op_put_obj_dud, op_make_arr, op_put_proto_key, op_get_prop, op_put_prop, op_del_prop,
+        op_put_this, op_ref_error, op_discard, op_typename, op_put_obj_dud, op_make_arr, op_put_proto_key, op_get_prop, op_put_prop, op_del_prop,
         op_numify, op_strcat, op_pre_inc, op_pre_dec,
         op_mod, op_mul, op_div, op_add, op_sub,
         op_test_falsy, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte,
         op_jump_else, op_jump_if, op_jump, op_object_call, op_ctor_call, op_ret,
+        op_throw, op_catch,
         op_halt
     };
 
@@ -291,6 +335,15 @@ namespace DerkJS {
 
     inline void op_put_this(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.stack.at(ctx.rsp + 1) = ctx.stack.at(ctx.rsbp - 1);
+        ctx.rsp++;
+        ctx.rip_p++;
+
+        [[clang::musttail]]
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    inline void op_ref_error(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+        ctx.stack.at(ctx.rsp + 1) = Value {ctx.current_error};
         ctx.rsp++;
         ctx.rip_p++;
 
@@ -675,6 +728,39 @@ namespace DerkJS {
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
+    inline void op_throw(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+        if (auto thrown_value_as_obj = ctx.stack.at(ctx.rsp).deep_clone().to_object(); thrown_value_as_obj != nullptr && thrown_value_as_obj->get_class_name() == "Error") {
+            ctx.status = ctx.try_recover(thrown_value_as_obj, a0 == 1);
+        } else if (auto error_object_p = ctx.heap.add_item(
+            ctx.heap.get_next_id(),
+            new NativeError {
+                ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::error)),
+                Value {
+                    ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_msg_key))
+                },
+                ctx.stack.at(ctx.rsp),
+                Value {
+                    ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_name_key))
+                }
+            }
+        ); error_object_p) {
+            ctx.status = ctx.try_recover(error_object_p, a0 == 1);
+        } else {
+            ctx.status = VMErrcode::bad_heap_alloc;
+        }
+
+        [[clang::musttail]]
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    inline void op_catch(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+        /// NOTE: Assume the Error bubbling finished, so it's ok to enter the catch body's code here.
+        ctx.rip_p++;
+
+        [[clang::musttail]]
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
     inline void op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.status = VMErrcode::vm_abort;
 
@@ -704,8 +790,8 @@ namespace DerkJS {
         /// NOTE: This SHOULD NOT be modified directly!
         ExternVMCtx m_ctx;
 
-        explicit VM(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit, std::size_t gc_threshold)
-        : m_ctx {prgm, stack_length_limit, call_frame_limit, gc_threshold} {}
+        explicit VM(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit, std::size_t gc_threshold, void* lexer_ptr, void* parser_ptr, void* compile_state_ptr, ExternVMCtx::compile_snippet_fn compile_proc_ptr)
+        : m_ctx {prgm, stack_length_limit, call_frame_limit, gc_threshold, lexer_ptr, parser_ptr, compile_state_ptr, compile_proc_ptr} {}
 
         [[nodiscard]] auto peek_final_result() const noexcept -> const Value& {
             return m_ctx.stack[0];
@@ -713,6 +799,10 @@ namespace DerkJS {
 
         [[nodiscard]] auto peek_status(this auto&& self) noexcept -> VMErrcode {
             return self.m_ctx.status;
+        }
+
+        [[nodiscard]] auto peek_leftover_error() const noexcept -> Value {
+            return Value {m_ctx.current_error};
         }
 
         inline void run() {

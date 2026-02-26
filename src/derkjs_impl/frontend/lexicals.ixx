@@ -21,6 +21,9 @@ export namespace DerkJS {
         keyword_while,
         keyword_break,
         keyword_continue,
+        keyword_throw,
+        keyword_try,
+        keyword_catch,
         keyword_function,
         keyword_prototype,
         keyword_new,
@@ -395,8 +398,18 @@ export namespace DerkJS {
         }
 
     public:
+        Lexer() noexcept
+        : m_specials {}, m_pos {}, m_end {}, m_line {}, m_column {} {}
+
         Lexer(std::string_view source, std::flat_map<std::string_view, TokenTag> lexicals) noexcept
         : m_specials (std::move(lexicals)), m_pos {}, m_end {static_cast<int>(source.size())}, m_line {1}, m_column {1} {}
+
+        void reset(std::string_view source) noexcept {
+            m_pos = 0;
+            m_end = static_cast<int>(source.size());
+            m_line = 1;
+            m_column = 1;
+        }
 
         [[nodiscard]] auto operator()(const std::string& source) -> Token {
             if (at_eof()) {

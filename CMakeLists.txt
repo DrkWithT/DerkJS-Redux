@@ -18,10 +18,11 @@ target_sources(
     src/derkjs_impl/meta/enums.ixx
     src/derkjs_impl/runtime/objects.ixx
     src/derkjs_impl/runtime/boolean.ixx
-    # src/derkjs_impl/runtime/number.ixx
+    src/derkjs_impl/runtime/number.ixx
     src/derkjs_impl/runtime/arrays.ixx
     src/derkjs_impl/runtime/callables.ixx
     src/derkjs_impl/runtime/strings.ixx
+    src/derkjs_impl/runtime/errors.ixx
     src/derkjs_impl/runtime/value.ixx
     src/derkjs_impl/runtime/bytecode.ixx
     src/derkjs_impl/runtime/gc.ixx

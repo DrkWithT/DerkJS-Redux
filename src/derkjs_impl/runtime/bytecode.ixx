@@ -31,6 +31,7 @@ export namespace DerkJS {
         djs_pop, // Lazy pops by N given <pop-n>.
         djs_emplace, // Pops the temporary and stores it into the under value (local variable reference / property reference) which gets popped afterwards.
         djs_put_this, // Pushes a reference to the current `this` object.
+        djs_ref_error, // Pushes an object reference in a Value for the current exception (`NativeError`).
         djs_discard, // For `void`, replaces the evaluated expression value with an `undefined`.
         djs_typename, // For `typeof`, replaces the expression value with a newly created string to its typename.
         djs_put_obj_dud, // Pushes a newly created, empty JS object.
@@ -61,6 +62,8 @@ export namespace DerkJS {
         djs_object_call, // Args: <arg-count> <pass-this-flag>: Assumes the top stack value references a `ObjectBase<Value>` to invoke on <arg-count> temporaries below. NativeFunction objects don't need to affect `RSBP` and `RSP` for restoring caller stack state. The call() virtual method per function object can now take 'this' on `pass-this-flag == 1`: the caller object is 'this', laying on top of all other arguments as the consuming temporary. Stack: `<obj-ref> <obj-ref> <key-value> -> <result>`
         djs_ctor_call, // Args: <arg-count>; creates a this object to initialize and return via `var foo = new Foo()` where the function has `return this;`. Invokes the object's `call_as_ctor()` virtual method. If `opt-chunk-id >= 0`: invokes the bytecode function as a constructor. ONLY WORKS WITH FUNCTION OBJECTS!!
         djs_ret, // Arg: <is-implicit> Yields the callee's result to the caller. If `is-implicit = 1`, return `undefined` or `this`, but yield the top-stack value otherwise.
+        djs_throw, // Arg: <is-in-try> // Takes the top stack value and passes it to `ExternVMCtx::try_recover(Value error_msg, bool is_in_try)`. If is-in-try is `1`, this method saves the error object in the heap and caches its object reference in the context before searching bottom-up through callees' bytecode for the nearest `djs_catch` instruction. Otherwise, the nearest, local `djs_ret` is found before resuming the search for a `djs_catch`.
+        djs_catch, // Resumes VM execution at the catch body's code located +1 after this kind of instruction.
         djs_halt,
         last,
     };
@@ -76,6 +79,7 @@ export namespace DerkJS {
         heap_obj, // -2: this, -3: prototype
         local,
         key_str,
+        error_var, // Used for `e` in `catch(e) { ... }`.
         end,
     };
 
@@ -117,6 +121,7 @@ export namespace DerkJS {
             "djs_pop",
             "djs_emplace",
             "djs_put_this",
+            "djs_ref_error",
             "djs_discard",
             "djs_typename",
             "djs_put_obj_dud",
@@ -147,6 +152,8 @@ export namespace DerkJS {
             "djs_object_call",
             "djs_ctor_call",
             "djs_ret",
+            "djs_throw",
+            "djs_catch",
             "djs_halt",
         };
 
