@@ -22,6 +22,7 @@ target_sources(
     src/derkjs_impl/runtime/arrays.ixx
     src/derkjs_impl/runtime/callables.ixx
     src/derkjs_impl/runtime/strings.ixx
+    src/derkjs_impl/runtime/errors.ixx
     src/derkjs_impl/runtime/value.ixx
     src/derkjs_impl/runtime/bytecode.ixx
     src/derkjs_impl/runtime/gc.ixx
