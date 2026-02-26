@@ -45,7 +45,8 @@ export namespace DerkJS::Core {
             "ERROR: cannot access undefined property.",
             "ERROR: bad Function call or assignment operation.",
             "ERROR: heap allocation failed.",
-            "ERROR: VM aborted via halt."
+            "ERROR: VM aborted via halt.",
+            "ERROR: Uncaught error:\n",
             "OK",
         };
 
@@ -112,6 +113,28 @@ export namespace DerkJS::Core {
             m_preloads.emplace_back(Backend::PreloadItem {
                 .lexeme = "length",
                 .entity = std::move(length_str_length_key_p),
+                .location = Location::key_str
+            });
+
+            m_preloads.emplace_back(Backend::PreloadItem {
+                .lexeme = "message",
+                /// NOTE: Create this important "message" key to save later within the VM, used for Error creation.
+                .entity = std::make_unique<DynamicString>(
+                    nullptr,
+                    Value {m_length_str_length_key_p},
+                    std::string {"message"}
+                ),
+                .location = Location::key_str
+            });
+
+            m_preloads.emplace_back(Backend::PreloadItem {
+                .lexeme = "name",
+                /// NOTE: Create this important "name" key to save later within the VM, used for Error creation.
+                .entity = std::make_unique<DynamicString>(
+                    nullptr,
+                    Value {m_length_str_length_key_p},
+                    std::string {"name"}
+                ),
                 .location = Location::key_str
             });
         }
@@ -241,6 +264,13 @@ export namespace DerkJS::Core {
             case VMErrcode::bad_heap_alloc:
             case VMErrcode::vm_abort:
                 std::println(std::cerr, "{}", error_code_msgs.at(static_cast<int>(vm_status)));
+                return 1;
+            case VMErrcode::uncaught_error:
+                std::println(
+                    std::cerr, "{}\n{}",
+                    error_code_msgs.at(static_cast<int>(vm_status)),
+                    vm.peek_leftover_error().to_string().value()
+                );
                 return 1;
             case VMErrcode::ok:
             default:
