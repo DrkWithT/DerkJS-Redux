@@ -38,15 +38,16 @@
     - OR: the LHS is the result iff TRUTHY, but the RHS is taken iff the LHS is falsy
     - AND: the LHS is the result iff FALSY, but the RHS is taken otherwise
 
-### Symbol Lookups in Bytecode Generation (Pre-passes & emit pass)
- - Case 1: literal / globally scoped native object name...
-    - Lookup from global consts mapping.
- - Case 2.1: name of local variable...
-    - A: If the local variable name isn't within the local scope (top scope on stack), lookup using a string key (the name) to access the specific closure upvalue via the string-key mapping.
-      - Opcode snippet: `outside_var = 1` -> `put_const <name-const-id> 0, ref_upvalue 0 0, put_const <literal-1-id> 0, emplace 0 0`.
-    - B: Otherwise, look up the variable name in the local scope.
- - Case 2.2: name of property access key when `Literal.is_key == true`...
-    - Always treat this as a string constant.
+### Calls
+ - Basic pre-call layout: `<thisArg (undefined)>, <callee>, <args...>`
+    - `thisArg` is patched to a new object for constructors or `capture_p` for regular functions.
+ - Returns per function are placed at `CALLEE_RBSP - 1`.
+
+### Error
+ - These are exceptions which unwind the call stack frame by frame. Between each unwind, the callee is linearly searched for a `djs_catch` instruction.
+ - Otherwise, if no `djs_catch` instruction is hit, the script exits in failure.
+ - `throw new Error(msg);` will place an error in a special `ExternVMCtx` field. `catch` blocks will clear this field after they run.
+   - TODO: Fix `polyfill.js:211` once Error ctor is done.
 
 ### Pass 1: emit pass
  - Purpose: Generates bytecode using the context from the earlier pass(es).

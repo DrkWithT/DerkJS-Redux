@@ -205,6 +205,9 @@ Array.prototype.constructor = Array;
 
 Function.prototype.constructor = Function;
 
+Error.prototype.name = "Error";
+Error.prototype.message = "";
+Error.prototype.constructor = Error;
 
 /// By the spec, freeze built-in prototypes:
 
@@ -214,3 +217,4 @@ Number.prototype.freeze();
 String.prototype.freeze();
 Array.prototype.freeze();
 Function.prototype.freeze();
+Error.prototype.freeze();
