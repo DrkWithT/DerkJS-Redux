@@ -61,6 +61,9 @@ int main(int argc, char* argv[]) {
     driver.add_js_lexical("while", TokenTag::keyword_while);
     driver.add_js_lexical("break", TokenTag::keyword_break);
     driver.add_js_lexical("continue", TokenTag::keyword_continue);
+    driver.add_js_lexical("throw", TokenTag::keyword_throw);
+    driver.add_js_lexical("try", TokenTag::keyword_try);
+    driver.add_js_lexical("catch", TokenTag::keyword_catch);
     driver.add_js_lexical("function", TokenTag::keyword_function);
     driver.add_js_lexical("prototype", TokenTag::keyword_prototype);
     driver.add_js_lexical("this", TokenTag::keyword_this);
@@ -115,6 +118,8 @@ int main(int argc, char* argv[]) {
     driver.add_stmt_emitter(StmtNodeTag::stmt_break, std::make_unique<Backend::BreakEmitter>());
     driver.add_stmt_emitter(StmtNodeTag::stmt_continue, std::make_unique<Backend::ContinueEmitter>());
     driver.add_stmt_emitter(StmtNodeTag::stmt_block, std::make_unique<Backend::BlockEmitter>());
+    driver.add_stmt_emitter(StmtNodeTag::stmt_throw, std::make_unique<Backend::ThrowEmitter>());
+    driver.add_stmt_emitter(StmtNodeTag::stmt_try_catch, std::make_unique<Backend::TryCatchEmitter>());
 
     /// 4.1 Prepare native prototypes as stubs. ///
 
@@ -124,6 +129,7 @@ int main(int argc, char* argv[]) {
     auto string_prototype_p = driver.add_native_object<Object>("String::prototype", object_prototype_p);
     auto array_prototype_p = driver.add_native_object<Object>("Array::prototype", object_prototype_p);
     auto function_prototype_p = driver.add_native_object<Object>("Function::prototype", object_prototype_p);
+    auto error_prototype_p = driver.add_native_object<Object>("Error::prototype", object_prototype_p);
 
     /// 4.2 Patch properties of native prototypes. These are VERY important for DerkJS to interpret certain scripts properly. ///
 
@@ -452,6 +458,15 @@ int main(int argc, char* argv[]) {
         Value {1}
     );
 
+    auto error_ctor_p = driver.add_native_object<NativeFunction>(
+        "",
+        error_prototype_p,
+        DerkJS::native_error_ctor,
+        function_prototype_p,
+        driver.get_length_key_str_p(),
+        Value {1}
+    );
+
     auto console_p = driver.add_native_object<Object>("", object_prototype_p);
     auto date_p = driver.add_native_object<Object>("", object_prototype_p);
 
@@ -492,6 +507,9 @@ int main(int argc, char* argv[]) {
 
     driver.patch_native_object(function_prototype_p, string_prototype_p, std::to_array(std::move(function_prototype_props)));
     driver.add_native_object_alias("Function", function_ctor_p);
+
+    // driver.patch_native_object(error_prototype_p, string_prototype_p, std::to_array(std::move(error_prototype_props)));
+    driver.add_native_object_alias("Error", error_ctor_p);
 
     driver.patch_native_object(console_p, string_prototype_p, std::to_array(std::move(console_props)));
     driver.add_native_object_alias("console", console_p);
