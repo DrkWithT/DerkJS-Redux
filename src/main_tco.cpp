@@ -59,6 +59,7 @@ int main(int argc, char* argv[]) {
     driver.add_js_lexical("else", TokenTag::keyword_else);
     driver.add_js_lexical("return", TokenTag::keyword_return);
     driver.add_js_lexical("while", TokenTag::keyword_while);
+    driver.add_js_lexical("for", TokenTag::keyword_for);
     driver.add_js_lexical("break", TokenTag::keyword_break);
     driver.add_js_lexical("continue", TokenTag::keyword_continue);
     driver.add_js_lexical("throw", TokenTag::keyword_throw);
@@ -115,6 +116,7 @@ int main(int argc, char* argv[]) {
     driver.add_stmt_emitter(StmtNodeTag::stmt_if, std::make_unique<Backend::IfEmitter>());
     driver.add_stmt_emitter(StmtNodeTag::stmt_return, std::make_unique<Backend::ReturnEmitter>());
     driver.add_stmt_emitter(StmtNodeTag::stmt_while, std::make_unique<Backend::WhileEmitter>());
+    driver.add_stmt_emitter(StmtNodeTag::stmt_for_stepped, std::make_unique<Backend::ForSteppedEmitter>());
     driver.add_stmt_emitter(StmtNodeTag::stmt_break, std::make_unique<Backend::BreakEmitter>());
     driver.add_stmt_emitter(StmtNodeTag::stmt_continue, std::make_unique<Backend::ContinueEmitter>());
     driver.add_stmt_emitter(StmtNodeTag::stmt_block, std::make_unique<Backend::BlockEmitter>());

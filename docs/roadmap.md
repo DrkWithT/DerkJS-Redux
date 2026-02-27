@@ -31,12 +31,12 @@
  28. ~~Refactor bytecode gen to Dep. Inj. modules for generating each expr / stmt.~~
  29. ~~Add prefix increment & decrement operator.~~
  30. ~~Support Polyfills.~~
- 31. Add exceptions (see `codegen.md`).
- 32. Improve operations for objects:
-    - Prevent `toString` from circular reference chasing with a `std::set` of entered parent addresses. Show all properties recursively.
-    - Modify `on_accessor_mut` method to take the property key.
+ 31. ~~Add exceptions (see `codegen.md`).~~
+ 32. Add for loops.
  33. `Object()` should box primitives later.
- 34. Add `__proto__` AKA `[[prototype]]` support:
+ 34. Improve operations for objects:
+    - Modify `on_accessor_mut` method to take the property key.
+ 35. Add `__proto__` AKA `[[prototype]]` support:
     - Add `__proto__` to parsing.
     - Add `__proto__` support to bytecode & compiler.
     - Add `__proto__` support to `Value` & VM.
