@@ -1,9 +1,9 @@
 function sumMultiplesOf(num, count) {
     var sum = 0;
 
-    for (var i = 0; i < count; ++i) {
-        console.log("Multiple #", i, " -> sum =", sum);
-        sum += num * i;
+    for (var i = 0; i <= count; ++i) {
+        sum = sum + num * i;
+        console.log("Multiple #", i, "-> sum =", sum);
     }
 
     return sum;
@@ -11,4 +11,4 @@ function sumMultiplesOf(num, count) {
 
 var ans = sumMultiplesOf(2, 10);
 
-console.log("PASS:", ans === 110, "ans =", ans);
+console.log("PASS:", ans === 110, "    ans =", ans);

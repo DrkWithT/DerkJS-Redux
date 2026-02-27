@@ -3,6 +3,7 @@ module;
 #include <utility>
 #include <memory>
 #include <optional>
+#include <variant>
 #include <vector>
 #include <string>
 #include <stdexcept>
@@ -863,41 +864,46 @@ export namespace DerkJS {
             );
         }
 
-        [[nodiscard]] auto parse_for_stepped() -> StmtPtr {
+        [[nodiscard]] auto parse_for_stepped(Lexer& lexer, const std::string& source) -> StmtPtr {
             const auto snippet_begin = m_current.start;
 
             consume_any(lexer, source); // skip 'for'
             consume(lexer, source, TokenTag::left_paren);
 
-            std::variant<Variables, ExprPtr> init_part;
+            std::variant<StmtPtr, ExprPtr> init_part;
 
             if (m_current.match_tag_to(TokenTag::semicolon)) {
                 // skip optional init-for here...
             } else if (m_current.match_tag_to(TokenTag::keyword_var)) {
                 init_part = parse_variable(lexer, source);
             } else {
-                init_part = parse_expr(lexer, source);
+                init_part = parse_compare(lexer, source);
+                consume(lexer, source, TokenTag::semicolon);
             }
-
-            consume(lexer, source, TokenTag::semicolon);
 
             ExprPtr check_expr;
 
             if (!m_current.match_tag_to(TokenTag::semicolon)) {
-                check_expr = parse_expr(lexer, source);
+                check_expr = parse_compare(lexer, source);
             }
 
             consume(lexer, source, TokenTag::semicolon);
 
             ExprPtr update_expr;
 
-            if (!m_current.match_tag_to(TokenTag::semicolon)) {
-                update_expr = parse_expr(lexer, source);
+            if (!m_current.match_tag_to(TokenTag::right_paren)) {
+                update_expr = parse_compare(lexer, source);
             }
 
             consume(lexer, source, TokenTag::right_paren);
 
-            auto body_stmt = parse_stmt(lexer, source);
+            StmtPtr body_stmt;
+
+            if (m_current.match_tag_to(TokenTag::left_brace)) {
+                body_stmt = parse_block(lexer, source);
+            } else {
+                body_stmt = parse_stmt(lexer, source);
+            }
 
             return std::make_unique<Stmt>(
                 ForStepped {
