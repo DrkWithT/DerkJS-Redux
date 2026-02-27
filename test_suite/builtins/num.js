@@ -5,7 +5,7 @@ var ok = 0;
 
 var xAsPrimitive = x.valueOf();
 
-if (xAsPrimitive === 42) {
+if (xAsPrimitive === 10.7525) {
     ++ok;
 } else {
     console.log("FAIL: unexpected x.valueOf():", xAsPrimitive);

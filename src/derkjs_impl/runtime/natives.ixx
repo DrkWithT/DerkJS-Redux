@@ -158,7 +158,7 @@ export namespace DerkJS {
     [[nodiscard]] auto native_number_value_of(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
         const auto number_this_p = dynamic_cast<const NumberBox*>(
-            ctx->stack.at(passed_rsbp).to_object()
+            ctx->stack.at(passed_rsbp - 1).to_object()
         );
 
         if (!number_this_p) {
@@ -178,7 +178,7 @@ export namespace DerkJS {
 
         const int passed_rsbp = ctx->rsbp;
         const auto number_this_p = dynamic_cast<const NumberBox*>(
-            ctx->stack.at(passed_rsbp).to_object()
+            ctx->stack.at(passed_rsbp - 1).to_object()
         );
 
         if (!number_this_p) {
