@@ -436,7 +436,7 @@ export namespace DerkJS {
 
             ObjectBase<Value>* this_arg_p = vm_context_p->heap.add_item(
                 vm_context_p->heap.get_next_id(),
-                std::make_unique<Object>(m_prototype.to_object())
+                std::make_unique<Object>(m_instance_prototype.to_object())
             );
 
             if (!this_arg_p) {

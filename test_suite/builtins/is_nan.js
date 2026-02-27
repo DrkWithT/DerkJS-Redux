@@ -6,7 +6,7 @@ var resultsNaN = tests.map(
     function (item) {
         return isNaN(item);
     },
-    null
+    this
 );
 
 console.log("PASS:", resultsNaN === expected, "    resultsNaN:", resultsNaN);

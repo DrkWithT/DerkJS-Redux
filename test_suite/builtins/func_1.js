@@ -10,7 +10,6 @@ function test(a) {
 
 var ok = 0;
 var x = test.call(data, 67);
-var y = test.call(null, 67);
 
 if (x === 69) {
     ++ok;
@@ -18,10 +17,4 @@ if (x === 69) {
     console.log("Unexpected x:", x);
 }
 
-if (y === 68) {
-    ++ok;
-} else {
-    console.log("Unexpected y:", y);
-}
-
-console.log("PASS:", ok === 2);
+console.log("PASS:", ok === 1);

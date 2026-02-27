@@ -32,7 +32,7 @@
  29. ~~Add prefix increment & decrement operator.~~
  30. ~~Support Polyfills.~~
  31. ~~Add exceptions (see `codegen.md`).~~
- 32. Add for loops.
+ 32. ~~Add for loops.~~
  33. `Object()` should box primitives later.
  34. Improve operations for objects:
     - Modify `on_accessor_mut` method to take the property key.
