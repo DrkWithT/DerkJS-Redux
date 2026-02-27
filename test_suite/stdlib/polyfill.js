@@ -150,7 +150,6 @@ Array.prototype.map = function (callbackFn, thisArg) {
     }
 
     while (pos < end) {
-        console.log("pos:", pos, " item:", this[pos], " thisArg:", thisArg);
         var discard = temp.push(callbackFn.call(thisArg, this[pos]));
         ++pos;
     }
