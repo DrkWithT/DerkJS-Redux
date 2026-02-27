@@ -689,6 +689,8 @@ export namespace DerkJS {
                 return parse_return(lexer, source);
             } else if (stmt_keyword == TokenTag::keyword_while) {
                 return parse_while(lexer, source);
+            } else if (stmt_keyword == TokenTag::keyword_for) {
+                return parse_for_stepped(lexer, source);
             } else if (stmt_keyword == TokenTag::keyword_break) {
                 return parse_break(lexer, source);
             } else if (stmt_keyword == TokenTag::keyword_continue) {
@@ -858,6 +860,56 @@ export namespace DerkJS {
                 snippet_begin,
                 m_current.start - snippet_begin + 1,
                 StmtNodeTag::stmt_while
+            );
+        }
+
+        [[nodiscard]] auto parse_for_stepped() -> StmtPtr {
+            const auto snippet_begin = m_current.start;
+
+            consume_any(lexer, source); // skip 'for'
+            consume(lexer, source, TokenTag::left_paren);
+
+            std::variant<Variables, ExprPtr> init_part;
+
+            if (m_current.match_tag_to(TokenTag::semicolon)) {
+                // skip optional init-for here...
+            } else if (m_current.match_tag_to(TokenTag::keyword_var)) {
+                init_part = parse_variable(lexer, source);
+            } else {
+                init_part = parse_expr(lexer, source);
+            }
+
+            consume(lexer, source, TokenTag::semicolon);
+
+            ExprPtr check_expr;
+
+            if (!m_current.match_tag_to(TokenTag::semicolon)) {
+                check_expr = parse_expr(lexer, source);
+            }
+
+            consume(lexer, source, TokenTag::semicolon);
+
+            ExprPtr update_expr;
+
+            if (!m_current.match_tag_to(TokenTag::semicolon)) {
+                update_expr = parse_expr(lexer, source);
+            }
+
+            consume(lexer, source, TokenTag::right_paren);
+
+            auto body_stmt = parse_stmt(lexer, source);
+
+            return std::make_unique<Stmt>(
+                ForStepped {
+                    .init = std::move(init_part),
+                    .check = std::move(check_expr),
+                    .update = std::move(update_expr),
+                    .stmt = std::move(body_stmt)
+                },
+                0,
+                snippet_begin,
+                m_current.start - snippet_begin + 1,
+                StmtNodeTag::stmt_for_stepped
             );
         }
 

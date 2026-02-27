@@ -19,6 +19,7 @@ export namespace DerkJS {
         keyword_else,
         keyword_return,
         keyword_while,
+        keyword_for,
         keyword_break,
         keyword_continue,
         keyword_throw,
