@@ -414,10 +414,9 @@ namespace DerkJS::Backend {
 
         [[nodiscard]] auto emit(BytecodeEmitterContext& context, const Stmt& node, const std::string& source) -> bool override {
             const auto& [error_name_token, block_try, block_catch] = std::get<TryCatch>(node.data);
+            std::string error_name_prepassed = error_name_token.as_string(source);
 
             if (context.m_prepass_vars) {
-                std::string error_name_prepassed = error_name_token.as_string(source);
-
                 auto error_name_slot = context.record_symbol(error_name_prepassed, RecordLocalOpt {}, FindLocalsOpt {});
 
                 // 1. When hoisting the var declaration, just set it to undefined 1st.
@@ -442,7 +441,12 @@ namespace DerkJS::Backend {
             context.encode_instruction(Opcode::djs_jump);
 
             // 3. Emit catch block (error name 1st)...
-            context.record_symbol(error_name_token.as_string(source), RecordLocalOpt {}, FindErrorVarOpt {});
+            context.m_local_maps.back().locals[error_name_prepassed] = Arg {
+                .n = 0,
+                .tag = Location::error_var,
+                .is_str_literal = false,
+                .from_closure = false
+            };
             context.encode_instruction(Opcode::djs_catch);
 
             if (!context.emit_stmt(*block_catch, source)) {
