@@ -73,7 +73,7 @@ namespace DerkJS {
             if (key.is_prototype_key()) {
                 return PropertyDescriptor<Value> {&key, &m_prototype, this, m_flags};
             } else if (auto property_entry_it = std::find_if(m_properties.begin(), m_properties.end(), [&key](const auto& prop) -> bool {
-                return prop.key == key;
+                return prop.key == key || prop.key.compare_as_object(key);
             }); property_entry_it != m_properties.end()) {
                 return PropertyDescriptor<Value> {&key, &property_entry_it->item, this, static_cast<uint8_t>(m_flags & property_entry_it->flags)};
             } else if ((m_flags & std::to_underlying(AttrMask::writable)) && allow_filler) {

@@ -130,13 +130,13 @@ export namespace DerkJS {
             return m_own_properties;
         }
 
-        [[maybe_unused]] auto get_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
+        [[maybe_unused]] auto get_property_value(const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
             if (key.is_prototype_key()) {
                 return PropertyDescriptor<Value> {&key, &m_prototype, this, m_flags};
             } else if (key.get_tag() == ValueTag::num_i32) {
                 return PropertyDescriptor<Value> {&key, get_item(key.to_num_i32().value(), allow_filler), this, m_flags};
             } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
-                return prop.key == key;
+                return prop.key == key || prop.key.compare_as_object(key);
             }); property_entry_it != m_own_properties.end()) {
                 return PropertyDescriptor<Value> {&key, &property_entry_it->item, this, static_cast<uint8_t>(m_flags & property_entry_it->flags)};
             } else if ((m_flags & std::to_underlying(AttrMask::writable)) && allow_filler) {
