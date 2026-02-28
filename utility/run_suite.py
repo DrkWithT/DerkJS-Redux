@@ -7,7 +7,7 @@ import os
 import subprocess
 
 DERKJS_TEST_SUITE_DIR = os.path.relpath('./test_suite')
-DERKJS_TEST_SUITE_GROUPS = ['basic', 'objects', 'special'] # TODO add 'objects' and 'builtins'
+DERKJS_TEST_SUITE_GROUPS = ['basic', 'objects', 'builtins'] # TODO add 'objects' and 'builtins'
 DERKJS_TEST_PROCESS_COUNT = 4;
 
 def get_test_names(test_suite_path: str = DERKJS_TEST_SUITE_DIR, folders: list[str] = DERKJS_TEST_SUITE_GROUPS) -> list[str]:
