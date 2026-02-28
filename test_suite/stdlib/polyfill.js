@@ -7,7 +7,12 @@
 /// Patch polyfills for built-in prototypes / functions:
 
 function isNaN(arg) {
-    return arg !== arg;
+    // handle '[]'
+    if (typeof arg === "object" && arg && Array.prototype.constructor.prototype.isPrototypeOf(arg)) {
+        return false;
+    }
+
+    return +arg !== +arg;
 }
 
 Object.prototype.toString = function () {

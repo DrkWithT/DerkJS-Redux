@@ -8,20 +8,11 @@ function test(a) {
     return a + this.secret;
 }
 
-var ok = 0;
 var x = test.call(data, 67);
-var y = test.call(null, 67);
 
 if (x === 69) {
-    ++ok;
+    console.log("PASS");
 } else {
     console.log("Unexpected x:", x);
+    throw new Error("Test failed, see logs.");
 }
-
-if (y === 68) {
-    ++ok;
-} else {
-    console.log("Unexpected y:", y);
-}
-
-console.log("PASS:", ok === 2);

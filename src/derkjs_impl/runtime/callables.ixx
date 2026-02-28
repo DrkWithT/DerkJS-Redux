@@ -346,7 +346,7 @@ export namespace DerkJS {
             if (key.is_prototype_key()) { // For prototype, not __proto__!
                 return PropertyDescriptor<Value> {&key, &m_instance_prototype, this, m_flags};
             } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
-                return prop.key == key;
+                return prop.key == key || prop.key.compare_as_object(key);
             }); property_entry_it != m_own_properties.end()) {
                 return PropertyDescriptor<Value> {&property_entry_it->key, &property_entry_it->item, this, static_cast<uint8_t>(m_flags & property_entry_it->flags)};
             } else if ((m_flags & std::to_underlying(AttrMask::writable)) && !m_prototype && allow_filler) {
@@ -436,7 +436,7 @@ export namespace DerkJS {
 
             ObjectBase<Value>* this_arg_p = vm_context_p->heap.add_item(
                 vm_context_p->heap.get_next_id(),
-                std::make_unique<Object>(m_prototype.to_object())
+                std::make_unique<Object>(m_instance_prototype.to_object())
             );
 
             if (!this_arg_p) {

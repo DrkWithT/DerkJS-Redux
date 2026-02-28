@@ -29,4 +29,8 @@ if (test.secret === 69) {
     console.log("Object.freeze failed on 'test', test.secret:", test.secret);
 }
 
-console.log("PASS:", ok === 2);
+if (ok === 2) {
+    console.log("PASS");
+} else {
+    throw new Error("Test failed, see logs.");
+}

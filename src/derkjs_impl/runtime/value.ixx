@@ -196,26 +196,40 @@ export namespace DerkJS {
             return m_tag == ValueTag::num_nan;
         }
 
+        [[nodiscard]] constexpr auto compare_as_object(const Value& other) const noexcept -> bool {
+            if (const auto self_tag = get_tag(), other_tag = other.get_tag(); self_tag != ValueTag::object || other_tag != ValueTag::object) {
+                return false;
+            }
+
+            return m_data.obj_p->operator==(*other.m_data.obj_p);
+        }
+
         [[nodiscard]] constexpr auto operator==(const Value& other) const noexcept -> bool {
-            if (const auto lhs_tag = get_tag(), rhs_tag = other.get_tag(); lhs_tag != rhs_tag && !is_reference() && !other.is_reference()) {
+            const auto self_v = (is_reference()) ? deep_clone() : *this;
+            const auto other_v = (other.is_reference()) ? other.deep_clone() : *this;
+
+            if (const auto lhs_tag = self_v.get_tag(), rhs_tag = other_v.get_tag(); lhs_tag != rhs_tag) {
                 return false;
             } else if (lhs_tag == ValueTag::undefined || lhs_tag == ValueTag::null) {
                 return true;
+            } else if (lhs_tag == ValueTag::num_nan || rhs_tag == ValueTag::num_nan) {
+                return false;
+            } else if (lhs_tag == ValueTag::boolean) {
+                /// NOTE: As per https://262.ecma-international.org/5.1/#sec-11.9.6, the boolean values in this case must be both T / both F. This is actually the negation of a Boolean XOR.
+                return (m_data.b ^ other.m_data.b) == 0;
             } else if (lhs_tag == ValueTag::num_i32) {
                 return m_data.i == other.m_data.i;
             } else if (lhs_tag == ValueTag::num_f64) {
                 return m_data.d == other.m_data.d;
-            } else if (lhs_tag == ValueTag::boolean) {
-                /// NOTE: As per https://262.ecma-international.org/5.1/#sec-11.9.6, the boolean values in this case must be both T / both F. This is actually the negation of a Boolean XOR.
-                return (m_data.b ^ other.m_data.b) == 0;
-            } else if (lhs_tag == ValueTag::object) {
-                /// TODO: add object comparison algorithm!
+            } else if (lhs_tag == ValueTag::object
+                    && m_data.obj_p->get_typename() == "string"
+                    && other.m_data.obj_p->get_typename() == "string") {
                 return m_data.obj_p->operator==(*other.m_data.obj_p);
-            } else if (lhs_tag == ValueTag::val_ref) {
-                return m_data.ref_p->operator==(other.deep_clone());
-            } else {
-                return false;
+            } else if (lhs_tag == ValueTag::object) {
+                return m_data.obj_p == other.m_data.obj_p;
             }
+
+            return false;
         }
 
         /// NOTE: This partly implements the Abstract Relational Comparison logic from https://262.ecma-international.org/5.1/#sec-11.8.5, but it only implements case 3 for now.
@@ -544,7 +558,7 @@ export namespace DerkJS {
             return *this;
         }
 
-        [[nodiscard]] constexpr auto to_boolean() const noexcept -> std::optional<bool> {
+        [[nodiscard]] constexpr auto to_boolean() const noexcept -> bool {
             return is_truthy();
         }
 
@@ -584,7 +598,7 @@ export namespace DerkJS {
             }
         }
 
-        [[nodiscard]] auto to_string() const noexcept -> std::optional<std::string> {
+        [[nodiscard]] auto to_string() const noexcept -> std::string {
             switch (m_tag) {
             case ValueTag::undefined: return "undefined";
             case ValueTag::null: return "null";
@@ -686,7 +700,7 @@ export namespace DerkJS {
                 /// TODO: fix this to not get __proto__- instead get a new m_instance_prototype field.
                 return PropertyDescriptor<Value> {&key, &m_prototype, this, m_flags};
             } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
-                return prop.key == key;
+                return prop.key == key || prop.key.compare_as_object(key);
             }); property_entry_it != m_own_properties.end()) {
                 return PropertyDescriptor<Value> {&key, &property_entry_it->item, this, static_cast<uint8_t>(m_flags & property_entry_it->flags)};
             } else if ((m_flags & std::to_underlying(AttrMask::writable)) && allow_filler) {

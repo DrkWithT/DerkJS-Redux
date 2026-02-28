@@ -185,7 +185,7 @@ export namespace DerkJS {
             std::println(
                 "const:{} -> {}",
                 constant_id,
-                temp_constant.to_string().value()
+                temp_constant.to_string()
             );
 
             ++constant_id;

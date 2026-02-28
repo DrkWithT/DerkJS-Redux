@@ -5,7 +5,7 @@ var ok = 0;
 if (!Object.prototype || !Object.prototype.constructor) {
     console.log("Bad Object.prototype / ctor:", Object.prototype, Object.prototype.constructor);
 } else {
-    ok = ok + 1;
+    ++ok;
 }
 
 var foo = Object({x: 1});
@@ -13,7 +13,11 @@ var foo = Object({x: 1});
 if (!foo.x) {
     console.log("foo is not an Object with 'x'.");
 } else {
-    ok = ok + 1;
+    ++ok;
 }
 
-console.log("PASS:", ok === 2);
+if (ok === 2) {   
+    console.log("PASS:");
+} else {
+    throw new Error("Test failed, see logs.");
+}

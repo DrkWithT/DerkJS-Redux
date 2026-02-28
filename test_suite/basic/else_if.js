@@ -15,4 +15,9 @@ function get_quad(x, y) {
 /* NOTE: This should be 3 */
 var ans = get_quad(-4.5, -1.5);
 
-console.log(ans === 3);
+if (ans === 3) {
+    console.log("PASS");
+} else {
+    console.log("Results:", ans);
+    throw new Error("Test failed, see logs.");
+}

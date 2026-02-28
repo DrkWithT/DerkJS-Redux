@@ -12,7 +12,11 @@ function consecutive_sum(n) {
     return sum;
 }
 
-/* Should be true */
-console.log("PASS:", consecutive_sum(10) === 55);
+var ans = consecutive_sum(10);
 
-return 0;
+if (ans === 55) {
+    console.log("PASS");
+} else {
+    console.log("Results:", ans);
+    throw new Error("Test failed, see logs.");
+}

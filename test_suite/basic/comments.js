@@ -24,4 +24,8 @@ if (a != 0) {
     ok = ok + 1;
 }
 
-console.log("PASS:", ok === 3);
+if (ok === 3) {
+    console.log("PASS");
+} else {
+    throw new Error("Test failed, see logs.");
+}

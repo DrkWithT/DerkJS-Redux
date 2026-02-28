@@ -2,9 +2,9 @@ module;
 
 #include <utility>
 #include <optional>
+#include <variant>
 #include <array>
 #include <vector>
-#include <variant>
 #include <forward_list>
 #include <flat_map>
 #include <string>
@@ -226,6 +226,89 @@ namespace DerkJS::Backend {
         }
     };
 
+    export class ForSteppedEmitter : public StmtEmitterBase<Stmt> { 
+    public:
+        ForSteppedEmitter() noexcept = default;
+
+        [[nodiscard]] auto emit(BytecodeEmitterContext& context, [[maybe_unused]] const Stmt& node, [[maybe_unused]] const std::string& source) -> bool override {
+            const auto& [init_part, check_expr, update_expr, loop_stmt] = std::get<ForStepped>(node.data);
+
+            if (std::holds_alternative<StmtPtr>(init_part)) {
+                if (!context.emit_stmt(*std::get<StmtPtr>(init_part), source)) {
+                    return false;
+                }
+            } else if (!context.m_prepass_vars && std::holds_alternative<ExprPtr>(init_part)) {
+                if (!context.emit_expr(*std::get<ExprPtr>(init_part), source)) {
+                    return false;
+                }
+            }
+
+            if (context.m_prepass_vars) {
+                return context.emit_stmt(*loop_stmt, source);
+            }
+
+            // 1. Begin for-step loop emission here, ensuring that its active jump positions are tracked. Any omitted constructs in its (init; condition; update) portion will become NOPs.
+            context.m_active_loops.push_front(ActiveLoop {
+                .exits = {},
+                .repeats = {}
+            });
+
+            const int begin_checked_loop_pos = context.m_code_blobs.front().size();
+
+            if (check_expr) {
+                if (!context.emit_expr(*check_expr, source)) {
+                    return false;
+                }
+            } else {
+                context.encode_instruction(Opcode::djs_nop);
+            }
+
+            const int exit_loop_jmp_pos = context.m_code_blobs.front().size();
+            context.encode_instruction(Opcode::djs_jump_else);
+
+            if (loop_stmt) {
+                if (!context.emit_stmt(*loop_stmt, source)) {
+                    return false;
+                }
+            } else {
+                context.encode_instruction(Opcode::djs_nop);
+            }
+
+            const int update_loop_pos = context.m_code_blobs.front().size();
+            if (update_expr) {
+                if (!context.emit_expr(*update_expr, source)) {
+                    return false;
+                }
+            } else {
+                context.encode_instruction(Opcode::djs_nop);
+            }
+
+            const int repeat_loop_jmp_pos = context.m_code_blobs.front().size();
+            context.encode_instruction(Opcode::djs_jump);
+
+            const int end_loop_pos = context.m_code_blobs.front().size();
+            context.encode_instruction(Opcode::djs_nop);
+
+            // 2. Backpatch for-loop break, continue, and normal jumps here!
+            const auto& [w_loop_exits, w_loop_repeats] = context.m_active_loops.front();
+
+            for (auto loop_break_pos : w_loop_exits) {
+                context.m_code_blobs.front().at(loop_break_pos).args[0] = end_loop_pos - loop_break_pos;
+            }
+
+            for (auto loop_continue_pos : w_loop_repeats) {
+                context.m_code_blobs.front().at(loop_continue_pos).args[0] = update_loop_pos - loop_continue_pos;
+            }
+
+            context.m_code_blobs.front().at(repeat_loop_jmp_pos).args[0] = begin_checked_loop_pos - repeat_loop_jmp_pos;
+            context.m_code_blobs.front().at(exit_loop_jmp_pos).args[0] = end_loop_pos - exit_loop_jmp_pos;
+
+            context.m_active_loops.pop_front();
+
+            return true;
+        }
+    };
+
     export class BreakEmitter : public StmtEmitterBase<Stmt> {
     public:
         BreakEmitter() noexcept = default;
@@ -304,6 +387,10 @@ namespace DerkJS::Backend {
         ThrowEmitter() noexcept = default;
 
         [[nodiscard]] auto emit(BytecodeEmitterContext& context, const Stmt& node, const std::string& source) -> bool override {
+            if (context.m_prepass_vars) {
+                return true;
+            }
+
             const auto& [error_data_expr] = std::get<Throw>(node.data);
 
             if (!context.emit_expr(*error_data_expr, source)) {
@@ -327,6 +414,20 @@ namespace DerkJS::Backend {
 
         [[nodiscard]] auto emit(BytecodeEmitterContext& context, const Stmt& node, const std::string& source) -> bool override {
             const auto& [error_name_token, block_try, block_catch] = std::get<TryCatch>(node.data);
+            std::string error_name_prepassed = error_name_token.as_string(source);
+
+            if (context.m_prepass_vars) {
+                auto error_name_slot = context.record_symbol(error_name_prepassed, RecordLocalOpt {}, FindLocalsOpt {});
+
+                // 1. When hoisting the var declaration, just set it to undefined 1st.
+                if (const auto placeholder_undefined_loc = context.lookup_symbol("undefined", FindGlobalConstsOpt {}); placeholder_undefined_loc) {
+                    context.encode_instruction(Opcode::djs_put_const, *placeholder_undefined_loc);
+                    context.m_local_maps.back().locals[error_name_prepassed] = *error_name_slot;
+                    return true;
+                }
+
+                return false;
+            }
 
             context.m_in_try_block = true;
 
@@ -340,7 +441,12 @@ namespace DerkJS::Backend {
             context.encode_instruction(Opcode::djs_jump);
 
             // 3. Emit catch block (error name 1st)...
-            context.record_symbol(error_name_token.as_string(source), RecordLocalOpt {}, FindErrorVarOpt {});
+            context.m_local_maps.back().locals[error_name_prepassed] = Arg {
+                .n = 0,
+                .tag = Location::error_var,
+                .is_str_literal = false,
+                .from_closure = false
+            };
             context.encode_instruction(Opcode::djs_catch);
 
             if (!context.emit_stmt(*block_catch, source)) {

@@ -21,7 +21,7 @@ export namespace DerkJS {
     enum class StmtNodeTag : uint8_t {
         stmt_expr_stmt,
         stmt_variables,
-        stmt_if, stmt_return, stmt_while, stmt_break, stmt_continue, stmt_block,
+        stmt_if, stmt_return, stmt_while, stmt_for_stepped, stmt_break, stmt_continue, stmt_block,
         stmt_throw, stmt_try_catch,
         last
     };
@@ -75,13 +75,14 @@ export namespace DerkJS {
     struct If;
     struct Return;
     struct While;
+    struct ForStepped; // for (<init>; <cond>; <update>) {}
     struct Break;
     struct Continue;
     struct Block;
     struct Throw;
     struct TryCatch;
 
-    using Stmt = StmtNode<ExprStmt, Variables, If, Return, While, Break, Continue, Block, Throw, TryCatch>;
+    using Stmt = StmtNode<ExprStmt, Variables, If, Return, While, ForStepped, Break, Continue, Block, Throw, TryCatch>;
     using StmtPtr = std::unique_ptr<Stmt>;
 
     template <typename ... ExprKind>
@@ -179,6 +180,13 @@ export namespace DerkJS {
     struct While {
         ExprPtr check;
         StmtPtr body;
+    };
+
+    struct ForStepped {
+        std::variant<StmtPtr, ExprPtr> init;
+        ExprPtr check;
+        ExprPtr update;
+        StmtPtr stmt;
     };
 
     struct Break {};

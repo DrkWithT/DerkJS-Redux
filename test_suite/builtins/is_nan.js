@@ -6,7 +6,15 @@ var resultsNaN = tests.map(
     function (item) {
         return isNaN(item);
     },
-    null
+    this
 );
 
-console.log("PASS:", resultsNaN === expected, "    resultsNaN:", resultsNaN);
+var resultsStr = resultsNaN.join();
+var expectedStr = expected.join();
+
+if (resultsStr === expectedStr) {
+    console.log("PASS");
+} else {
+    console.log("Bad match:", resultsStr, " != ", expectedStr);
+    throw new Error("Test failed, see logs.");
+}

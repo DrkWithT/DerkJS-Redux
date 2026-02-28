@@ -22,6 +22,37 @@ import runtime.value;
 import runtime.vm;
 
 export namespace DerkJS {
+    /// NOTE: Helps determine boxing JS object types for C++ "primitives"... @see `box_primitive_as_object()` ~ line 574.
+    template <typename T>
+    struct cxx_primitive_as_js_box_t {
+        using type = void;
+    };
+
+    template <>
+    struct cxx_primitive_as_js_box_t<bool> {
+        using type = BooleanBox;
+    };
+
+    template <>
+    struct cxx_primitive_as_js_box_t<int> {
+        using type = NumberBox;
+    };
+
+    template <>
+    struct cxx_primitive_as_js_box_t<double> {
+        using type = NumberBox;
+    };
+
+    /// NOTE: Helps determine the appropriate prototype pointer for the primitive boxing object type... @see ~ line 574.
+    template <typename T>
+    constexpr auto js_primitive_box_proto_tag_v = BasePrototypeID::last; // dud terminator of enum class
+
+    template <>
+    constexpr auto js_primitive_box_proto_tag_v<BooleanBox> = BasePrototypeID::boolean;
+
+    template <>
+    constexpr auto js_primitive_box_proto_tag_v<NumberBox> = BasePrototypeID::number;
+
     //// BEGIN global functions:
 
     [[nodiscard]] auto native_parse_int(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
@@ -30,7 +61,7 @@ export namespace DerkJS {
         constexpr auto default_radix = 10;
 
         const int passed_rsbp = ctx->rsbp;
-        std::string temp_str = ctx->stack.at(passed_rsbp + 1).to_string().value_or("");
+        std::string temp_str = ctx->stack.at(passed_rsbp + 1).to_string();
         auto radix_n = (argc == 2) ? static_cast<std::size_t>(ctx->stack.at(passed_rsbp + 2).to_num_i32().value_or(10)) : default_radix;
 
         if (radix_n < min_radix || radix_n > max_radix) {
@@ -49,7 +80,7 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_parse_float(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
-        std::string temp_str = ctx->stack.at(passed_rsbp + 1).to_string().value_or("");
+        std::string temp_str = ctx->stack.at(passed_rsbp + 1).to_string();
 
         try {
             ctx->stack.at(passed_rsbp - 1) = Value {std::stod(temp_str)};
@@ -92,7 +123,7 @@ export namespace DerkJS {
             return false;
         }
 
-        ctx->stack.at(passed_rsbp - 1) = boolean_this_p->get_native_value();
+        ctx->stack.at(passed_rsbp - 1) = boolean_this_p->get_native_value().to_boolean();
         return true;
     }
 
@@ -125,13 +156,14 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_number_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
-        ObjectBase<Value>* instance_prototype_p = ctx->stack.at(passed_rsbp).to_object()->get_instance_prototype();
-        const auto& arg_value = ctx->stack.at(passed_rsbp + 1);
 
+        ObjectBase<Value>* instance_prototype_p = ctx->stack.at(passed_rsbp).to_object()->get_instance_prototype();
         auto temp_number_ptr = std::make_unique<NumberBox>(
             Value { JSNaNOpt {} },
             instance_prototype_p
         );
+
+        Value arg_value = ctx->stack.at(passed_rsbp + 1).deep_clone();
 
         if (!temp_number_ptr) {
             ctx->status = VMErrcode::bad_heap_alloc;
@@ -148,6 +180,8 @@ export namespace DerkJS {
             temp_number_instance_p->get_native_value() = Value { arg_value.to_num_i32().value() };
         } else if (arg_value.get_tag() == ValueTag::num_f64) {
             temp_number_instance_p->get_native_value() = Value { arg_value.to_num_f64().value() };
+        } else if (arg_value.get_tag() == ValueTag::null) {
+            temp_number_instance_p->get_native_value() = Value {0};
         }
 
         ctx->stack.at(passed_rsbp - 1) = Value {temp_number_object_p};
@@ -158,7 +192,7 @@ export namespace DerkJS {
     [[nodiscard]] auto native_number_value_of(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
         const auto number_this_p = dynamic_cast<const NumberBox*>(
-            ctx->stack.at(passed_rsbp).to_object()
+            ctx->stack.at(passed_rsbp - 1).to_object()
         );
 
         if (!number_this_p) {
@@ -178,7 +212,7 @@ export namespace DerkJS {
 
         const int passed_rsbp = ctx->rsbp;
         const auto number_this_p = dynamic_cast<const NumberBox*>(
-            ctx->stack.at(passed_rsbp).to_object()
+            ctx->stack.at(passed_rsbp - 1).to_object()
         );
 
         if (!number_this_p) {
@@ -243,7 +277,7 @@ export namespace DerkJS {
         if (auto temp_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::make_unique<DynamicString>(
             instance_prototype_p,
             ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
-            ctx->stack.at(passed_rsbp + 1).to_string().value()
+            ctx->stack.at(passed_rsbp + 1).to_string()
         )); temp_str_p) {
             ctx->stack.at(passed_rsbp - 1) = Value {temp_str_p};
             return true;
@@ -378,7 +412,7 @@ export namespace DerkJS {
         for (auto passed_arg_local_offset = 0; passed_arg_local_offset < argc; ++passed_arg_local_offset) {
             std::print(
                 "{} ",
-                ctx->stack.at(passed_rsbp + passed_arg_local_offset + 1).to_string().value()
+                ctx->stack.at(passed_rsbp + passed_arg_local_offset + 1).to_string()
             );
         }
 
@@ -394,7 +428,7 @@ export namespace DerkJS {
         const auto passed_rsbp = ctx->rsbp;
         const auto& prompt_value = ctx->stack.at(passed_rsbp + 1);
 
-        std::print("{}", prompt_value.to_string().value());
+        std::print("{}", prompt_value.to_string());
 
         std::string temp_line;
         std::getline(std::cin, temp_line);
@@ -511,15 +545,15 @@ export namespace DerkJS {
         );
 
         if (!array_this_p->items().empty()) {
-            std::string delim = (argc == 1) ? ctx->stack.at(passed_rsbp + 1).to_string().value_or(",") : ",";
+            std::string delim = (argc == 1) ? ctx->stack.at(passed_rsbp + 1).to_string() : ",";
 
-            temp_str->append_back(array_this_p->items().front().to_string().value());
+            temp_str->append_back(array_this_p->items().front().to_string());
 
             for (int more_count = 1, self_len = array_this_p->items().size(); more_count < self_len; more_count++) {
                 temp_str->append_back(delim);
 
                 if (const auto& next_item = array_this_p->items().at(more_count); next_item.get_tag() != ValueTag::undefined && next_item.get_tag() != ValueTag::null) {
-                    temp_str->append_back(next_item.to_string().value());
+                    temp_str->append_back(next_item.to_string());
                 }
             }
         }
@@ -540,34 +574,81 @@ export namespace DerkJS {
 
     /// Object.prototype impls:
 
+    /// NOTE: This is a helper for `native_object_create()` ~ `natives.ixx:569`... This should make the logic to box booleans and numbers as objects on the heap before getting a non-owning pointer to "reference" them.
+    /// TODO: This may need a refactor to treat all numbers as double-precision floats gahh
+    template <typename PrimitiveType>
+    [[nodiscard]] auto box_primitive_as_object(ExternVMCtx* ctx, const Value& argument_value) -> ObjectBase<Value>* {
+        using deduced_derkjs_box_t = typename cxx_primitive_as_js_box_t<PrimitiveType>::type;
+
+        constexpr auto boxing_prototype_id = static_cast<unsigned int>(js_primitive_box_proto_tag_v<deduced_derkjs_box_t>);
+
+        ObjectBase<Value>* boxing_prototype_p = ctx->base_protos.at(boxing_prototype_id);
+
+        if constexpr (std::is_same_v<deduced_derkjs_box_t, BooleanBox>) {
+            return ctx->heap.add_item(
+                ctx->heap.get_next_id(), std::make_unique<deduced_derkjs_box_t>(
+                    argument_value.to_boolean(),
+                    boxing_prototype_p
+                )
+            );
+        } else if constexpr (std::is_same_v<deduced_derkjs_box_t, NumberBox>) {
+            return ctx->heap.add_item(
+                ctx->heap.get_next_id(), std::make_unique<deduced_derkjs_box_t>(
+                    Value {argument_value.to_num_f64().value_or(0.0)},
+                    boxing_prototype_p
+                )
+            );
+        } else {
+            return nullptr;
+        }
+    }
+
     /// TODO: fix this to wrap primitives in object form / forward objects as-is.
     [[nodiscard]] auto native_object_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        Value target_arg = ctx->stack.at(passed_rsbp + 1);
 
-        if (auto target_as_object_p = target_arg.to_object(); target_as_object_p) {   
-            ctx->stack.at(passed_rsbp - 1) = Value {target_as_object_p};
+        if (auto argument_value = ctx->stack.at(passed_rsbp + 1).deep_clone(); argc == 1) {
+            switch (argument_value.get_tag()) {
+            case ValueTag::boolean:
+                ctx->stack.at(passed_rsbp - 1) = Value {
+                    box_primitive_as_object<bool>(ctx, argument_value)
+                };
+                break;
+            case ValueTag::num_i32:
+            case ValueTag::num_f64:
+                ctx->stack.at(passed_rsbp - 1) = Value {
+                    box_primitive_as_object<double>(ctx, argument_value)
+                };
+                break;
+            case ValueTag::object:
+                ctx->stack.at(passed_rsbp - 1) = argument_value;
+                break;
+            default:
+                ctx->stack.at(passed_rsbp - 1) = Value {JSNullOpt {}};
+                break;
+            }
+
             return true;
         }
 
         ctx->status = VMErrcode::bad_operation;
-        std::println(std::cerr, "Object.constructor: Non-object arguments to Object ctor are unsupported.");
-
         return false;
     }
 
     [[nodiscard]] auto native_object_create(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        auto taken_proto_p = ctx->stack.at(passed_rsbp + 1).to_object();
+        ObjectBase<Value>* taken_proto_p = ctx->stack.at(passed_rsbp + 1).to_object();
 
-        if (auto result_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::make_unique<Object>(taken_proto_p)); result_p) {
+        if (auto result_p = ctx->heap.add_item(
+            ctx->heap.get_next_id(),
+            std::make_unique<Object>(taken_proto_p)
+        ); result_p) {
             ctx->stack.at(passed_rsbp - 1) = Value {result_p};
             return true;
         }
 
         ctx->status = VMErrcode::bad_heap_alloc;
         std::println(std::cerr, "Failed to allocate JS object on the heap.");
-
         return false;
     }
 
@@ -673,10 +754,10 @@ export namespace DerkJS {
         
         /// NOTE: ensure exit of just the callback when its frame is popped...
         ctx->ending_frame_depth = ctx->frames.size();
-        /// NOTE: For the change in ES3, an undefined / null thisArg must default to globalThis, accessible in DerkJS via ctx->stack.at(0).
-        if (const auto this_arg_tag = ctx->stack.at(passed_rsbp).get_tag(); this_arg_tag == ValueTag::undefined || this_arg_tag == ValueTag::null) {
-            ctx->stack.at(passed_rsbp) = ctx->stack.at(0);
-        }
+        /// NOTE: For the change in ES3, an undefined / null thisArg must default to globalThis, accessible in DerkJS via ctx->stack.at(0). TODO: remove implicit globalThis for null / undefined thisArg...
+        // if (const auto this_arg_tag = ctx->stack.at(passed_rsbp).get_tag(); this_arg_tag == ValueTag::undefined || this_arg_tag == ValueTag::null) {
+        //     ctx->stack.at(passed_rsbp) = ctx->stack.at(0);
+        // }
 
         if (!maybe_callable_p->call(ctx, argc - 1, true)) {
             std::println(std::cerr, "Function.call: Cannot invoke non-function object.");

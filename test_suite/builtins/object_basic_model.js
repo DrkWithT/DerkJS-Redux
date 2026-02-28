@@ -9,8 +9,8 @@ var o = new Obj();
 o.f = f;
 
 if (o.f() != 1) {
-    console.log("Invalid o.f() result:", o.f());
-    ok = false;
+    console.log("Invalid o.f(), expected 1:", o.f());
+    throw new Error("Test failed, see logs.");
+} else {
+    console.log("PASS");
 }
-
-console.log("PASS:", ok);

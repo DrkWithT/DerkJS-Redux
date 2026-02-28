@@ -18,9 +18,31 @@ Sequence.prototype.next = function() {
 };
 
 var odds = new Sequence(1);
+var x = odds.next();
+var y = odds.next();
+var z = odds.next();
+var ok = 0;
 
-console.log(odds.next() == 1);
-console.log(odds.next() == 3);
-console.log(odds.next() == 5);
+if (x === 1) {
+    ++ok;
+} else {
+    console.log("Unexpected value by odds:", x);
+}
 
-return 0;
+if (y === 3) {
+    ++ok;
+} else {
+    console.log("Unexpected value by odds:", y);
+}
+
+if (z === 5) {
+    ++ok;
+} else {
+    console.log("Unexpected value by odds:", z);
+}
+
+if (ok === 3) {
+    console.log("PASS");
+} else {
+    throw new Error("Test failed, see logs.");
+}

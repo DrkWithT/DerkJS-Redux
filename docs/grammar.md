@@ -23,12 +23,13 @@
 ### Grammar (Statements)
 ```
 <program> = <stmt>+
-<stmt> = <variable> | <if> | <return> | <break> | <continue> | <throw> | <try-catch> | <while> | <function> | <expr-stmt>
+<stmt> = <variable> | <if> | <return> | <break> | <continue> | <throw> | <try-catch> | <while> | <for> | <function> | <expr-stmt>
 <variable> = "var" <var-decl> ( "," <var-decl>)* ";"
 <var-decl> = <identifier> ( "=" <expr> )?
 <if> = "if" "(" <expr> ")" <block> ( "else" ( <block> | <if> | <return> | <expr-stmt> ) )? ; maybe add dangling while loops later, meh
 <return> = "return" <expr> ";"
 <while> = "while" "(" <expr> ")" <block>   ; just have loops contain block bodies for simplicity!
+<for> = "for" "(" <expr> | <variable>? ";" <expr>? ";" <expr>? ")" <stmt>   ; omitted check-expr becomes `djs_push <true>` but other parts become NOPs.
 <break> = "break" ";"
 <continue> = "continue" ";"
 <throw> = "throw" <expr> ";"

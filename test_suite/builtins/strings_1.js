@@ -24,4 +24,8 @@ if (a.substr(0, 3) === "one") {
     console.log("Unexpected a.substr(0, 3): not 'one'.");
 }
 
-console.log("PASS:", ok === 3);
+if (ok === 3) {   
+    console.log("PASS");
+} else {
+    throw new Error("Test failed, see logs.");
+}

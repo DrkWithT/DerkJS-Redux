@@ -5,7 +5,7 @@ var ok = 0;
 
 var xAsPrimitive = x.valueOf();
 
-if (xAsPrimitive === 42) {
+if (xAsPrimitive === 10.7525) {
     ++ok;
 } else {
     console.log("FAIL: unexpected x.valueOf():", xAsPrimitive);
@@ -19,4 +19,8 @@ if (xToHundredth === "10.75") {
     console.log("FAIL: unexpected xToHundredth:", xToHundredth);
 }
 
-console.log("PASS:", ok === 2);
+if (ok === 2) {   
+    console.log("PASS");
+} else {
+    throw new Error("Test failed, see logs.");
+}
