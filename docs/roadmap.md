@@ -42,7 +42,7 @@
     - Number methods
     - String methods
     - Object methods
-    - Date methods
+    - Date methods: toString?? toDateString??
     - Math methods
  36. Add `__proto__` AKA `[[prototype]]` support:
     - Add `__proto__` to parsing.
