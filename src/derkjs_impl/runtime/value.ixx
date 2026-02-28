@@ -584,7 +584,7 @@ export namespace DerkJS {
             }
         }
 
-        [[nodiscard]] auto to_string() const noexcept -> std::optional<std::string> {
+        [[nodiscard]] auto to_string() const noexcept -> std::string {
             switch (m_tag) {
             case ValueTag::undefined: return "undefined";
             case ValueTag::null: return "null";

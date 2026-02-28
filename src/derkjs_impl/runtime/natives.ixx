@@ -30,7 +30,7 @@ export namespace DerkJS {
         constexpr auto default_radix = 10;
 
         const int passed_rsbp = ctx->rsbp;
-        std::string temp_str = ctx->stack.at(passed_rsbp + 1).to_string().value_or("");
+        std::string temp_str = ctx->stack.at(passed_rsbp + 1).to_string();
         auto radix_n = (argc == 2) ? static_cast<std::size_t>(ctx->stack.at(passed_rsbp + 2).to_num_i32().value_or(10)) : default_radix;
 
         if (radix_n < min_radix || radix_n > max_radix) {
@@ -49,7 +49,7 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_parse_float(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
-        std::string temp_str = ctx->stack.at(passed_rsbp + 1).to_string().value_or("");
+        std::string temp_str = ctx->stack.at(passed_rsbp + 1).to_string();
 
         try {
             ctx->stack.at(passed_rsbp - 1) = Value {std::stod(temp_str)};
@@ -243,7 +243,7 @@ export namespace DerkJS {
         if (auto temp_str_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::make_unique<DynamicString>(
             instance_prototype_p,
             ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
-            ctx->stack.at(passed_rsbp + 1).to_string().value()
+            ctx->stack.at(passed_rsbp + 1).to_string()
         )); temp_str_p) {
             ctx->stack.at(passed_rsbp - 1) = Value {temp_str_p};
             return true;
@@ -378,7 +378,7 @@ export namespace DerkJS {
         for (auto passed_arg_local_offset = 0; passed_arg_local_offset < argc; ++passed_arg_local_offset) {
             std::print(
                 "{} ",
-                ctx->stack.at(passed_rsbp + passed_arg_local_offset + 1).to_string().value()
+                ctx->stack.at(passed_rsbp + passed_arg_local_offset + 1).to_string()
             );
         }
 
@@ -394,7 +394,7 @@ export namespace DerkJS {
         const auto passed_rsbp = ctx->rsbp;
         const auto& prompt_value = ctx->stack.at(passed_rsbp + 1);
 
-        std::print("{}", prompt_value.to_string().value());
+        std::print("{}", prompt_value.to_string());
 
         std::string temp_line;
         std::getline(std::cin, temp_line);
@@ -511,15 +511,15 @@ export namespace DerkJS {
         );
 
         if (!array_this_p->items().empty()) {
-            std::string delim = (argc == 1) ? ctx->stack.at(passed_rsbp + 1).to_string().value_or(",") : ",";
+            std::string delim = (argc == 1) ? ctx->stack.at(passed_rsbp + 1).to_string() : ",";
 
-            temp_str->append_back(array_this_p->items().front().to_string().value());
+            temp_str->append_back(array_this_p->items().front().to_string());
 
             for (int more_count = 1, self_len = array_this_p->items().size(); more_count < self_len; more_count++) {
                 temp_str->append_back(delim);
 
                 if (const auto& next_item = array_this_p->items().at(more_count); next_item.get_tag() != ValueTag::undefined && next_item.get_tag() != ValueTag::null) {
-                    temp_str->append_back(next_item.to_string().value());
+                    temp_str->append_back(next_item.to_string());
                 }
             }
         }

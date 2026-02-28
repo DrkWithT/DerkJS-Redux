@@ -604,14 +604,14 @@ namespace DerkJS::Backend {
         sout << "(function (";
 
         if (param_names_n >= 1) {
-            sout << string_args.front().to_string().value();
+            sout << string_args.front().to_string();
         }
 
         for (int arg_pos = 1; arg_pos < param_names_n; arg_pos++) {
-            sout << ", " << string_args[arg_pos].to_string().value();
+            sout << ", " << string_args[arg_pos].to_string();
         }
 
-        sout << ") {" << string_args.back().to_string().value() << "});";
+        sout << ") {" << string_args.back().to_string() << "});";
 
         return compiler_ptr->compile_function_snippet(sout.str(), *lexer_ptr, *parser_ptr, *vm_heap_ptr);
     }

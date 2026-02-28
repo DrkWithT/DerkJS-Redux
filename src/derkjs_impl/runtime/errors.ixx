@@ -133,7 +133,7 @@ namespace DerkJS {
 
         /// NOTE: For default printing of objects, etc. to the console (stdout). 
         [[nodiscard]] auto as_string() const -> std::string override {
-            return std::format("Error: {}", m_message.to_string().value());
+            return std::format("Error: {}", m_message.to_string());
         }
 
         // [[nodiscard]] auto field_iter() noexcept -> FieldIterator<PropertyDescriptor<V>> override {

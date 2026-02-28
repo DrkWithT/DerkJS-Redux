@@ -497,8 +497,8 @@ namespace DerkJS {
         auto result_p = new DynamicString {
             ctx.stack[ctx.rsp].to_object()->get_prototype(),
             Value {ctx.base_protos[static_cast<unsigned int>(BasePrototypeID::extra_length_key)]},
-            ctx.stack[ctx.rsp].to_string().value()};
-        result_p->append_back(ctx.stack[ctx.rsp - 1].to_string().value());
+            ctx.stack[ctx.rsp].to_string()};
+        result_p->append_back(ctx.stack[ctx.rsp - 1].to_string());
 
         if (auto temp_str_p = ctx.heap.add_item(ctx.heap.get_next_id(), result_p); !temp_str_p) {
             ctx.status = VMErrcode::bad_heap_alloc;

@@ -189,7 +189,7 @@ export namespace DerkJS {
                 return;
             }
 
-            if (value.to_string().value_or("") == "length") {
+            if (value.to_string() == "length") {
                 const int next_length = value.to_num_i32().value_or(0);
                 resize_by_length(std::max(0, next_length));
             }
@@ -219,7 +219,7 @@ export namespace DerkJS {
 
             if (!m_items.empty()) {
                 for (int pending_items = m_items.size(); const auto& temp_item : m_items) {
-                    sout << temp_item.to_string().value();
+                    sout << temp_item.to_string();
                     --pending_items;
                     
                     if (pending_items <= 0) {

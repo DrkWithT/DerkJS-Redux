@@ -269,7 +269,7 @@ export namespace DerkJS::Core {
                 std::println(
                     std::cerr, "{}\n{}",
                     error_code_msgs.at(static_cast<int>(vm_status)),
-                    vm.peek_leftover_error().to_string().value()
+                    vm.peek_leftover_error().to_string()
                 );
                 return 1;
             case VMErrcode::ok:

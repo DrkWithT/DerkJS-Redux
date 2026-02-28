@@ -135,7 +135,7 @@ namespace DerkJS {
         /// NOTE: For default printing of objects, etc. to the console (stdout). 
         [[nodiscard]] auto as_string() const -> std::string override {
             /// NOTE: Here's a temporary hack before radix-based stringification.
-            return m_value.to_string().value();
+            return m_value.to_string();
         }
 
         // [[nodiscard]] auto field_iter() noexcept -> FieldIterator<PropertyDescriptor<V>> override {
