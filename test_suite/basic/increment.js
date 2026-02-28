@@ -32,4 +32,8 @@ if (test3.secret === 69) {
     console.log("++test3 failed:", test3);
 }
 
-console.log("PASS:", ok === 3);
+if (ok === 3) {
+    console.log("PASS");
+} else {
+    throw new Error("Test failed, see logs.");
+}

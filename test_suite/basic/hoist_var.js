@@ -7,4 +7,9 @@ if (secret1 > 0) {
 }
 
 // Must be `true`
-console.log("PASS:", secret1 * secret2 === 42);
+if (secret1 * secret2 === 42) {
+    console.log("PASS");
+} else {
+    console.log("Results:", secret1, secret2);
+    throw new Error("Test failed, see logs.");
+}
