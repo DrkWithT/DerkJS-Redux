@@ -18,4 +18,8 @@ if (testStr === "1234") {
     console.log("String ctor failed, invalid testStr:", testStr);
 }
 
-console.log("PASS:", ok === 2);
+if (ok === 2) {   
+    console.log("PASS");
+} else {
+    throw new Error("Test failed, see logs.");
+}

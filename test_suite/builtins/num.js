@@ -19,4 +19,8 @@ if (xToHundredth === "10.75") {
     console.log("FAIL: unexpected xToHundredth:", xToHundredth);
 }
 
-console.log("PASS:", ok === 2);
+if (ok === 2) {   
+    console.log("PASS");
+} else {
+    throw new Error("Test failed, see logs.");
+}

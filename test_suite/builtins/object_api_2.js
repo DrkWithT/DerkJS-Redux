@@ -20,4 +20,8 @@ if (testObject.hasOwnProperty("data")) {
     console.log("FAIL: testObject.data is missing.");
 }
 
-console.log("PASS:", ok === 2);
+if (ok === 2) {
+    console.log("PASS");
+} else {
+    throw new Error("Test failed, see logs.");
+}

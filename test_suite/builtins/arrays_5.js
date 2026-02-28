@@ -16,4 +16,9 @@ function updateChecks(arg) {
 var test = [1, 2, 3, 4, 5, 6];
 var discard = test.forEach(updateChecks, info);
 
-console.log("PASS:", info.calls === 6, info.total === 21);
+if (info.calls === 6 && info.total === 21) {   
+    console.log("PASS");
+} else {
+    console.log("Wrong results of info (should be 6, 21): ", info.calls, info.total);
+    throw new Error("Test failed, see logs.");
+}

@@ -7,14 +7,14 @@ var extraTest = "  foo bar  ";
 if (!String.prototype.substring || !String.prototype.trim) {
     console.log("Missing String.prototype.substring, trim:", String.prototype.substring, String.prototype.trim);
 } else {
-    ok = ok + 1;
+    ++ok;
 }
 
 // Maybe I should note the edge case of a not-passed end index.
 var testedSubstr = test.substring(6, 11);
 
 if (testedSubstr === "World") {
-    ok = ok + 1;
+    ++ok;
 } else {
     console.log("Unexpected testedSubstr, expected 'World':", testedSubstr);
 }
@@ -22,7 +22,7 @@ if (testedSubstr === "World") {
 var testedSubstr2 = test.substring(1, 5);
 
 if (testedSubstr2 === "ello") {
-    ok = ok + 1;
+    ++ok;
 } else {
     console.log("Unexpected testedSubstr2, expected 'ello':", testedSubstr2);
 }
@@ -30,9 +30,13 @@ if (testedSubstr2 === "ello") {
 var trimmedExtra = extraTest.trim();
 
 if (trimmedExtra === "foo bar") {
-    ok = ok + 1;
+    ++ok;
 } else {
     console.log("Unexpected trimmedExtra, expected 'foo bar':", trimmedExtra);
 }
 
-console.log("PASS:", ok === 4);
+if (ok === 4) {
+    console.log("PASS");
+} else {
+    throw new Error("Test failed, see logs.");
+}

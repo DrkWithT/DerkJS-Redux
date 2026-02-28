@@ -13,13 +13,17 @@ var ok = 0;
 if (foo.length === 0) {
     ++ok;
 } else {
-    console.log("ERROR: foo.length is not 0.");
+    console.log("foo.length is not 0.");
 }
 
 if (bar.length === 3) {
     ++ok;
 } else {
-    console.log("ERROR: bar.length is not 3.");
+    console.log("bar.length is not 3.");
 }
 
-console.log("PASS:", ok === 2);
+if (ok === 2) {   
+    console.log("PASS");
+} else {
+    throw new Error("Test failed, see logs.");
+}

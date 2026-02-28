@@ -8,7 +8,7 @@ var noBrainrot = brainrot.filter(function (arg) { return typeof arg !== "number"
 var noBrainrotStr = noBrainrot.join();
 
 if (noBrainrotStr === "false,,true,") {
-    ok = ok + 1;
+    ++ok;
 } else {
     console.log("Wrong brainrot.filter result:", noBrainrotStr);
 }
@@ -19,9 +19,13 @@ var squaresTo3 = counts.map(function (arg) {
 var squaresTo3Str = squaresTo3.join(); 
 
 if (squaresTo3Str === "1,4,9") {
-    ok = ok + 1;
+    ++ok;
 } else {
     console.log("Wrong counts.map(<square fn>) result:", squaresTo3Str);
 }
 
-console.log("PASS:", ok === 2);
+if (ok === 2) {
+    console.log("PASS");
+} else {
+    throw new Error("Test failed, see logs.");
+}

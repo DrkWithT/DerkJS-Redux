@@ -9,5 +9,9 @@ var num_1 = {
 
 num_1.x = 2;
 
-/* Should be 5 */
-console.log("PASS:", num_1.x + num_1.x + 1 === 5);
+if (num_1.x === 2) {
+    console.log("PASS");
+} else {
+    console.log("num_1.x != 2:", num_1.x);
+    throw new Error("Test failed, see logs.");
+}

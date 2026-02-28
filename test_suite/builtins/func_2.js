@@ -8,4 +8,8 @@ var addTwo = new Function("a", "b", "return a + b;");
 
 var answer2 = addTwo(10, 20);
 
-console.log("PASS:", answer1 === 42, answer2 === 30);
+if (answer1 === 42 && answer2 === 30) {   
+    console.log("PASS");
+} else {
+    throw new Error("Test failed, see logs.");
+}
