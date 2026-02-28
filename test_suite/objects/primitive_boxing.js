@@ -9,7 +9,7 @@ if (!wrappedTrue.valueOf()) {
 
 var wrappedFalsy = new Boolean(null);
 
-if (!wrappedFalsy.valueOf()) {
+if (wrappedFalsy.valueOf()) {
     console.log("Boolean wrap failed- wrappedFalsy.valueOf() should be false.");
     return 1;
 }
@@ -24,7 +24,7 @@ if (wrapX.valueOf() != 69) {
 var wrapY = new Number(null);
 
 if (wrapY.valueOf() != 0) {
-    console.log("Number wrap failed- wrapY.valueOf() should be 0.");
+    console.log("Number wrap failed- wrapY.valueOf() should be 0:", wrapY.valueOf());
     return 1;
 }
 

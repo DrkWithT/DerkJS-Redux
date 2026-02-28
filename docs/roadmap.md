@@ -33,17 +33,17 @@
  30. ~~Support Polyfills.~~
  31. ~~Add exceptions (see `codegen.md`).~~
  32. ~~Add for loops.~~
- 33. `Object()` should box primitives later & `Function.prototype` should be a dud function (return `undefined` & length = `0`).
+ 33. `Function.prototype` should be a dud function (return `undefined` & length = `0`).
  34. Improve operations for objects:
     - Modify `on_accessor_mut` method to take the property key.
     - Improve `as_string` method of object-base... Pretty print object literal / `[object <class name> ... ]`
-    - Refactor `Value::to_string` to just return `std::string`.
  35. Add more support for built-in methods:
     - Number methods
     - String methods
-    - Object methods
+    - Object methods: getPrototypeOf, seal, isFrozen, isSealed
     - Date methods: toString?? toDateString??
-    - Math methods
+    - Math methods: pow, cos, sin, tan, log, logn, floor, ceil??
+    - Array methods: sort, splice??
  36. Add `__proto__` AKA `[[prototype]]` support:
     - Add `__proto__` to parsing.
     - Add `__proto__` support to bytecode & compiler.
