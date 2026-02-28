@@ -544,7 +544,7 @@ export namespace DerkJS {
             return *this;
         }
 
-        [[nodiscard]] constexpr auto to_boolean() const noexcept -> std::optional<bool> {
+        [[nodiscard]] constexpr auto to_boolean() const noexcept -> bool {
             return is_truthy();
         }
 

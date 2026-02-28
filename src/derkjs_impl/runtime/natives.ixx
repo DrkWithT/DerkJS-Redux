@@ -22,6 +22,37 @@ import runtime.value;
 import runtime.vm;
 
 export namespace DerkJS {
+    /// NOTE: Helps determine boxing JS object types for C++ "primitives"... @see `box_primitive_as_object()` ~ line 574.
+    template <typename T>
+    struct cxx_primitive_as_js_box_t {
+        using type = void;
+    };
+
+    template <>
+    struct cxx_primitive_as_js_box_t<bool> {
+        using type = BooleanBox;
+    };
+
+    template <>
+    struct cxx_primitive_as_js_box_t<int> {
+        using type = NumberBox;
+    };
+
+    template <>
+    struct cxx_primitive_as_js_box_t<double> {
+        using type = NumberBox;
+    };
+
+    /// NOTE: Helps determine the appropriate prototype pointer for the primitive boxing object type... @see ~ line 574.
+    template <typename T>
+    constexpr auto js_primitive_box_proto_tag_v = BasePrototypeID::last; // dud terminator of enum class
+
+    template <>
+    constexpr auto js_primitive_box_proto_tag_v<BooleanBox> = BasePrototypeID::boolean;
+
+    template <>
+    constexpr auto js_primitive_box_proto_tag_v<NumberBox> = BasePrototypeID::number;
+
     //// BEGIN global functions:
 
     [[nodiscard]] auto native_parse_int(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
@@ -92,7 +123,7 @@ export namespace DerkJS {
             return false;
         }
 
-        ctx->stack.at(passed_rsbp - 1) = boolean_this_p->get_native_value();
+        ctx->stack.at(passed_rsbp - 1) = boolean_this_p->get_native_value().to_boolean();
         return true;
     }
 
@@ -125,13 +156,14 @@ export namespace DerkJS {
 
     [[nodiscard]] auto native_number_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
-        ObjectBase<Value>* instance_prototype_p = ctx->stack.at(passed_rsbp).to_object()->get_instance_prototype();
-        const auto& arg_value = ctx->stack.at(passed_rsbp + 1);
 
+        ObjectBase<Value>* instance_prototype_p = ctx->stack.at(passed_rsbp).to_object()->get_instance_prototype();
         auto temp_number_ptr = std::make_unique<NumberBox>(
             Value { JSNaNOpt {} },
             instance_prototype_p
         );
+
+        Value arg_value = ctx->stack.at(passed_rsbp + 1).deep_clone();
 
         if (!temp_number_ptr) {
             ctx->status = VMErrcode::bad_heap_alloc;
@@ -148,6 +180,8 @@ export namespace DerkJS {
             temp_number_instance_p->get_native_value() = Value { arg_value.to_num_i32().value() };
         } else if (arg_value.get_tag() == ValueTag::num_f64) {
             temp_number_instance_p->get_native_value() = Value { arg_value.to_num_f64().value() };
+        } else if (arg_value.get_tag() == ValueTag::null) {
+            temp_number_instance_p->get_native_value() = Value {0};
         }
 
         ctx->stack.at(passed_rsbp - 1) = Value {temp_number_object_p};
@@ -540,34 +574,81 @@ export namespace DerkJS {
 
     /// Object.prototype impls:
 
+    /// NOTE: This is a helper for `native_object_create()` ~ `natives.ixx:569`... This should make the logic to box booleans and numbers as objects on the heap before getting a non-owning pointer to "reference" them.
+    /// TODO: This may need a refactor to treat all numbers as double-precision floats gahh
+    template <typename PrimitiveType>
+    [[nodiscard]] auto box_primitive_as_object(ExternVMCtx* ctx, const Value& argument_value) -> ObjectBase<Value>* {
+        using deduced_derkjs_box_t = typename cxx_primitive_as_js_box_t<PrimitiveType>::type;
+
+        constexpr auto boxing_prototype_id = static_cast<unsigned int>(js_primitive_box_proto_tag_v<deduced_derkjs_box_t>);
+
+        ObjectBase<Value>* boxing_prototype_p = ctx->base_protos.at(boxing_prototype_id);
+
+        if constexpr (std::is_same_v<deduced_derkjs_box_t, BooleanBox>) {
+            return ctx->heap.add_item(
+                ctx->heap.get_next_id(), std::make_unique<deduced_derkjs_box_t>(
+                    argument_value.to_boolean(),
+                    boxing_prototype_p
+                )
+            );
+        } else if constexpr (std::is_same_v<deduced_derkjs_box_t, NumberBox>) {
+            return ctx->heap.add_item(
+                ctx->heap.get_next_id(), std::make_unique<deduced_derkjs_box_t>(
+                    Value {argument_value.to_num_f64().value_or(0.0)},
+                    boxing_prototype_p
+                )
+            );
+        } else {
+            return nullptr;
+        }
+    }
+
     /// TODO: fix this to wrap primitives in object form / forward objects as-is.
     [[nodiscard]] auto native_object_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        Value target_arg = ctx->stack.at(passed_rsbp + 1);
 
-        if (auto target_as_object_p = target_arg.to_object(); target_as_object_p) {   
-            ctx->stack.at(passed_rsbp - 1) = Value {target_as_object_p};
+        if (auto argument_value = ctx->stack.at(passed_rsbp + 1).deep_clone(); argc == 1) {
+            switch (argument_value.get_tag()) {
+            case ValueTag::boolean:
+                ctx->stack.at(passed_rsbp - 1) = Value {
+                    box_primitive_as_object<bool>(ctx, argument_value)
+                };
+                break;
+            case ValueTag::num_i32:
+            case ValueTag::num_f64:
+                ctx->stack.at(passed_rsbp - 1) = Value {
+                    box_primitive_as_object<double>(ctx, argument_value)
+                };
+                break;
+            case ValueTag::object:
+                ctx->stack.at(passed_rsbp - 1) = argument_value;
+                break;
+            default:
+                ctx->stack.at(passed_rsbp - 1) = Value {JSNullOpt {}};
+                break;
+            }
+
             return true;
         }
 
         ctx->status = VMErrcode::bad_operation;
-        std::println(std::cerr, "Object.constructor: Non-object arguments to Object ctor are unsupported.");
-
         return false;
     }
 
     [[nodiscard]] auto native_object_create(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
-        auto taken_proto_p = ctx->stack.at(passed_rsbp + 1).to_object();
+        ObjectBase<Value>* taken_proto_p = ctx->stack.at(passed_rsbp + 1).to_object();
 
-        if (auto result_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::make_unique<Object>(taken_proto_p)); result_p) {
+        if (auto result_p = ctx->heap.add_item(
+            ctx->heap.get_next_id(),
+            std::make_unique<Object>(taken_proto_p)
+        ); result_p) {
             ctx->stack.at(passed_rsbp - 1) = Value {result_p};
             return true;
         }
 
         ctx->status = VMErrcode::bad_heap_alloc;
         std::println(std::cerr, "Failed to allocate JS object on the heap.");
-
         return false;
     }
 
