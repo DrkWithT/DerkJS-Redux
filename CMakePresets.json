@@ -6,8 +6,43 @@
     },
     "configurePresets": [
         {
+            "name": "local-any-debug-build",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_CXX_SCAN_FOR_MODULES": "ON",
+                "CMAKE_CXX_STANDARD": "23",
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_COMPILE_WARNING_AS_ERROR": "ON",
+                "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "${sourceDir}/build/"
+            }
+        },
+        {
+            "name": "local-any-profile-build",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_CXX_SCAN_FOR_MODULES": "ON",
+                "CMAKE_CXX_STANDARD": "23",
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_COMPILE_WARNING_AS_ERROR": "ON",
+                "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "${sourceDir}/build/"
+            }
+        },
+        {
+            "name": "local-any-release-build",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_CXX_SCAN_FOR_MODULES": "ON",
+                "CMAKE_CXX_STANDARD": "23",
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_COMPILE_WARNING_AS_ERROR": "ON",
+                "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "${sourceDir}/build/"
+            }
+        },
+        {
             "name": "local-debug-build",
-            "generator": "Ninja",
             "cacheVariables": {
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
                 "CMAKE_CXX_COMPILER": "/usr/local/opt/llvm/bin/clang++",
@@ -17,12 +52,12 @@
                 "CMAKE_BUILD_TYPE": "Debug",
                 "CMAKE_COMPILE_WARNING_AS_ERROR": "ON",
                 "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "${sourceDir}/build/",
-                "MY_LLVM_LIBCXX_DIR": "/usr/local/opt/llvm/lib/"
+                "MY_LLVM_LIBCXX_DIR": "/usr/local/opt/llvm/lib/",
+                "SETUP_USES_CLANG": "ON"
             }
         },
         {
             "name": "local-release-build",
-            "generator": "Ninja",
             "cacheVariables": {
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
                 "CMAKE_CXX_COMPILER": "/usr/local/opt/llvm/bin/clang++",
@@ -32,12 +67,12 @@
                 "CMAKE_BUILD_TYPE": "Release",
                 "CMAKE_COMPILE_WARNING_AS_ERROR": "ON",
                 "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "${sourceDir}/build/",
-                "MY_LLVM_LIBCXX_DIR": "/usr/local/opt/llvm/lib/"
+                "MY_LLVM_LIBCXX_DIR": "/usr/local/opt/llvm/lib/",
+                "SETUP_USES_CLANG": "ON"
             }
         },
         {
             "name": "local-profile-build",
-            "generator": "Ninja",
             "cacheVariables": {
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
                 "CMAKE_CXX_COMPILER": "/usr/local/opt/llvm/bin/clang++",
@@ -47,7 +82,8 @@
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
                 "CMAKE_COMPILE_WARNING_AS_ERROR": "ON",
                 "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "${sourceDir}/build/",
-                "MY_LLVM_LIBCXX_DIR": "/usr/local/opt/llvm/lib/"
+                "MY_LLVM_LIBCXX_DIR": "/usr/local/opt/llvm/lib/",
+                "SETUP_USES_CLANG": "ON"
             }
         }
     ]
