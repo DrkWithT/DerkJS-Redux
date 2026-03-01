@@ -15,6 +15,22 @@ import runtime.errors;
 import runtime.gc;
 import runtime.bytecode;
 
+#ifdef __llvm__    
+    #if __clang_major__ >= 17
+        #define TCO_ATTR [[clang::musttail]]
+    #endif
+#endif
+
+#ifdef __GNUC__
+    #if __GNUC__ > 13
+        #define TCO_ATTR [[gnu::musttail]]
+    #endif
+#endif
+
+#ifndef TCO_ATTR
+    #error "Only GCC 13+ or Clang 17+ is supported."
+#endif
+
 namespace DerkJS {
     export enum class VMErrcode : uint8_t {
         pending,
@@ -49,24 +65,6 @@ namespace DerkJS {
             return false;
         }
     };
-
-    #ifdef __clang__
-        #ifdef __llvm__
-            #if __clang_major__ >= 20
-                /// NOTE: Compile-time flag to check if TCO is enabled for the build- This is only enabled on LLVM Clang 20+ to be safe.
-                constexpr bool is_tco_enabled_v = true;
-            #else
-                /// NOTE: Compile-time flag to check if TCO is enabled for the build- This is only enabled on LLVM Clang 20+ to be safe.
-                constexpr bool is_tco_enabled_v = false;
-            #endif
-        #else
-            /// NOTE: Compile-time flag to check if TCO is enabled for the build- This is only enabled on LLVM Clang 20+ to be safe.
-            constexpr bool is_tco_enabled_v = false;
-        #endif
-    #else
-        /// NOTE: Compile-time flag to check if TCO is enabled for the build- This is only enabled on LLVM Clang 20+ to be safe.
-        constexpr bool is_tco_enabled_v = false;
-    #endif
 
     /// NOTE: This type decouples the internal state of the bytecode VM. It's used when the `DispatchPolicy::tco` specialization is used with a opcode dispatch table and dispatch TCO'd function internally apply in `VM<DispatchPolicy::tco>`. However, this is only enabled on LLVM Clang 20+ to be safe.
     export struct ExternVMCtx {
@@ -229,7 +227,7 @@ namespace DerkJS {
     inline void op_nop(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -238,7 +236,7 @@ namespace DerkJS {
         ctx.rsp++;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -247,7 +245,7 @@ namespace DerkJS {
         ctx.rsp++;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -263,7 +261,7 @@ namespace DerkJS {
         ctx.rsp++;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -276,7 +274,7 @@ namespace DerkJS {
             ctx.status = VMErrcode::bad_property_access;
         }
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -289,7 +287,7 @@ namespace DerkJS {
 
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -298,7 +296,7 @@ namespace DerkJS {
         ctx.rsp++;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -306,7 +304,7 @@ namespace DerkJS {
         ctx.stack.at(ctx.rsp) = ctx.stack.at(ctx.rsp).deep_clone();
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -314,7 +312,7 @@ namespace DerkJS {
         ctx.rsp -= a0;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -329,7 +327,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -338,7 +336,7 @@ namespace DerkJS {
         ctx.rsp++;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -347,7 +345,7 @@ namespace DerkJS {
         ctx.rsp++;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -355,7 +353,7 @@ namespace DerkJS {
         ctx.stack[ctx.rsp] = Value {};
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -374,7 +372,7 @@ namespace DerkJS {
             ctx.status = VMErrcode::bad_heap_alloc;
         }
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -394,7 +392,7 @@ namespace DerkJS {
             ctx.status = VMErrcode::bad_heap_alloc;
         }
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -423,7 +421,7 @@ namespace DerkJS {
             ctx.status = VMErrcode::bad_heap_alloc;
         }
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -433,7 +431,7 @@ namespace DerkJS {
         ctx.rsp++;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -451,7 +449,7 @@ namespace DerkJS {
             ctx.status = VMErrcode::bad_property_access;
         }
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -468,7 +466,7 @@ namespace DerkJS {
             ctx.status = VMErrcode::bad_property_access;
         }
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -486,7 +484,7 @@ namespace DerkJS {
 
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -508,7 +506,7 @@ namespace DerkJS {
             ctx.rip_p++;
         }
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -517,7 +515,7 @@ namespace DerkJS {
 
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -526,7 +524,7 @@ namespace DerkJS {
 
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -536,7 +534,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -545,7 +543,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -555,7 +553,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -564,7 +562,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -574,7 +572,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -583,7 +581,7 @@ namespace DerkJS {
         ctx.rsp++;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -592,7 +590,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -601,7 +599,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -610,7 +608,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -619,7 +617,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -628,7 +626,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -637,7 +635,7 @@ namespace DerkJS {
         ctx.rsp--;
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -649,7 +647,7 @@ namespace DerkJS {
             ctx.rip_p++;
         }
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -661,14 +659,14 @@ namespace DerkJS {
             ctx.rip_p++;
         }
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     inline void op_jump(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.rip_p += a0;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -683,7 +681,7 @@ namespace DerkJS {
             ctx.status = VMErrcode::bad_operation;
         }
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -698,7 +696,7 @@ namespace DerkJS {
             ctx.status = VMErrcode::bad_operation;
         }
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -724,7 +722,7 @@ namespace DerkJS {
             return;
         }
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -749,22 +747,22 @@ namespace DerkJS {
             ctx.status = VMErrcode::bad_heap_alloc;
         }
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     inline void op_catch(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        /// NOTE: Assume the Error bubbling finished, so it's ok to enter the catch body's code here.
+        /// NOTE: Here, the Error bubbling finished. We can enter the catch body's code here.
         ctx.rip_p++;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
     inline void op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
         ctx.status = VMErrcode::vm_abort;
 
-        [[clang::musttail]]
+        TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
     }
 
@@ -773,10 +771,7 @@ namespace DerkJS {
             return;
         }
 
-        // std::println("DISPATCHES-LEFT: {}, RBP: {}, RSP: {}, RIP_P: {}", ctx.dispatch_allowance, ctx.rsbp, ctx.rsp, reinterpret_cast<const void*>(ctx.rip_p));
-        // ctx.dispatch_allowance--;
-
-        [[clang::musttail]]
+        TCO_ATTR
         return tco_opcodes[ctx.rip_p->op](ctx, a0, a1);
     }
 
@@ -785,9 +780,7 @@ namespace DerkJS {
      */
     export class VM {
     public:
-        static_assert(is_tco_enabled_v, "TCO is not enabled for this compiler toolchain.");
-
-        /// NOTE: This SHOULD NOT be modified directly!
+        /// NOTE: Only modify this from DerkJS native functions.
         ExternVMCtx m_ctx;
 
         explicit VM(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit, std::size_t gc_threshold, void* lexer_ptr, void* parser_ptr, void* compile_state_ptr, ExternVMCtx::compile_snippet_fn compile_proc_ptr)
