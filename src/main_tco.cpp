@@ -130,7 +130,16 @@ int main(int argc, char* argv[]) {
     auto number_prototype_p = driver.add_native_object<Object>("Number::prototype", object_prototype_p);
     auto string_prototype_p = driver.add_native_object<Object>("String::prototype", object_prototype_p);
     auto array_prototype_p = driver.add_native_object<Object>("Array::prototype", object_prototype_p);
-    auto function_prototype_p = driver.add_native_object<Object>("Function::prototype", object_prototype_p);
+
+    auto function_prototype_p = driver.add_native_object<NativeFunction>(
+        "Function::prototype",
+        nullptr,
+        DerkJS::native_function_dud,
+        object_prototype_p,
+        driver.get_length_key_str_p(),
+        Value {0}
+    );
+
     auto error_prototype_p = driver.add_native_object<Object>("Error::prototype", object_prototype_p);
 
     /// 4.2 Patch properties of native prototypes. These are VERY important for DerkJS to interpret certain scripts properly. ///
