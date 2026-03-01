@@ -206,13 +206,15 @@ export namespace DerkJS {
 
         [[nodiscard]] constexpr auto operator==(const Value& other) const noexcept -> bool {
             const auto self_v = (is_reference()) ? deep_clone() : *this;
-            const auto other_v = (other.is_reference()) ? other.deep_clone() : *this;
+            const auto other_v = (other.is_reference()) ? other.deep_clone() : other;
 
             if (const auto lhs_tag = self_v.get_tag(), rhs_tag = other_v.get_tag(); lhs_tag != rhs_tag) {
                 return false;
-            } else if (lhs_tag == ValueTag::undefined || lhs_tag == ValueTag::null) {
+            } else if (lhs_tag == ValueTag::undefined) {
                 return true;
-            } else if (lhs_tag == ValueTag::num_nan || rhs_tag == ValueTag::num_nan) {
+            } else if (lhs_tag == ValueTag::null) {
+                return true;
+            } else if (lhs_tag == ValueTag::num_nan) {
                 return false;
             } else if (lhs_tag == ValueTag::boolean) {
                 /// NOTE: As per https://262.ecma-international.org/5.1/#sec-11.9.6, the boolean values in this case must be both T / both F. This is actually the negation of a Boolean XOR.
@@ -230,6 +232,10 @@ export namespace DerkJS {
             }
 
             return false;
+        }
+
+        [[nodiscard]] constexpr auto operator!=(const Value& other) const noexcept -> bool {
+            return !(this->operator==(other));
         }
 
         /// NOTE: This partly implements the Abstract Relational Comparison logic from https://262.ecma-international.org/5.1/#sec-11.8.5, but it only implements case 3 for now.
