@@ -37,6 +37,7 @@
  34. Improve operations for objects:
     - Modify `on_accessor_mut` method to take the property key.
     - Improve `as_string` method of object-base... Pretty print object literal / `[object <class name> ... ]`
+ 35. ~~Add `x instanceof y` operator.~~
  35. Add more support for built-in methods:
     - Number methods
     - String methods
