@@ -56,6 +56,7 @@ export namespace DerkJS {
         djs_test_lte,
         djs_test_gt,
         djs_test_gte,
+        djs_cmp_protos, // Implements the `instanceof` operator. Stack: <LHS> <RHS> -> <RESULT BOOL>
         djs_jump_else, // Pops the LHS if it's truthy before incrementing RIP. Otherwise, the relative offset is applied to RIP.
         djs_jump_if, // Pops the LHS if it's falsy before incrementing RIP. Otherwise, the relative offset is applied to RIP.
         djs_jump,
@@ -146,6 +147,7 @@ export namespace DerkJS {
             "djs_test_lte",
             "djs_test_gt",
             "djs_test_gte",
+            "djs_cmp_protos",
             "djs_jump_else",
             "djs_jump_if",
             "djs_jump",

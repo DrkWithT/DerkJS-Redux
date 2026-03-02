@@ -33,6 +33,7 @@ export namespace DerkJS {
         ast_op_new,             // 'new' for objects
         ast_op_void,            // 'void' for discarded evaluations
         ast_op_typeof,          // `typeof` for getting a typename string of exprs.
+        ast_op_instance_of,     // `instanceof` for checking A.__proto__ === B.prototype
         ast_op_dot_access,      // access member by `'.'`
         ast_op_index_access,    // access member by `<lhs>[...]`
         ast_op_percent,

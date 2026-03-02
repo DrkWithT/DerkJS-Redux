@@ -453,6 +453,22 @@ namespace DerkJS::Backend {
             return true;
         }
 
+        [[nodiscard]] auto emit_instanceof_expr(BytecodeEmitterContext& context, const ExprPtr& expr_lhs, const ExprPtr& expr_rhs, const std::string& source) -> bool {
+            if (!context.emit_expr(*expr_lhs, source)) {
+                std::println(std::cerr, "Compile Error: Failed to emit LHS of instanceof-expr.");
+                return false;
+            }
+
+            if (!context.emit_expr(*expr_rhs, source)) {
+                std::println(std::cerr, "Compile Error: Failed to emit RHS of instanceof-expr.");
+                return false;
+            }
+
+            context.encode_instruction(Opcode::djs_cmp_protos);
+
+            return true;
+        }
+
     public:
         BinaryEmitter() noexcept = default;
 
@@ -463,6 +479,10 @@ namespace DerkJS::Backend {
             // Case 1: emit logical operator expressions if applicable since these have special short-circuiting vs. arithmetic ones...
             if (expr_op == AstOp::ast_op_and || expr_op == AstOp::ast_op_or) {
                 return emit_logical_expr(context, expr_op, expr_lhs, expr_rhs, source);
+            }
+
+            if (expr_op == AstOp::ast_op_instance_of) {
+                return emit_instanceof_expr(context, expr_lhs, expr_rhs, source);
             }
 
             // Case 2 (General): arithmtic operators MUST evaluate RHS before LHS in case one operator is right-associative. The only other left-associative ones supported now are commutative: ADD, MUL, MOD...

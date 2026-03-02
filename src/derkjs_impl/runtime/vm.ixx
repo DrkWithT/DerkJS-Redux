@@ -200,6 +200,7 @@ namespace DerkJS {
     inline void op_test_lte(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_test_gt(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_test_gte(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_cmp_protos(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_jump_else(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_jump_if(ExternVMCtx& ctx, int16_t a0, int16_t a1);
     inline void op_jump(ExternVMCtx& ctx, int16_t a0, int16_t a1);
@@ -218,7 +219,7 @@ namespace DerkJS {
         op_put_this, op_ref_error, op_discard, op_typename, op_put_obj_dud, op_make_arr, op_put_proto_key, op_get_prop, op_put_prop, op_del_prop,
         op_numify, op_strcat, op_pre_inc, op_pre_dec,
         op_mod, op_mul, op_div, op_add, op_sub,
-        op_test_falsy, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte,
+        op_test_falsy, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte, op_cmp_protos,
         op_jump_else, op_jump_if, op_jump, op_object_call, op_ctor_call, op_ret,
         op_throw, op_catch,
         op_halt
@@ -634,6 +635,26 @@ namespace DerkJS {
         ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] <= ctx.stack[ctx.rsp]; // IF x >= y THEN y <= x
         ctx.rsp--;
         ctx.rip_p++;
+
+        TCO_ATTR
+        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+    }
+
+    inline void op_cmp_protos(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+        if (auto lhs_as_obj_p = ctx.stack.at(ctx.rsp - 1).to_object(); !lhs_as_obj_p) {
+            ctx.stack.at(ctx.rsp - 1) = Value {false};
+            ctx.rsp--;
+            ctx.rip_p++;
+        } else if (auto rhs_as_obj_p = ctx.stack.at(ctx.rsp).to_object(); !rhs_as_obj_p) {
+            ctx.status = VMErrcode::bad_operation;
+        } else {
+            ctx.stack.at(ctx.rsp - 1) = Value {
+                /// NOTE: This check computes `LHS.__proto__ === RHS.prototype` for `instanceof`.
+                lhs_as_obj_p->get_prototype() == rhs_as_obj_p->get_instance_prototype()
+            };
+            ctx.rsp--;
+            ctx.rip_p++;
+        }
 
         TCO_ATTR
         return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
