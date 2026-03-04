@@ -1,6 +1,7 @@
 export module derkjs_impl;
 
 export import runtime.value;
+export import runtime.object;
 // export import runtime.strings;
 // export import runtime.arrays;
 export import runtime.callables;

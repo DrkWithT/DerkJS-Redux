@@ -19,6 +19,7 @@ export module backend.bc_generate;
 
 export import frontend.ast;
 import frontend.parse;
+export import runtime.object;
 export import runtime.strings;
 export import runtime.callables;
 export import runtime.value;

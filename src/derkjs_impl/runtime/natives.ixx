@@ -13,6 +13,7 @@ module;
 
 export module runtime.natives;
 
+import runtime.object;
 import runtime.boolean;
 import runtime.number;
 import runtime.arrays;
@@ -773,7 +774,7 @@ export namespace DerkJS {
             return false;
         }
 
-        dispatch_op(*ctx, ctx->rip_p->args[0], ctx->rip_p->args[1]);
+        dispatch_op(*ctx);
 
         if (ctx->status != VMErrcode::ok) {
             std::println(std::cerr, "Function.call: fatal error in callback body.");
