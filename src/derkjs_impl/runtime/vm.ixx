@@ -9,6 +9,7 @@ module;
 export module runtime.vm;
 
 import runtime.value;
+import runtime.object;
 import runtime.arrays;
 import runtime.strings;
 import runtime.errors;
@@ -164,55 +165,55 @@ namespace DerkJS {
         }
     };
 
-    inline void op_nop(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_dup(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_dup_local(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_ref_local(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_store_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_ref_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_put_const(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_deref(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_pop(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_emplace(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_put_this(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_ref_error(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_discard(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_typename(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_put_obj_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_make_arr(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_put_proto_key(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_get_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_put_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_del_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_numify(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_strcat(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_pre_inc(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_pre_dec(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_mod(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_mul(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_div(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_add(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_sub(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_test_falsy(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_test_strict_eq(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_test_strict_ne(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_test_lt(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_test_lte(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_test_gt(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_test_gte(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_cmp_protos(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_jump_else(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_jump_if(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_jump(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_object_call(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_ctor_call(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_throw(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_catch(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    inline void op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1);
-    export inline void dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1);
+    inline void op_nop(ExternVMCtx& ctx);
+    inline void op_dup(ExternVMCtx& ctx);
+    inline void op_dup_local(ExternVMCtx& ctx);
+    inline void op_ref_local(ExternVMCtx& ctx);
+    inline void op_store_upval(ExternVMCtx& ctx);
+    inline void op_ref_upval(ExternVMCtx& ctx);
+    inline void op_put_const(ExternVMCtx& ctx);
+    inline void op_deref(ExternVMCtx& ctx);
+    inline void op_pop(ExternVMCtx& ctx);
+    inline void op_emplace(ExternVMCtx& ctx);
+    inline void op_put_this(ExternVMCtx& ctx);
+    inline void op_ref_error(ExternVMCtx& ctx);
+    inline void op_discard(ExternVMCtx& ctx);
+    inline void op_typename(ExternVMCtx& ctx);
+    inline void op_put_obj_dud(ExternVMCtx& ctx);
+    inline void op_make_arr(ExternVMCtx& ctx);
+    inline void op_put_proto_key(ExternVMCtx& ctx);
+    inline void op_get_prop(ExternVMCtx& ctx);
+    inline void op_put_prop(ExternVMCtx& ctx);
+    inline void op_del_prop(ExternVMCtx& ctx);
+    inline void op_numify(ExternVMCtx& ctx);
+    inline void op_strcat(ExternVMCtx& ctx);
+    inline void op_pre_inc(ExternVMCtx& ctx);
+    inline void op_pre_dec(ExternVMCtx& ctx);
+    inline void op_mod(ExternVMCtx& ctx);
+    inline void op_mul(ExternVMCtx& ctx);
+    inline void op_div(ExternVMCtx& ctx);
+    inline void op_add(ExternVMCtx& ctx);
+    inline void op_sub(ExternVMCtx& ctx);
+    inline void op_test_falsy(ExternVMCtx& ctx);
+    inline void op_test_strict_eq(ExternVMCtx& ctx);
+    inline void op_test_strict_ne(ExternVMCtx& ctx);
+    inline void op_test_lt(ExternVMCtx& ctx);
+    inline void op_test_lte(ExternVMCtx& ctx);
+    inline void op_test_gt(ExternVMCtx& ctx);
+    inline void op_test_gte(ExternVMCtx& ctx);
+    inline void op_cmp_protos(ExternVMCtx& ctx);
+    inline void op_jump_else(ExternVMCtx& ctx);
+    inline void op_jump_if(ExternVMCtx& ctx);
+    inline void op_jump(ExternVMCtx& ctx);
+    inline void op_object_call(ExternVMCtx& ctx);
+    inline void op_ctor_call(ExternVMCtx& ctx);
+    inline void op_ret(ExternVMCtx& ctx);
+    inline void op_throw(ExternVMCtx& ctx);
+    inline void op_catch(ExternVMCtx& ctx);
+    inline void op_halt(ExternVMCtx& ctx);
+    export inline void dispatch_op(ExternVMCtx& ctx);
 
-    using tco_opcode_fn = void(*)(ExternVMCtx&, int16_t, int16_t);
+    using tco_opcode_fn = void(*)(ExternVMCtx&);
     constexpr tco_opcode_fn tco_opcodes[static_cast<std::size_t>(Opcode::last)] = {
         op_nop,
         op_dup, op_dup_local, op_ref_local, op_store_upval, op_ref_upval, op_put_const, op_deref, op_pop, op_emplace,
@@ -225,48 +226,48 @@ namespace DerkJS {
         op_halt
     };
 
-    inline void op_nop(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_nop(ExternVMCtx& ctx) {
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_dup(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_dup(ExternVMCtx& ctx) {
         ctx.stack[ctx.rsp + 1] = ctx.stack[ctx.rsp];
         ctx.rsp++;
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_dup_local(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        ctx.stack[ctx.rsp + 1] = ctx.stack[ctx.rsbp + a0];
+    inline void op_dup_local(ExternVMCtx& ctx) {
+        ctx.stack[ctx.rsp + 1] = ctx.stack[ctx.rsbp + ctx.rip_p->args[0]];
         ctx.rsp++;
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_ref_local(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        auto& target_local_ref = ctx.stack[ctx.rsbp + a0];
+    inline void op_ref_local(ExternVMCtx& ctx) {
+        auto& target_local_ref = ctx.stack[ctx.rsbp + ctx.rip_p->args[0]];
 
         if (const auto target_tag = target_local_ref.get_tag(); target_tag == ValueTag::val_ref/* || target_tag == ValueTag::object*/) {
             ctx.stack[ctx.rsp + 1] = target_local_ref;
         } else {
-            ctx.stack[ctx.rsp + 1] = Value {&ctx.stack[ctx.rsbp + a0]};
+            ctx.stack[ctx.rsp + 1] = Value {&ctx.stack[ctx.rsbp + ctx.rip_p->args[0]]};
         }
 
         ctx.rsp++;
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_store_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_store_upval(ExternVMCtx& ctx) {
         if (auto new_upval_p = &ctx.frames.back().capture_p->get_property_value(ctx.stack[ctx.rsp], true); new_upval_p) {
             *new_upval_p = ctx.stack[ctx.rsp - 1];
             ctx.rip_p++;
@@ -276,10 +277,10 @@ namespace DerkJS {
         }
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_ref_upval(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_ref_upval(ExternVMCtx& ctx) {
         ctx.stack[ctx.rsp] = *ctx.frames.back().capture_p->get_property_value(ctx.stack[ctx.rsp], false);
 
         if (ctx.stack[ctx.rsp].get_tag() == ValueTag::undefined) {
@@ -289,35 +290,35 @@ namespace DerkJS {
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_put_const(ExternVMCtx& ctx, int16_t a0, int16_t a1)  {
-        ctx.stack[ctx.rsp + 1] = ctx.consts_view[a0];
+    inline void op_put_const(ExternVMCtx& ctx)  {
+        ctx.stack[ctx.rsp + 1] = ctx.consts_view[ctx.rip_p->args[0]];
         ctx.rsp++;
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_deref(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_deref(ExternVMCtx& ctx) {
         ctx.stack.at(ctx.rsp) = ctx.stack.at(ctx.rsp).deep_clone();
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_pop(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        ctx.rsp -= a0;
+    inline void op_pop(ExternVMCtx& ctx) {
+        ctx.rsp -= ctx.rip_p->args[0];
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_emplace(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_emplace(ExternVMCtx& ctx) {
         auto& dest_val_ref = ctx.stack[ctx.rsp - 1];
 
         if (dest_val_ref.is_assignable_ref()) {
@@ -329,36 +330,36 @@ namespace DerkJS {
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_put_this(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_put_this(ExternVMCtx& ctx) {
         ctx.stack.at(ctx.rsp + 1) = ctx.stack.at(ctx.rsbp - 1);
         ctx.rsp++;
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_ref_error(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_ref_error(ExternVMCtx& ctx) {
         ctx.stack.at(ctx.rsp + 1) = Value {ctx.current_error};
         ctx.rsp++;
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_discard(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_discard(ExternVMCtx& ctx) {
         ctx.stack[ctx.rsp] = Value {};
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_typename(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_typename(ExternVMCtx& ctx) {
         const auto& temp_value_ref = ctx.stack[ctx.rsp];
 
         if (auto js_typename_p = ctx.heap.add_item(ctx.heap.get_next_id(), DynamicString {
@@ -374,10 +375,10 @@ namespace DerkJS {
         }
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_put_obj_dud(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_put_obj_dud(ExternVMCtx& ctx) {
         ctx.gc(ctx.heap, ctx.stack, ctx.rsp);
 
         auto obj_ref_p = ctx.heap.add_item(ctx.heap.get_next_id(), Object {
@@ -394,12 +395,13 @@ namespace DerkJS {
         }
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_make_arr(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_make_arr(ExternVMCtx& ctx) {
         ctx.gc(ctx.heap, ctx.stack, ctx.rsp);
 
+        const auto a0 = ctx.rip_p->args[0];
         auto array_p = new Array {
             /// NOTE: [].__proto__ === Array.prototype
             ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::array)),
@@ -423,21 +425,22 @@ namespace DerkJS {
         }
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_put_proto_key(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_put_proto_key(ExternVMCtx& ctx) {
         ctx.stack[ctx.rsp + 1] = Value {JSProtoKeyOpt {}};
 
         ctx.rsp++;
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_get_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_get_prop(ExternVMCtx& ctx) {
         auto& target_ref = ctx.stack.at(ctx.rsp - 1);
+        const auto a0 = ctx.rip_p->args[0];
 
         if (ObjectBase<Value>* target_obj_p = target_ref.to_object(); target_obj_p) {
             ctx.stack.at(ctx.rsp - 1) = *target_obj_p->get_property_value(
@@ -451,10 +454,10 @@ namespace DerkJS {
         }
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_put_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_put_prop(ExternVMCtx& ctx) {
         if (auto target_object_p = ctx.stack[ctx.rsp - 2].to_object(); target_object_p) {
             target_object_p->set_property_value(
                 ctx.stack[ctx.rsp - 1], // property key
@@ -468,15 +471,15 @@ namespace DerkJS {
         }
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_del_prop(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_del_prop(ExternVMCtx& ctx) {
         ctx.status = VMErrcode::bad_operation; // TODO
         return;
     }
 
-    inline void op_numify(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_numify(ExternVMCtx& ctx) {
         if (auto num_temp = ctx.stack[ctx.rsp].to_num_f64(); num_temp) {
             ctx.stack[ctx.rsp] = Value {*num_temp};
         } else {
@@ -486,10 +489,10 @@ namespace DerkJS {
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_strcat(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_strcat(ExternVMCtx& ctx) {
         ctx.gc(ctx.heap, ctx.stack, ctx.rsp);
 
         /// NOTE: For making TCO possible, just allocate the new string on the heap via raw ptr to avoid non-trivial destructor problems. The heap will manage that anyways.
@@ -508,139 +511,139 @@ namespace DerkJS {
         }
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_pre_inc(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_pre_inc(ExternVMCtx& ctx) {
         ctx.stack.at(ctx.rsp) = ctx.stack.at(ctx.rsp).increment().deep_clone();
 
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_pre_dec(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_pre_dec(ExternVMCtx& ctx) {
         ctx.stack.at(ctx.rsp) = ctx.stack.at(ctx.rsp).decrement().deep_clone();
 
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_mod(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_mod(ExternVMCtx& ctx) {
         std::swap_ranges(reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp) + sizeof(Value), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp - 1));
         ctx.stack[ctx.rsp - 1] %= ctx.stack[ctx.rsp];
         ctx.rsp--;
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_mul(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_mul(ExternVMCtx& ctx) {
         ctx.stack[ctx.rsp - 1] *= ctx.stack[ctx.rsp]; // commutativity of the TIMES operator allows avoidance of std::swap
         ctx.rsp--;
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_div(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_div(ExternVMCtx& ctx) {
         std::swap_ranges(reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp) + sizeof(Value), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp - 1));
         ctx.stack[ctx.rsp - 1] /= ctx.stack[ctx.rsp];
         ctx.rsp--;
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_add(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_add(ExternVMCtx& ctx) {
         ctx.stack[ctx.rsp - 1] += ctx.stack[ctx.rsp]; // commutativity of the PLUS operator allows avoidance of std::swap
         ctx.rsp--;
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_sub(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_sub(ExternVMCtx& ctx) {
         std::swap_ranges(reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp) + sizeof(Value), reinterpret_cast<std::byte*>(ctx.stack.data() + ctx.rsp - 1));
         ctx.stack[ctx.rsp - 1] -= ctx.stack[ctx.rsp];
         ctx.rsp--;
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_test_falsy(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_test_falsy(ExternVMCtx& ctx) {
         ctx.stack[ctx.rsp + 1] = ctx.stack[ctx.rsp].is_falsy();
         ctx.rsp++;
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_test_strict_eq(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_test_strict_eq(ExternVMCtx& ctx) {
         ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] == ctx.stack[ctx.rsp];
         ctx.rsp--;
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_test_strict_ne(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_test_strict_ne(ExternVMCtx& ctx) {
         ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] != ctx.stack[ctx.rsp];
         ctx.rsp--;
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_test_lt(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_test_lt(ExternVMCtx& ctx) {
         ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] > ctx.stack[ctx.rsp]; // IF x < y THEN y > x
         ctx.rsp--;
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_test_lte(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_test_lte(ExternVMCtx& ctx) {
         ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] >= ctx.stack[ctx.rsp]; // IF x <= y THEN y >= x
         ctx.rsp--;
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_test_gt(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_test_gt(ExternVMCtx& ctx) {
         ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] < ctx.stack[ctx.rsp]; // IF x > y THEN y < x
         ctx.rsp--;
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_test_gte(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_test_gte(ExternVMCtx& ctx) {
         ctx.stack[ctx.rsp - 1] = ctx.stack[ctx.rsp - 1] <= ctx.stack[ctx.rsp]; // IF x >= y THEN y <= x
         ctx.rsp--;
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_cmp_protos(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_cmp_protos(ExternVMCtx& ctx) {
         if (auto lhs_as_obj_p = ctx.stack.at(ctx.rsp - 1).to_object(); !lhs_as_obj_p) {
             ctx.stack.at(ctx.rsp - 1) = Value {false};
             ctx.rsp--;
@@ -657,74 +660,70 @@ namespace DerkJS {
         }
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_jump_else(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_jump_else(ExternVMCtx& ctx) {
         if (!ctx.stack[ctx.rsp]) {
-            ctx.rip_p += a0;
+            ctx.rip_p += ctx.rip_p->args[0];
         } else {
             ctx.rsp--;
             ctx.rip_p++;
         }
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_jump_if(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_jump_if(ExternVMCtx& ctx) {
         if (ctx.stack[ctx.rsp]) {
-            ctx.rip_p += a0;
+            ctx.rip_p += ctx.rip_p->args[0];
         } else {
             ctx.rsp--;
             ctx.rip_p++;
         }
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_jump(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        ctx.rip_p += a0;
+    inline void op_jump(ExternVMCtx& ctx) {
+        ctx.rip_p += ctx.rip_p->args[0];
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_object_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        auto& callable_value = ctx.stack.at(ctx.rsp - a0);
+    inline void op_object_call(ExternVMCtx& ctx) {
+        const auto a0 = ctx.rip_p->args[0];
+        const auto a1 = ctx.rip_p->args[1];
 
-        if (const auto val_tag = callable_value.get_tag(); val_tag == ValueTag::val_ref && callable_value.get_value_ref()->get_tag() == ValueTag::object && callable_value.get_value_ref()->to_object()->call(&ctx, a0, a1)) {
-            ; // ok
-        } else if (val_tag == ValueTag::object && callable_value.to_object()->call(&ctx, a0, a1)) {
+        if (auto callable_ptr = ctx.stack.at(ctx.rsp - a0).to_object(); callable_ptr != nullptr && callable_ptr->call(&ctx, a0, a1)) {
             ; // ok
         } else {
             ctx.status = VMErrcode::bad_operation;
         }
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_ctor_call(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        auto& callable_value = ctx.stack.at(ctx.rsp - a0);
-
-        if (const auto val_tag = callable_value.get_tag(); val_tag == ValueTag::val_ref && callable_value.get_value_ref()->get_tag() == ValueTag::object && callable_value.get_value_ref()->to_object()->call_as_ctor(&ctx, a0)) {
-            ; // ok
-        } else if (val_tag == ValueTag::object && callable_value.to_object()->call_as_ctor(&ctx, a0)) {
-            ; // ok
+    inline void op_ctor_call(ExternVMCtx& ctx) {
+        const auto a0 = ctx.rip_p->args[0];
+        if (auto callable_ptr = ctx.stack.at(ctx.rsp - a0).to_object(); callable_ptr != nullptr && callable_ptr->call_as_ctor(&ctx, a0)) {
+            ;
         } else {
             ctx.status = VMErrcode::bad_operation;
         }
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_ret(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_ret(ExternVMCtx& ctx) {
         const auto& [caller_ret_ip, caller_addr, caller_capture_p, callee_sbp, caller_sbp, calling_flags] = ctx.frames.back();
 
-        if (a0 == 0) {
+        if (const auto a0 = ctx.rip_p->args[0]; a0 == 0) {
             ctx.stack.at(callee_sbp - 1) = ctx.stack.at(ctx.rsp);
         } else if (calling_flags & std::to_underlying(CallFlags::is_ctor)) {
             /// NOTE: The initialized `this` object from the ctor must be at CALLEE_RSBP - 1.
@@ -744,11 +743,13 @@ namespace DerkJS {
         }
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_throw(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        if (auto thrown_value_as_obj = ctx.stack.at(ctx.rsp).deep_clone().to_object(); thrown_value_as_obj != nullptr && thrown_value_as_obj->get_class_name() == "Error") {
+    inline void op_throw(ExternVMCtx& ctx) {
+        const auto a0 = ctx.rip_p->args[0];
+
+        if (auto thrown_value_as_obj = ctx.stack.at(ctx.rsp).to_object(); thrown_value_as_obj != nullptr && thrown_value_as_obj->get_class_name() == "Error") {
             ctx.status = ctx.try_recover(thrown_value_as_obj, a0 == 1);
         } else if (auto error_object_p = ctx.heap.add_item(
             ctx.heap.get_next_id(),
@@ -769,31 +770,30 @@ namespace DerkJS {
         }
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_catch(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
-        /// NOTE: Here, the Error bubbling finished. We can enter the catch body's code here.
+    inline void op_catch(ExternVMCtx& ctx) {
         ctx.rip_p++;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void op_halt(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void op_halt(ExternVMCtx& ctx) {
         ctx.status = VMErrcode::vm_abort;
 
         TCO_ATTR
-        return dispatch_op(ctx, ctx.rip_p->args[0], ctx.rip_p->args[1]);
+        return dispatch_op(ctx);
     }
 
-    inline void dispatch_op(ExternVMCtx& ctx, int16_t a0, int16_t a1) {
+    inline void dispatch_op(ExternVMCtx& ctx) {
         if (ctx.status != VMErrcode::pending /* || ctx.dispatch_allowance == 0*/) {
             return;
         }
 
         TCO_ATTR
-        return tco_opcodes[ctx.rip_p->op](ctx, a0, a1);
+        return tco_opcodes[ctx.rip_p->op](ctx);
     }
 
     /**
@@ -820,7 +820,7 @@ namespace DerkJS {
         }
 
         inline void run() {
-            return dispatch_op(m_ctx, m_ctx.rip_p->args[0], m_ctx.rip_p->args[1]);
+            return dispatch_op(m_ctx);
         }
     };
 }
