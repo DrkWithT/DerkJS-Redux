@@ -38,14 +38,14 @@
     - Modify `on_accessor_mut` method to take the property key.
     - Improve `as_string` method of object-base... Pretty print object literal / `[object <class name> ... ]`
  35. ~~Add `x instanceof y` operator.~~
- 35. Add more support for built-in methods:
+ 36. Add more support for built-in methods:
     - Number methods
     - String methods
     - Object methods: getPrototypeOf, seal, isFrozen, isSealed
     - Date methods: toString?? toDateString??
     - Math methods: pow, cos, sin, tan, log, logn, floor, ceil??
     - Array methods: sort, splice??
- 36. Add `__proto__` AKA `[[prototype]]` support:
+ 37. Add `__proto__` AKA `[[prototype]]` support:
     - Add `__proto__` to parsing.
     - Add `__proto__` support to bytecode & compiler.
     - Add `__proto__` support to `Value` & VM.
