@@ -14,7 +14,7 @@ export module runtime.callables;
 import runtime.value;
 import runtime.object;
 import runtime.bytecode;
-import runtime.vm;
+import runtime.context;
 
 export namespace DerkJS {
     /**
