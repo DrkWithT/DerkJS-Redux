@@ -12,8 +12,9 @@ module;
 export module runtime.callables;
 
 import runtime.value;
+import runtime.object;
 import runtime.bytecode;
-import runtime.vm;
+import runtime.context;
 
 export namespace DerkJS {
     /**
@@ -277,6 +278,7 @@ export namespace DerkJS {
             "djs_test_lte",
             "djs_test_gt",
             "djs_test_gte",
+            "djs_cmp_protos",
             "djs_jump_else",
             "djs_jump_if",
             "djs_jump",

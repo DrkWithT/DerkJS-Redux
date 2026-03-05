@@ -558,7 +558,7 @@ export namespace DerkJS {
             auto lhs = parse_term(lexer, source);
 
             while (!at_eof()) {
-                if (!m_current.match_tag_to(TokenTag::symbol_less, TokenTag::symbol_less_equal, TokenTag::symbol_greater, TokenTag::symbol_greater_equal)) {
+                if (!m_current.match_tag_to(TokenTag::symbol_less, TokenTag::symbol_less_equal, TokenTag::symbol_greater, TokenTag::symbol_greater_equal, TokenTag::keyword_instanceof)) {
                     break;
                 }
 
@@ -567,7 +567,8 @@ export namespace DerkJS {
                     case TokenTag::symbol_less: return AstOp::ast_op_less;
                     case TokenTag::symbol_less_equal: return AstOp::ast_op_less_equal;
                     case TokenTag::symbol_greater: return AstOp::ast_op_greater;
-                    case TokenTag::symbol_greater_equal: default: return AstOp::ast_op_greater_equal;
+                    case TokenTag::symbol_greater_equal: return AstOp::ast_op_greater_equal;
+                    case TokenTag::keyword_instanceof: default: return AstOp::ast_op_instance_of;
                     }
                 })(m_current.tag);
 

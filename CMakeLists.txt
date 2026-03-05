@@ -19,6 +19,7 @@ target_sources(
     src/derkjs_impl/runtime/objects.ixx
     src/derkjs_impl/runtime/boolean.ixx
     src/derkjs_impl/runtime/number.ixx
+    src/derkjs_impl/runtime/object.ixx
     src/derkjs_impl/runtime/arrays.ixx
     src/derkjs_impl/runtime/callables.ixx
     src/derkjs_impl/runtime/strings.ixx
@@ -26,8 +27,17 @@ target_sources(
     src/derkjs_impl/runtime/value.ixx
     src/derkjs_impl/runtime/bytecode.ixx
     src/derkjs_impl/runtime/gc.ixx
+    src/derkjs_impl/runtime/context.ixx
+    src/derkjs_impl/runtime/op_handlers.ixx
     src/derkjs_impl/runtime/vm.ixx
-    src/derkjs_impl/runtime/natives.ixx
+    src/derkjs_impl/runtime/intrinsics/routines.ixx
+    src/derkjs_impl/runtime/intrinsics/boolean_natives.ixx
+    src/derkjs_impl/runtime/intrinsics/number_natives.ixx
+    src/derkjs_impl/runtime/intrinsics/string_natives.ixx
+    src/derkjs_impl/runtime/intrinsics/object_natives.ixx
+    src/derkjs_impl/runtime/intrinsics/array_natives.ixx
+    src/derkjs_impl/runtime/intrinsics/function_natives.ixx
+    src/derkjs_impl/runtime/intrinsics/error_natives.ixx
 )
 
 add_executable(derkjs_tco src/main_tco.cpp)
@@ -35,13 +45,16 @@ add_executable(derkjs_tco src/main_tco.cpp)
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     message(WARNING "CMAKE_BUILD_TYPE was set to 'Debug'- TCO will not apply & the VM can stack overflow.")
     target_link_options(derkjs_impl PRIVATE "-fsanitize=address")
-else ()
+elseif (DEFINED SETUP_USES_CLANG)
     set_property(SOURCE src/derkjs_impl/runtime/vm.ixx APPEND PROPERTY COMPILE_OPTIONS "-foptimize-sibling-calls")
+    target_link_directories(derkjs_tco PUBLIC ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} PUBLIC ${MY_LLVM_LIBCXX_DIR})
+else ()
+    message(WARNING "This project is mainly developed on Clang 21+ via macOS Homebrew. Build support on Linux distros may be wonky.")
+    target_link_directories(derkjs_tco PUBLIC ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 endif ()
 
-target_link_directories(derkjs_tco PUBLIC ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} PUBLIC ${MY_LLVM_LIBCXX_DIR})
 target_link_libraries(derkjs_tco PUBLIC derkjs_impl)
-message(NOTICE "Executable: ./build/derkjs_tco")
+message(NOTICE "Executable at: ./build/derkjs_tco")
 
 # enable_testing()
 # add_subdirectory(tests)

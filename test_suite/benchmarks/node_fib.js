@@ -12,6 +12,6 @@ function fib_r_node(n) {
 }
 
 const fib_begin_time_ms = Date.now();
-const ans = fib_r_node(30);
+const ans = fib_r_node(35);
 const fib_runtime_ms = Date.now() - fib_begin_time_ms;
 console.log(`answer = ${ans}, runtime = \x1b[1;33m${fib_runtime_ms}ms\x1b[0m`);

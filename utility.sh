@@ -1,9 +1,10 @@
-#!/bin/zsh
+#!/bin/sh
 
 argc=$#
 
 usage_exit() {
-    printf "Usage: utility.sh [help | build | unittest | profile | sloc]\\n\\tutility.sh (re)build [debug | profile | release]\\n\\tutility.sh unittest\\n\\tutility.sh profile <JS file path>\\n";
+    printf "\033[1;34mUses:\033[0m\\nutility.sh [help | build | unittest | profile | sloc]\\n\\tutility.sh (re)build [debug | profile | release | any-debug | any-profile | any-release] [CMake generator name]\\n\\tutility.sh unittest\\n\\tutility.sh profile <JS file path>\\n";
+    printf "\033[1;34mUSAGE NOTES:\033[0m\\n\\tany-* build modes are for compiler-platform setups that are outside Homebrew Clang on macOS.\\n\\tOn Linux platforms, try getting the latest version of GCC / Clang for a better chance of C++ modules and TCO working.\\n";
     exit "$1";
 }
 
@@ -15,15 +16,15 @@ action="$1"
 
 if [[ $action = "help" ]]; then
     usage_exit 0;
-elif [[ $action = "build" ]]; then
+elif [[ $action = "build" && $argc -eq 3 ]]; then
     rm -rf ./.cache;
     rm -f ./compile_commands.json;
     rm -f ./build/derkjs;
-    cmake -S . -B build --preset "local-$2-build" && cmake --build build && mv ./build/compile_commands.json .;
-elif [[ $action = "rebuild" ]]; then
+    cmake -S . -B build --preset "local-$2-build" -G "$3" && cmake --build build && mv ./build/compile_commands.json .;
+elif [[ $action = "rebuild" && $argc -eq 3 ]]; then
     rm -rf ./.cache;
     rm -rf ./build/;
-    cmake --fresh -S . -B build --preset "local-$2-build" && cmake --build build && mv ./build/compile_commands.json .;
+    cmake --fresh -S . -B build --preset "local-$2-build" -G "$3" && cmake --build build && mv ./build/compile_commands.json .;
 elif [[ $action = "unittest" && $argc -eq 1 ]]; then
     # touch ./test_logs.txt;
     # ctest --test-dir build --timeout 2 -V 1> ./test_logs.txt;

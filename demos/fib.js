@@ -7,7 +7,7 @@ function fib(n) {
 }
 
 var start_ms = Date.now();
-var ans = fib(30);
+var ans = fib(35);
 var end_ms = Date.now();
 
-console.log("PASS:", ans === 832040, "Run-Time:", end_ms - start_ms);
+console.log("answer:", ans, "run-time:", end_ms - start_ms);

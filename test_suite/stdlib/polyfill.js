@@ -7,8 +7,7 @@
 /// Patch polyfills for built-in prototypes / functions:
 
 function isNaN(arg) {
-    // handle '[]'
-    if (typeof arg === "object" && arg && Array.prototype.constructor.prototype.isPrototypeOf(arg)) {
+    if (arg instanceof Array) {
         return false;
     }
 
@@ -28,6 +27,18 @@ Object.prototype.toString = function () {
 Object.prototype.constructor = Object;
 
 Boolean.prototype.constructor = Boolean;
+
+Boolean.prototype.toString = function () {
+    if (this instanceof Boolean === false) {
+        throw new Error("Only booleans are allowed for Boolean.toString().");
+    }
+
+    if (this.valueOf()) {
+        return "true";
+    }
+
+    return "false";
+};
 
 Number.prototype.constructor = Number;
 

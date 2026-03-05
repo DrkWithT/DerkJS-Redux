@@ -15,6 +15,7 @@ constexpr int derkjs_heap_count = 4096;
 
 int main(int argc, char* argv[]) {
     using namespace DerkJS;
+    namespace DerkJSNatives = DerkJS::Runtime::Intrinsics;
 
     if (argc < 2 || argc > 3) {
         std::println(std::cerr, "usage: ./derkjs [-v | [-d | -r] <script name>]");
@@ -27,7 +28,7 @@ int main(int argc, char* argv[]) {
             .author = "DrkWithT (GitHub)",
             .version_major = 0,
             .version_minor = 5,
-            .version_patch = 1
+            .version_patch = 4
         },
         derkjs_heap_count // increase object count limit for VM if needed
     };
@@ -71,6 +72,7 @@ int main(int argc, char* argv[]) {
     driver.add_js_lexical("new", TokenTag::keyword_new);
     driver.add_js_lexical("void", TokenTag::keyword_void);
     driver.add_js_lexical("typeof", TokenTag::keyword_typeof);
+    driver.add_js_lexical("instanceof", TokenTag::keyword_instanceof);
     driver.add_js_lexical("undefined", TokenTag::keyword_undefined);
     driver.add_js_lexical("null", TokenTag::keyword_null);
     driver.add_js_lexical("true", TokenTag::keyword_true);
@@ -130,7 +132,16 @@ int main(int argc, char* argv[]) {
     auto number_prototype_p = driver.add_native_object<Object>("Number::prototype", object_prototype_p);
     auto string_prototype_p = driver.add_native_object<Object>("String::prototype", object_prototype_p);
     auto array_prototype_p = driver.add_native_object<Object>("Array::prototype", object_prototype_p);
-    auto function_prototype_p = driver.add_native_object<Object>("Function::prototype", object_prototype_p);
+
+    auto function_prototype_p = driver.add_native_object<NativeFunction>(
+        "Function::prototype",
+        nullptr,
+        DerkJSNatives::native_function_dud,
+        object_prototype_p,
+        driver.get_length_key_str_p(),
+        Value {0}
+    );
+
     auto error_prototype_p = driver.add_native_object<Object>("Error::prototype", object_prototype_p);
 
     /// 4.2 Patch properties of native prototypes. These are VERY important for DerkJS to interpret certain scripts properly. ///
@@ -141,7 +152,7 @@ int main(int argc, char* argv[]) {
             .name_str = "create",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_object_create,
+                DerkJSNatives::native_object_create,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -151,7 +162,7 @@ int main(int argc, char* argv[]) {
             .name_str = "hasOwnProperty",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_object_has_own_property,
+                DerkJSNatives::native_object_has_own_property,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -161,7 +172,7 @@ int main(int argc, char* argv[]) {
             .name_str = "isPrototypeOf",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_object_is_prototype_of,
+                DerkJSNatives::native_object_is_prototype_of,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -171,7 +182,7 @@ int main(int argc, char* argv[]) {
             .name_str = "freeze",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_object_freeze,
+                DerkJSNatives::native_object_freeze,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -184,7 +195,7 @@ int main(int argc, char* argv[]) {
             .name_str = "hasOwnProperty",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_object_has_own_property,
+                DerkJSNatives::native_object_has_own_property,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -194,17 +205,7 @@ int main(int argc, char* argv[]) {
             .name_str = "valueOf",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_boolean_value_of,
-                function_prototype_p,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
-        },
-        Core::NativePropertyStub {
-            .name_str = "toString",
-            .item = std::make_unique<NativeFunction>(
-                function_prototype_p,
-                DerkJS::native_boolean_to_string,
+                DerkJSNatives::native_boolean_value_of,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -218,7 +219,7 @@ int main(int argc, char* argv[]) {
             .name_str = "valueOf",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_number_value_of,
+                DerkJSNatives::native_number_value_of,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -228,7 +229,7 @@ int main(int argc, char* argv[]) {
             .name_str = "toFixed",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_number_to_fixed,
+                DerkJSNatives::native_number_to_fixed,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -242,7 +243,7 @@ int main(int argc, char* argv[]) {
             .name_str = "hasOwnProperty",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_object_has_own_property,
+                DerkJSNatives::native_object_has_own_property,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -252,7 +253,7 @@ int main(int argc, char* argv[]) {
             .name_str = "charCodeAt",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_str_charcode_at,
+                DerkJSNatives::native_str_charcode_at,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -262,7 +263,7 @@ int main(int argc, char* argv[]) {
             .name_str = "substr",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_str_substr,
+                DerkJSNatives::native_str_substr,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {2}
@@ -272,7 +273,7 @@ int main(int argc, char* argv[]) {
             .name_str = "substring",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_str_substring,
+                DerkJSNatives::native_str_substring,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {2}
@@ -282,7 +283,7 @@ int main(int argc, char* argv[]) {
             .name_str = "trim",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_str_trim,
+                DerkJSNatives::native_str_trim,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -296,7 +297,7 @@ int main(int argc, char* argv[]) {
             .name_str = "hasOwnProperty",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_object_has_own_property,
+                DerkJSNatives::native_object_has_own_property,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -306,7 +307,7 @@ int main(int argc, char* argv[]) {
             .name_str = "call",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_function_call,
+                DerkJSNatives::native_function_call,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -320,7 +321,7 @@ int main(int argc, char* argv[]) {
             .name_str = "hasOwnProperty",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_object_has_own_property,
+                DerkJSNatives::native_object_has_own_property,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -330,7 +331,7 @@ int main(int argc, char* argv[]) {
             .name_str = "push",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_array_push,
+                DerkJSNatives::native_array_push,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -340,7 +341,7 @@ int main(int argc, char* argv[]) {
             .name_str = "join",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_array_join,
+                DerkJSNatives::native_array_join,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -354,7 +355,7 @@ int main(int argc, char* argv[]) {
             .name_str = "hasOwnProperty",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_object_has_own_property,
+                DerkJSNatives::native_object_has_own_property,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -364,7 +365,7 @@ int main(int argc, char* argv[]) {
             .name_str = "log",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_console_log,
+                DerkJSNatives::native_console_log,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -374,7 +375,7 @@ int main(int argc, char* argv[]) {
             .name_str = "readln",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_console_read_line,
+                DerkJSNatives::native_console_read_line,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -388,7 +389,7 @@ int main(int argc, char* argv[]) {
             .name_str = "hasOwnProperty",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::native_object_has_own_property,
+                DerkJSNatives::native_object_has_own_property,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -398,7 +399,7 @@ int main(int argc, char* argv[]) {
             .name_str = "now",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJS::clock_time_now,
+                DerkJSNatives::clock_time_now,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
@@ -409,7 +410,7 @@ int main(int argc, char* argv[]) {
     auto object_ctor_p = driver.add_native_object<NativeFunction>(
         "",
         object_prototype_p,
-        DerkJS::native_object_ctor,
+        DerkJSNatives::native_object_ctor,
         function_prototype_p,
         driver.get_length_key_str_p(),
         Value {1}
@@ -418,7 +419,7 @@ int main(int argc, char* argv[]) {
     auto boolean_ctor_p = driver.add_native_object<NativeFunction>(
         "",
         boolean_prototype_p,
-        DerkJS::native_boolean_ctor,
+        DerkJSNatives::native_boolean_ctor,
         function_prototype_p,
         driver.get_length_key_str_p(),
         Value {1}
@@ -427,7 +428,7 @@ int main(int argc, char* argv[]) {
     auto number_ctor_p = driver.add_native_object<NativeFunction>(
         "",
         number_prototype_p,
-        DerkJS::native_number_ctor,
+        DerkJSNatives::native_number_ctor,
         function_prototype_p,
         driver.get_length_key_str_p(),
         Value {1}
@@ -436,7 +437,7 @@ int main(int argc, char* argv[]) {
     auto string_ctor_p = driver.add_native_object<NativeFunction>(
         "",
         string_prototype_p,
-        DerkJS::native_str_ctor,
+        DerkJSNatives::native_str_ctor,
         function_prototype_p,
         driver.get_length_key_str_p(),
         Value {1}
@@ -445,7 +446,7 @@ int main(int argc, char* argv[]) {
     auto array_ctor_p = driver.add_native_object<NativeFunction>(
         "",
         array_prototype_p,
-        DerkJS::native_array_ctor,
+        DerkJSNatives::native_array_ctor,
         function_prototype_p,
         driver.get_length_key_str_p(),
         Value {1}
@@ -454,7 +455,7 @@ int main(int argc, char* argv[]) {
     auto function_ctor_p = driver.add_native_object<NativeFunction>(
         "",
         function_prototype_p,
-        DerkJS::native_function_ctor,
+        DerkJSNatives::native_function_ctor,
         function_prototype_p,
         driver.get_length_key_str_p(),
         Value {1}
@@ -463,7 +464,7 @@ int main(int argc, char* argv[]) {
     auto error_ctor_p = driver.add_native_object<NativeFunction>(
         "",
         error_prototype_p,
-        DerkJS::native_error_ctor,
+        DerkJSNatives::native_error_ctor,
         function_prototype_p,
         driver.get_length_key_str_p(),
         Value {1}
@@ -475,7 +476,7 @@ int main(int argc, char* argv[]) {
     auto parse_int_fn_p = driver.add_native_object<NativeFunction>(
         "",
         function_prototype_p,
-        DerkJS::native_parse_int,
+        DerkJSNatives::native_parse_int,
         function_prototype_p,
         driver.get_length_key_str_p(),
         Value {2}
@@ -484,7 +485,7 @@ int main(int argc, char* argv[]) {
     auto parse_float_fn_p = driver.add_native_object<NativeFunction>(
         "",
         function_prototype_p,
-        DerkJS::native_parse_float,
+        DerkJSNatives::native_parse_float,
         function_prototype_p,
         driver.get_length_key_str_p(),
         Value {1}

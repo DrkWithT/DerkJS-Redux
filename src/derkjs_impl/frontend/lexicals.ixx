@@ -30,6 +30,7 @@ export namespace DerkJS {
         keyword_new,
         keyword_void,
         keyword_typeof,
+        keyword_instanceof,
         keyword_this,
         keyword_undefined,
         keyword_null,

@@ -13,7 +13,7 @@
 <unary> = ( "!" | "+" | "++" | "--" | "typeof" | "void" )? <call>
 <factor> = <unary> ( ( "%" | "*" | "/" ) <unary> )*
 <term> = <factor> ( ( "+" | "-" ) <factor> )*
-<compare> = <term> ( ( "<" | ">" | "<=" | ">=" ) <term> )*
+<compare> = <term> ( ( "<" | ">" | "<=" | ">=" | "instanceof" ) <term> )*
 <equality> = <compare> ( ( "==" | "!=" | "===" | "!==" ) <compare> )*
 <logical-and> = <equality> ( "&&" <equality> )*
 <logical-or> = <logical-and> ( "||" <logical-and> )*
