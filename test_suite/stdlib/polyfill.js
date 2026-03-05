@@ -28,6 +28,18 @@ Object.prototype.constructor = Object;
 
 Boolean.prototype.constructor = Boolean;
 
+Boolean.prototype.toString = function () {
+    if (this instanceof Boolean === false) {
+        throw new Error("Only booleans are allowed for Boolean.toString().");
+    }
+
+    if (this.valueOf()) {
+        return "true";
+    }
+
+    return "false";
+};
+
 Number.prototype.constructor = Number;
 
 // Workaround for a bug within DerkJS setup: native function this-ptr mysteriously mutates before runtime.
