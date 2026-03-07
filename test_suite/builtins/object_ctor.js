@@ -17,7 +17,7 @@ if (!foo.x) {
 }
 
 if (ok === 2) {   
-    console.log("PASS:");
+    console.log("PASS");
 } else {
     throw new Error("Test failed, see logs.");
 }

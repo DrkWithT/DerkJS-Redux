@@ -20,7 +20,13 @@ if (testObject.hasOwnProperty("data")) {
     console.log("FAIL: testObject.data is missing.");
 }
 
-if (ok === 2) {
+if (Object.getPrototypeOf(testObject) === testProto) {
+    ++ok;
+} else {
+    console.log("FAIL: Object.getPrototypeOf(testObject) !== testProto");
+}
+
+if (ok === 3) {
     console.log("PASS");
 } else {
     throw new Error("Test failed, see logs.");
