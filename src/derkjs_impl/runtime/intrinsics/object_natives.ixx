@@ -172,6 +172,21 @@ namespace DerkJS::Runtime::Intrinsics {
         return true;
     }
 
+    export auto native_object_get_prototype_of(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+        const auto passed_rsbp = ctx->rsbp;
+
+        if (auto target_object_ptr = ctx->stack.at(passed_rsbp + 1).to_object(); target_object_ptr && argc == 1) {
+            ctx->stack.at(passed_rsbp - 1) = Value {
+                target_object_ptr->get_prototype()
+            };
+            return true;
+        }
+
+        std::println(std::cerr, "Object.getPrototypeOf: expected object argument (cannot be primitive, null, or undefined.)");
+        ctx->status = VMErrcode::bad_operation;
+        return false;
+    }
+
     export auto native_object_freeze(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
         ObjectBase<Value>* target_this_p = (argc == 0)
