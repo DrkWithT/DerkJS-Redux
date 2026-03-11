@@ -13,7 +13,6 @@
  12. ~~Make `banana.js` work.~~
  13. ~~Add anonymous functions as expressions.~~
  14. ~~Add support for `this` in functions & objects.~~
-   - Implement `Object.create(), Object.getPrototype()`.
  15. ~~Add Arrays:~~
  16. ~~Add mark and sweep GC.~~
  17. ~~Add `break` and `continue`.~~
@@ -35,17 +34,18 @@
  32. ~~Add for loops.~~
  33. ~~`Function.prototype` should be a dud function (return `undefined` & length = `0`).~~
  34. Improve operations for objects:
-    - Modify `on_accessor_mut` method to take the property key.
-    - Improve `as_string` method of object-base... Pretty print object literal / `[object <class name> ... ]`
+    - **DELAYED:** Improve `as_string` method of object-base... Pretty print object literal / `[object <class name> ... ]`
  35. ~~Add `x instanceof y` operator.~~
- 36. Add more support for built-in methods:
+ 36. Add rest parameters by _ES6_. **WIP**
+ 37. Add `delete` operator. **PENDING**
+ 38. Add more support for built-in methods:
     - Number methods
     - String methods
-    - Object methods: getPrototypeOf, seal, isFrozen, isSealed
+    - Object methods: seal, isFrozen, isSealed
     - Date methods: toString?? toDateString??
     - Math methods: pow, cos, sin, tan, log, logn, floor, ceil??
     - Array methods: sort, splice??
- 37. Add `__proto__` AKA `[[prototype]]` support:
+ 39. Add `__proto__` AKA `[[prototype]]` support:
     - Add `__proto__` to parsing.
     - Add `__proto__` support to bytecode & compiler.
     - Add `__proto__` support to `Value` & VM.
