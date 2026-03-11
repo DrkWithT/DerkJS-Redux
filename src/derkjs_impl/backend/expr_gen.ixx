@@ -97,6 +97,8 @@ namespace DerkJS::Backend {
                 context.encode_instruction(Opcode::djs_put_this);
             } else if (primitive_locate_type == Location::heap_obj && primitive_locator->n == -3) {
                 context.encode_instruction(Opcode::djs_put_proto_key);
+            } else if (primitive_locate_type == Location::heap_obj && primitive_locator->n == -4) { // pack param name
+                context.encode_instruction(Opcode::djs_ref_pack);
             } else if (primitive_locate_type == Location::end && primitive_locator->n == -1) {
                 /// NOTE: Put local:0 to reference the callee for self-recursive calls.
                 context.encode_instruction(Opcode::djs_dup_local); // argument-0 is defaulted to 0
@@ -180,7 +182,7 @@ namespace DerkJS::Backend {
         [[nodiscard]] auto emit(BytecodeEmitterContext& context, const Expr& node, const std::string& source) -> bool override {
             const auto& [lambda_params, lambda_body] = std::get<LambdaLiteral>(node.data);
             context.m_accessing_property = false;
-            const int lambda_arity = lambda_params.size();
+            int lambda_arity = lambda_params.size(); // named argument count
 
             // 1. Begin lambda code emission, but let's note that this nested "code scope" place a new buffer as the currently filling one before it's done & craps out a Lambda object... Which gets moved into the bytecode `Program` later.
             context.m_local_maps.emplace_back(CodeGenScope {
@@ -190,12 +192,21 @@ namespace DerkJS::Backend {
             });
             context.m_code_blobs.emplace_front();
 
-            for (const auto& param_token : lambda_params) {
+            for (const auto& [param_token, param_is_pack] : lambda_params) {
                 std::string param_name = param_token.as_string(source);
 
-                if (!context.record_symbol(param_name, RecordLocalOpt {}, FindLocalsOpt {})) {
-                    std::println(std::cerr, "Compile Error: Failed to record local parameter symbol '{}'", param_name);
-                    return false;
+                if (param_is_pack) {
+                    lambda_arity--;
+
+                    if (!context.record_symbol(param_name, RecordPackOpt {}, FindPackVarOpt {})) {
+                        std::println(std::cerr, "Compile Error: Failed to record pack parameter symbol '{}'", param_name);
+                        return false;
+                    }
+                } else {
+                    if (!context.record_symbol(param_name, RecordLocalOpt {}, FindLocalsOpt {})) {
+                        std::println(std::cerr, "Compile Error: Failed to record local parameter symbol '{}'", param_name);
+                        return false;
+                    }
                 }
             }
 

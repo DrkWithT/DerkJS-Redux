@@ -35,10 +35,12 @@ namespace DerkJS::Backend {
     export struct FindGlobalConstsOpt {};
     export struct FindKeyConstOpt {};
     export struct FindLocalsOpt {};
+    export struct FindPackVarOpt {};
     export struct FindCaptureOpt {};
     export struct FindErrorVarOpt {};
 
     export struct RecordLocalOpt {};
+    export struct RecordPackOpt {};
     export struct RecordSpecialThisOpt {};
 
     export struct CodeGenScope {
@@ -171,6 +173,14 @@ namespace DerkJS::Backend {
         [[nodiscard]] auto lookup_symbol(const std::string& symbol, [[maybe_unused]] FindLocalsOpt opt) -> std::optional<Arg> {
             if (auto fn_local_opt = m_local_maps.back().locals.find(symbol); fn_local_opt != m_local_maps.back().locals.end()) {
                 return fn_local_opt->second;
+            }
+
+            return {};
+        }
+
+        [[nodiscard]] auto lookup_symbol(const std::string& symbol, [[maybe_unused]] FindPackVarOpt opt) -> std::optional<Arg> {
+            if (auto fn_pack_location_opt = m_local_maps.back().locals.find(symbol); fn_pack_location_opt != m_local_maps.back().locals.end()) {
+                return fn_pack_location_opt->second;
             }
 
             return {};
@@ -320,6 +330,14 @@ namespace DerkJS::Backend {
                 ++m_local_maps.back().next_local_id;
 
                 return next_local_loc;
+            } else if constexpr (std::is_same_v<plain_item_type, RecordPackOpt> && std::is_same_v<RecordOpt, FindPackVarOpt>) {
+                const auto result_pack_loc = m_local_maps.back().locals[symbol] = Arg {
+                    .n = -4,
+                    .tag = Location::heap_obj
+                };
+
+                ++m_local_maps.back().next_local_id;
+                return result_pack_loc;
             } else if constexpr (std::is_same_v<plain_item_type, RecordLocalOpt> && std::is_same_v<RecordOpt, FindErrorVarOpt>) {
                 Arg next_error_loc {
                     .n = 0,
