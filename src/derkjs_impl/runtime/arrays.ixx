@@ -3,6 +3,7 @@ module;
 #include <type_traits>
 #include <utility>
 #include <string>
+#include <span>
 #include <vector>
 #include <sstream>
 
@@ -73,6 +74,27 @@ export namespace DerkJS {
                 .item = initial_length_v,
                 .flags = length_prop_flags
             });
+        }
+
+        Array(ObjectBase<Value>* prototype_p, const Value& length_key, const std::span<Value>& item_slice) noexcept (std::is_nothrow_default_constructible_v<Value>)
+        : m_own_properties {}, m_items {}, m_prototype {prototype_p}, m_flags {std::to_underlying(AttrMask::unused)} {
+            const auto length_prop_flags = static_cast<uint8_t>(std::to_underlying(AttrMask::is_accessor) | m_flags);
+
+            m_prototype.update_parent_flags(m_flags);
+
+            auto& length_value_ref = m_own_properties.emplace_back(PropEntry<Value, Value> {
+                .key = length_key,
+                .item = Value {0},
+                .flags = length_prop_flags
+            }).item;
+            auto item_count = 0;
+
+            for (const auto& item_value : item_slice) {
+                set_property_value(Value {item_count}, item_value);
+                item_count++;
+            }
+
+            length_value_ref = Value {item_count};
         }
 
         [[nodiscard]] auto items() noexcept -> std::vector<Value>& {
