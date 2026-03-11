@@ -105,7 +105,7 @@ export namespace DerkJS {
         [[nodiscard]] auto operator=(const V& value) noexcept -> PropertyDescriptor& {
             if (get_flag<AttrMask::writable>()) {
                 if (get_flag<AttrMask::is_accessor>()) {
-                    self_p->update_on_accessor_mut(item_p, value);
+                    self_p->update_on_accessor_mut(*item_p, value);
                 } else {
                     *item_p = value;
                 }
@@ -219,7 +219,7 @@ export namespace DerkJS {
         virtual auto set_property_value(const V& key, const V& value) -> V* = 0;
         virtual auto del_property_value(const V& key) -> bool = 0;
         /// NOTE: update this to take a const V& key parameter 1st.
-        virtual void update_on_accessor_mut(V* accessor_value_p, const V& value) = 0;
+        virtual void update_on_accessor_mut(const V& accessor_value_p, const V& value) = 0;
 
         virtual auto call(void* opaque_ctx_p, int argc, bool has_this_arg) -> bool = 0;
         virtual auto call_as_ctor(void* opaque_ctx_p, int argc) -> bool = 0;

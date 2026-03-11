@@ -127,7 +127,7 @@ export namespace DerkJS {
             return false;
         }
 
-        void update_on_accessor_mut([[maybe_unused]] Value* accessor_p, [[maybe_unused]] const Value& value) override {}
+        void update_on_accessor_mut([[maybe_unused]] const Value& accessor_p, [[maybe_unused]] const Value& value) override {}
 
         [[nodiscard]] auto call(void* opaque_ctx_p, int argc, [[maybe_unused]] bool has_this_arg) -> bool override {
             /// 1.1: Prepare the `opaque_ctx_p` argument, which MUST point to an `ExternVMCtx` and MUST NOT own the context. Track other important caller/callee state too.
@@ -392,7 +392,7 @@ export namespace DerkJS {
             return false;
         }
 
-        void update_on_accessor_mut([[maybe_unused]] Value* accessor_p, [[maybe_unused]] const Value& value) override {}
+        void update_on_accessor_mut([[maybe_unused]] const Value& accessor_p, [[maybe_unused]] const Value& value) override {}
 
         [[maybe_unused]] auto call(void* opaque_ctx_p, int argc, bool has_this_arg) -> bool override {
             // 1.1: After accessing the VM context, consume `this` argument (if needed) before the call to avoid garbage results.

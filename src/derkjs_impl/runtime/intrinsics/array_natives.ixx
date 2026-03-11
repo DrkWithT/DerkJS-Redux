@@ -60,12 +60,23 @@ namespace DerkJS::Runtime::Intrinsics {
         return false;
     }
 
+    /// NOTE: Upon adding rest parameter e.g `Array.prototype.push(args...)`, make this a polyfill.
     export auto native_array_push(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
         auto array_this_p = dynamic_cast<Array*>(
             ctx->stack.at(passed_rsbp - 1).to_object()
         );
-        Value* array_length_p = array_this_p->get_length();
+        /// NOTE: PropertyDescriptor of Array.length
+        auto array_length_p = &array_this_p->get_property_value(
+            Value {ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))},
+            false
+        );
+
+        if (!array_length_p) {
+            std::println(std::cerr, "Array instance has a null length reference.");
+            ctx->status = VMErrcode::bad_property_access;
+            return false;
+        }
 
         for (int temp_item_offset = 0; temp_item_offset < argc; temp_item_offset++) {
             array_this_p->items().emplace_back(ctx->stack.at(passed_rsbp + 1 + temp_item_offset));
