@@ -70,6 +70,7 @@ export namespace DerkJS {
         left_bracket,
         right_bracket,
         dot,
+        elipses,                // `...` symbol for rest parameters
         colon,
         comma,
         semicolon,
@@ -297,6 +298,38 @@ export namespace DerkJS {
             };
         }
 
+        [[nodiscard]] auto lex_dot_cluster(const std::string& source) noexcept -> Token {
+            auto temp_start = m_pos;
+            auto temp_length = 0;
+            const auto temp_line = m_line;
+            const auto temp_column = m_column;
+
+            while (!at_eof()) {
+                if (const auto c = source.at(m_pos); c == '.') {
+                    update_source_location(c);
+                    ++temp_length;
+                } else {
+                    break;
+                }
+            }
+
+            const auto checked_tag = ([] (int dots) noexcept -> TokenTag {
+                switch (dots) {
+                case 1: return TokenTag::dot;
+                case 3: return TokenTag::elipses;
+                default: return TokenTag::unknown;
+                }
+            })(temp_length);
+
+            return {
+                checked_tag,
+                temp_start,
+                temp_length,
+                temp_line,
+                temp_column
+            };
+        }
+
         [[nodiscard]] auto lex_numeric(const std::string& source) noexcept -> Token {
             auto temp_start = m_pos;
             auto temp_length = 0;
@@ -427,7 +460,7 @@ export namespace DerkJS {
             case '}': return lex_single(source, TokenTag::right_brace);
             case '[': return lex_single(source, TokenTag::left_bracket);
             case ']': return lex_single(source, TokenTag::right_bracket);
-            case '.': return lex_single(source, TokenTag::dot);
+            case '.': return lex_dot_cluster(source);
             case ':': return lex_single(source, TokenTag::colon);
             case ',': return lex_single(source, TokenTag::comma);
             case ';': return lex_single(source, TokenTag::semicolon);

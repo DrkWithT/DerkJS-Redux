@@ -266,18 +266,35 @@ export namespace DerkJS {
             );
         }
 
+        [[nodiscard]] auto parse_param(Lexer& lexer, const std::string& source) -> Param {
+            const auto snippet_begin = m_current.start;
+            const auto is_rest_param = m_current.match_tag_to(TokenTag::elipses);
+
+            if (is_rest_param) {
+                consume_any(lexer, source);
+            }
+
+            consume(lexer, source, TokenTag::identifier);
+
+            return {
+                .token = m_previous,
+                .is_rest = is_rest_param
+            };
+        }
+
         [[nodiscard]] auto parse_lambda(Lexer& lexer, const std::string& source) -> ExprPtr {
             m_syntax = SyntaxTag::expr_lambda;
 
             const auto snippet_begin = m_current.start;
-            std::vector<Token> param_tokens;
+            std::vector<Param> param_list;
 
             consume_any(lexer, source); // skip pre-checked 'function'
             consume(lexer, source, TokenTag::left_paren);
 
+            const auto is_first_pack = m_current.match_tag_to(TokenTag::elipses);
+
             if (!m_current.match_tag_to(TokenTag::right_paren)) {
-                consume(lexer, source, TokenTag::identifier);
-                param_tokens.emplace_back(m_previous);
+                param_list.emplace_back(parse_param(lexer, source));
             }
 
             while (!at_eof()) {
@@ -286,16 +303,14 @@ export namespace DerkJS {
                 }
 
                 consume_any(lexer, source);
-                consume(lexer, source, TokenTag::identifier);
-
-                param_tokens.emplace_back(m_previous);
+                param_list.emplace_back(parse_param(lexer, source));
             }
 
             consume(lexer, source, TokenTag::right_paren);
 
             return std::make_unique<Expr>(
                 LambdaLiteral {
-                    .params = std::move(param_tokens),
+                    .params = std::move(param_list),
                     .body = parse_block(lexer, source)
                 },
                 0,
@@ -1010,11 +1025,10 @@ export namespace DerkJS {
 
             consume(lexer, source, TokenTag::left_paren);
 
-            std::vector<Token> params;
+            std::vector<Param> params;
 
             if (!m_current.match_tag_to(TokenTag::right_paren)) {
-                consume(lexer, source, TokenTag::identifier);
-                params.emplace_back(m_previous);
+                params.emplace_back(parse_param(lexer, source));
             }
 
             while (!at_eof()) {
@@ -1023,8 +1037,7 @@ export namespace DerkJS {
                 }
 
                 consume_any(lexer, source); // pass ',' before another parameter name...
-                consume(lexer, source, TokenTag::identifier);
-                params.emplace_back(m_previous);
+                params.emplace_back(parse_param(lexer, source));
             }
 
             consume(lexer, source, TokenTag::right_paren);
