@@ -146,8 +146,8 @@ int main(int argc, char* argv[]) {
 
     /// 4.2 Patch properties of native prototypes. These are VERY important for DerkJS to interpret certain scripts properly. ///
 
-    /// Object.prototype items
-    Core::NativePropertyStub object_prototype_props[] {
+    /// Object own items:
+    Core::NativePropertyStub object_props[] {
         Core::NativePropertyStub {
             .name_str = "create",
             .item = std::make_unique<NativeFunction>(
@@ -158,6 +158,30 @@ int main(int argc, char* argv[]) {
                 Value {1}
             )
         },
+        Core::NativePropertyStub {
+            .name_str = "freeze",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJSNatives::native_object_freeze,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        },
+        Core::NativePropertyStub {
+            .name_str = "getPrototypeOf",
+            .item = std::make_unique<NativeFunction>(
+                function_prototype_p,
+                DerkJSNatives::native_object_get_prototype_of,
+                function_prototype_p,
+                driver.get_length_key_str_p(),
+                Value {1}
+            )
+        }
+    };
+
+    /// Object.prototype items
+    Core::NativePropertyStub object_prototype_props[] {
         Core::NativePropertyStub {
             .name_str = "hasOwnProperty",
             .item = std::make_unique<NativeFunction>(
@@ -177,30 +201,10 @@ int main(int argc, char* argv[]) {
                 driver.get_length_key_str_p(),
                 Value {1}
             )
-        },
-        Core::NativePropertyStub {
-            .name_str = "freeze",
-            .item = std::make_unique<NativeFunction>(
-                function_prototype_p,
-                DerkJSNatives::native_object_freeze,
-                function_prototype_p,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
         }
     };
 
     Core::NativePropertyStub boolean_prototype_props[] {
-        Core::NativePropertyStub {
-            .name_str = "hasOwnProperty",
-            .item = std::make_unique<NativeFunction>(
-                function_prototype_p,
-                DerkJSNatives::native_object_has_own_property,
-                function_prototype_p,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
-        },
         Core::NativePropertyStub {
             .name_str = "valueOf",
             .item = std::make_unique<NativeFunction>(
@@ -239,16 +243,6 @@ int main(int argc, char* argv[]) {
 
     /// String.prototype items
     Core::NativePropertyStub string_prototype_props[] {
-        Core::NativePropertyStub {
-            .name_str = "hasOwnProperty",
-            .item = std::make_unique<NativeFunction>(
-                function_prototype_p,
-                DerkJSNatives::native_object_has_own_property,
-                function_prototype_p,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
-        },
         Core::NativePropertyStub {
             .name_str = "charCodeAt",
             .item = std::make_unique<NativeFunction>(
@@ -294,16 +288,6 @@ int main(int argc, char* argv[]) {
     /// Function.prototype items
     Core::NativePropertyStub function_prototype_props[] {
         Core::NativePropertyStub {
-            .name_str = "hasOwnProperty",
-            .item = std::make_unique<NativeFunction>(
-                function_prototype_p,
-                DerkJSNatives::native_object_has_own_property,
-                function_prototype_p,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
-        },
-        Core::NativePropertyStub {
             .name_str = "call",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
@@ -317,16 +301,6 @@ int main(int argc, char* argv[]) {
 
     /// Array.prototype items
     Core::NativePropertyStub array_prototype_props[] {
-        Core::NativePropertyStub {
-            .name_str = "hasOwnProperty",
-            .item = std::make_unique<NativeFunction>(
-                function_prototype_p,
-                DerkJSNatives::native_object_has_own_property,
-                function_prototype_p,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
-        },
         Core::NativePropertyStub {
             .name_str = "push",
             .item = std::make_unique<NativeFunction>(
@@ -347,20 +321,20 @@ int main(int argc, char* argv[]) {
                 Value {1}
             )
         },
-    };
-
-    /// Console items
-    Core::NativePropertyStub console_props[] {
         Core::NativePropertyStub {
-            .name_str = "hasOwnProperty",
+            .name_str = "concat",
             .item = std::make_unique<NativeFunction>(
                 function_prototype_p,
-                DerkJSNatives::native_object_has_own_property,
+                DerkJSNatives::native_array_concat,
                 function_prototype_p,
                 driver.get_length_key_str_p(),
                 Value {1}
             )
-        },
+        }
+    };
+
+    /// Console items
+    Core::NativePropertyStub console_props[] {
         Core::NativePropertyStub {
             .name_str = "log",
             .item = std::make_unique<NativeFunction>(
@@ -385,16 +359,6 @@ int main(int argc, char* argv[]) {
 
     /// Date items
     Core::NativePropertyStub date_props[] {
-        Core::NativePropertyStub {
-            .name_str = "hasOwnProperty",
-            .item = std::make_unique<NativeFunction>(
-                function_prototype_p,
-                DerkJSNatives::native_object_has_own_property,
-                function_prototype_p,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
-        },
         Core::NativePropertyStub {
             .name_str = "now",
             .item = std::make_unique<NativeFunction>(
@@ -494,6 +458,7 @@ int main(int argc, char* argv[]) {
     /// Patch prototypes & alias built-in globals ///
 
     driver.patch_native_object(object_prototype_p, string_prototype_p, std::to_array(std::move(object_prototype_props)));
+    driver.patch_native_object(object_ctor_p, string_prototype_p, std::to_array(std::move(object_props)));
     driver.add_native_object_alias("Object", object_ctor_p);
 
     driver.patch_native_object(boolean_prototype_p, string_prototype_p, std::to_array(std::move(boolean_prototype_props)));

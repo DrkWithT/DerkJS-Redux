@@ -1,6 +1,8 @@
 ### Grammar (Expressions)
 
 ```
+<param> = "..."? <identifier>
+
 <primary> = "undefined" | "null" | "this" | <identifier> | <boolean> | <number> | <object> | <array> | <lambda> | "(" <expr> ")"
 <object> = "{" (<property> ",")* "}"
 <property> = <identifier> : <expr>

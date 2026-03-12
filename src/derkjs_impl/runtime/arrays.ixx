@@ -3,6 +3,7 @@ module;
 #include <type_traits>
 #include <utility>
 #include <string>
+#include <span>
 #include <vector>
 #include <sstream>
 
@@ -19,8 +20,6 @@ export namespace DerkJS {
         std::vector<Value> m_items;
         // Holds a prototype reference.
         Value m_prototype;
-        // References the actual length value.
-        Value* m_length_p;
         uint8_t m_flags;
 
         void fill_gap_to_n(int index, bool should_default) {
@@ -55,35 +54,47 @@ export namespace DerkJS {
             return &m_items[index];
         }
 
-        void resize_by_length(int next_length) {
+        void try_resize_by_length(const Value& length_key, int next_length) {
+            set_property_value(length_key, next_length);
+
             if (const int current_length = m_items.size(); next_length > current_length) {
                 m_items.resize(next_length, Value {});
-                *m_length_p = Value {next_length};
             } else if (next_length < current_length) {
                 m_items.resize(next_length);
-                *m_length_p = Value {next_length};
             }
         }
     public:
         Array(ObjectBase<Value>* prototype_p, const Value& length_key, const Value& initial_length_v) noexcept (std::is_nothrow_default_constructible_v<Value>)
-        : m_own_properties {}, m_items {}, m_prototype {prototype_p}, m_length_p {}, m_flags {std::to_underlying(AttrMask::unused)} {
+        : m_own_properties {}, m_items {}, m_prototype {prototype_p}, m_flags {std::to_underlying(AttrMask::unused)} {
             const auto length_prop_flags = static_cast<uint8_t>(std::to_underlying(AttrMask::is_accessor) | m_flags);
 
             m_prototype.update_parent_flags(m_flags);
-            m_length_p = &m_own_properties.emplace_back(PropEntry<Value, Value> {
+            m_own_properties.emplace_back(PropEntry<Value, Value> {
                 .key = length_key,
                 .item = initial_length_v,
                 .flags = length_prop_flags
+            });
+        }
+
+        Array(ObjectBase<Value>* prototype_p, const Value& length_key, const std::span<Value>& item_slice) noexcept (std::is_nothrow_default_constructible_v<Value>)
+        : m_own_properties {}, m_items {}, m_prototype {prototype_p}, m_flags {std::to_underlying(AttrMask::unused)} {
+            const auto length_prop_flags = static_cast<uint8_t>(std::to_underlying(AttrMask::is_accessor) | m_flags);
+
+            m_prototype.update_parent_flags(m_flags);
+
+            auto& length_value_ref = m_own_properties.emplace_back(PropEntry<Value, Value> {
+                .key = length_key,
+                .item = Value {0},
+                .flags = length_prop_flags
             }).item;
-            m_length_p->update_parent_flags(length_prop_flags);
-        }
+            auto item_count = 0;
 
-        [[nodiscard]] auto get_length() const noexcept -> const Value* {
-            return m_length_p;
-        }
+            for (const auto& item_value : item_slice) {
+                set_property_value(Value {item_count}, item_value);
+                item_count++;
+            }
 
-        [[nodiscard]] auto get_length() noexcept -> Value* {
-            return m_length_p;
+            length_value_ref = Value {item_count};
         }
 
         [[nodiscard]] auto items() noexcept -> std::vector<Value>& {
@@ -173,9 +184,9 @@ export namespace DerkJS {
         [[maybe_unused]] auto set_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] const Value& value) -> Value* override {
             auto property_desc = get_property_value(key, true);
 
-            if (m_flags & std::to_underlying(AttrMask::writable)) {
-                *m_length_p = Value {static_cast<int>(m_items.size())};
-            }
+            // if (m_flags & std::to_underlying(AttrMask::writable)) {
+            //     *m_length_p = Value {static_cast<int>(m_items.size())};
+            // }
 
             return &(property_desc = value);
         }
@@ -184,15 +195,13 @@ export namespace DerkJS {
             return false; // TODO
         }
 
-        void update_on_accessor_mut([[maybe_unused]] Value* accessor_p, const Value& value) override {
+        void update_on_accessor_mut([[maybe_unused]] const Value& key, const Value& value) override {
             if ((m_flags & std::to_underlying(AttrMask::writable)) == 0) {
                 return;
             }
 
-            if (value.to_string() == "length") {
-                const int next_length = value.to_num_i32().value_or(0);
-                resize_by_length(std::max(0, next_length));
-            }
+            const int next_length = value.to_num_i32().value_or(0);
+            try_resize_by_length(key, std::max(0, next_length));
         }
 
         [[nodiscard]] auto call([[maybe_unused]] void* opaque_ctx_p, [[maybe_unused]] int argc, [[maybe_unused]] bool has_this_arg) -> bool override {

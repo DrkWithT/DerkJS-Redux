@@ -5,6 +5,7 @@ module;
 #include <format>
 #include <string>
 #include <string_view>
+#include <span>
 #include <sstream>
 #include <iostream>
 #include <print>
@@ -13,6 +14,7 @@ export module runtime.callables;
 
 import runtime.value;
 import runtime.object;
+import runtime.arrays;
 import runtime.bytecode;
 import runtime.context;
 
@@ -127,7 +129,7 @@ export namespace DerkJS {
             return false;
         }
 
-        void update_on_accessor_mut([[maybe_unused]] Value* accessor_p, [[maybe_unused]] const Value& value) override {}
+        void update_on_accessor_mut([[maybe_unused]] const Value& accessor_p, [[maybe_unused]] const Value& value) override {}
 
         [[nodiscard]] auto call(void* opaque_ctx_p, int argc, [[maybe_unused]] bool has_this_arg) -> bool override {
             /// 1.1: Prepare the `opaque_ctx_p` argument, which MUST point to an `ExternVMCtx` and MUST NOT own the context. Track other important caller/callee state too.
@@ -262,6 +264,7 @@ export namespace DerkJS {
             "djs_get_prop",
             "djs_put_prop",
             "djs_del_prop",
+            "djs_ref_pack",
             "djs_numify",
             "djs_strcat",
             "djs_pre_inc",
@@ -392,7 +395,7 @@ export namespace DerkJS {
             return false;
         }
 
-        void update_on_accessor_mut([[maybe_unused]] Value* accessor_p, [[maybe_unused]] const Value& value) override {}
+        void update_on_accessor_mut([[maybe_unused]] const Value& accessor_p, [[maybe_unused]] const Value& value) override {}
 
         [[maybe_unused]] auto call(void* opaque_ctx_p, int argc, bool has_this_arg) -> bool override {
             // 1.1: After accessing the VM context, consume `this` argument (if needed) before the call to avoid garbage results.
@@ -404,9 +407,24 @@ export namespace DerkJS {
 
             // 1.2: Get thisArg and capture objects.
             ObjectBase<Value>* caller_capture_p = vm_context_p->frames.back().capture_p;
+            ObjectBase<Value>* callee_pack_p = nullptr;
 
             if (vm_context_p->frames.back().caller_addr != this) {
                 caller_capture_p = vm_context_p->heap.add_item(vm_context_p->heap.get_next_id(), std::make_unique<Object>(caller_capture_p));
+
+                if (const int16_t named_arity = min_arity(); argc > named_arity) {
+                    callee_pack_p = vm_context_p->heap.add_item(
+                        vm_context_p->heap.get_next_id(),
+                        std::make_unique<Array>(
+                            vm_context_p->base_protos.at(static_cast<unsigned int>(BasePrototypeID::array)),
+                            vm_context_p->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
+                            std::span<Value> {
+                                vm_context_p->stack.begin() + callee_rsbp + named_arity + 1,
+                                static_cast<std::size_t>(argc - named_arity)
+                            }
+                        )
+                    );
+                }
             }
 
             if (!has_this_arg) {
@@ -419,6 +437,7 @@ export namespace DerkJS {
                 .m_caller_ret_ip = resume_ip,
                 .caller_addr = this,
                 .capture_p = caller_capture_p,
+                .pack_array_p = callee_pack_p,
                 .m_callee_sbp = callee_rsbp,
                 .m_caller_sbp = caller_rsbp,
                 .m_flags = 0

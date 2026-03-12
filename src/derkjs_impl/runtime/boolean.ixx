@@ -121,7 +121,7 @@ namespace DerkJS {
             return false; // TODO: implement.
         }
 
-        void update_on_accessor_mut([[maybe_unused]] Value* accessor_value_p, const Value& value) override {}
+        void update_on_accessor_mut([[maybe_unused]] const Value& accessor_value_p, const Value& value) override {}
 
         [[nodiscard]] auto call(void* opaque_ctx_p, int argc, bool has_this_arg) -> bool override {
             return false;

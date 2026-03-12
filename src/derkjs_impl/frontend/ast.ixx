@@ -70,6 +70,12 @@ export namespace DerkJS {
         StmtNodeTag tag;
     };
 
+    /// NOTE: utility type for function parameter (rest / single)
+    struct Param {
+        Token token;
+        bool is_rest;
+    };
+
     struct ExprStmt;
     struct VarDecl;
     struct Variables;
@@ -129,7 +135,7 @@ export namespace DerkJS {
     };
 
     struct LambdaLiteral {
-        std::vector<Token> params;
+        std::vector<Param> params;
         StmtPtr body;
     };
 

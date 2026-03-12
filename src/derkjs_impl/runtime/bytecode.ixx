@@ -40,6 +40,7 @@ export namespace DerkJS {
         djs_get_prop, // djs_get_prop gets a property value's ref based on an object's ref below a pooled string ref on the stack... the result is placed where the targeted ref was. --> Stack placement: <OBJ-REF-LOCAL> <PROP-KEY-HANDLE> --> <PROP-VALUE-REF>
         djs_put_prop, // djs_put_prop --> Stack placement: <OBJ-REF> <PROP-KEY-HANDLE-VALUE> <NEW-VALUE> --> <OBJ-REF>
         djs_del_prop, // TODO!
+        djs_ref_pack, // TODO, please see roadmap todos under "rest parameters"
         djs_numify, // converts the VM stack's top value to a number
         djs_strcat, // concatenates 2 string copies since the ref-wrapping `Value` is decoupled from VM state --> Stack placement: <STRING-1> <STRING-2> --> <NEW-STRING>
         djs_pre_inc, // puts the VM stack's top value copy, increments, then clones it
@@ -77,7 +78,7 @@ export namespace DerkJS {
         code_chunk,
         immediate,
         constant,
-        heap_obj, // -2: this, -3: prototype
+        heap_obj, // -2: this, -3: prototype, -4: rest param's Array
         local,
         key_str,
         error_var, // Used for `e` in `catch(e) { ... }`.
@@ -130,7 +131,8 @@ export namespace DerkJS {
             "djs_put_proto_key",
             "djs_get_prop", // Args: <should-default>: gets a property value based on RSP: <OBJ-REF>, RSP - 1: <POOLED-STR-REF>; IF should-default == 1, default any invalid key to `undefined`.
             "djs_put_prop", // SEE: djs_get_prop for stack args passing...
-            "djs_del_prop", // SEE: djs_get_prop for stack args passing...
+            "djs_del_prop", // SEE: djs_del_prop for stack args passing...
+            "djs_ref_pack",
             "djs_numify",
             "djs_strcat",
             "djs_pre_inc",

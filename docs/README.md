@@ -1,16 +1,19 @@
 ## README
 
 ### Brief
-My latest attempt at implmenting JavaScript under version ES5 in modern C++.
+My latest attempt at implmenting a subset of JavaScript, specifically ES5 with cherry-picked ES6+ features, in modern C++.
 
 ### Dependencies
  - LLVM 21.1.7+ (just the Homebrew distribution for now)
  - CMake 4.2+
  - Ninja
 
-### Caveats
+### Caveats / Quirks
+ - No `eval()`.
  - No automatic semicolon insertion.
+ - No `arguments`, but rest parameters are given.
  - No BigInt.
+ - No Promise API yet.
 
 #### Demo: Function Expressions
 <img src="imgs/DerkJS_lambda_test.png" size="25%">

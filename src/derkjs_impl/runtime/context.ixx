@@ -37,6 +37,7 @@ namespace DerkJS {
         const Instruction* m_caller_ret_ip;
         ObjectBase<Value>* caller_addr;
         ObjectBase<Value>* capture_p;
+        ObjectBase<Value>* pack_array_p;
         int m_callee_sbp;
         int m_caller_sbp;
         uint8_t m_flags;
@@ -107,6 +108,7 @@ namespace DerkJS {
                     .m_caller_ret_ip = nullptr,
                     .caller_addr = nullptr,
                     .capture_p = global_this_p,
+                    .pack_array_p = nullptr,
                     .m_callee_sbp = 1,
                     .m_caller_sbp = -1,
                 });
@@ -133,7 +135,7 @@ namespace DerkJS {
                     return VMErrcode::pending;
                 }
 
-                if (const auto& [caller_ret_ip, caller_addr, caller_capture_p, callee_sbp, caller_sbp, calling_flags] = frames.back(); peek_rip_p->op == Opcode::djs_ret) {
+                if (const auto& [caller_ret_ip, caller_addr, caller_capture_p, pack_array_ptr, callee_sbp, caller_sbp, calling_flags] = frames.back(); peek_rip_p->op == Opcode::djs_ret) {
                     rsbp = caller_sbp;
                     rsp = callee_sbp;
                     rip_p = caller_ret_ip;

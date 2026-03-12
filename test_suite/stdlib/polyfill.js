@@ -49,6 +49,14 @@ String.prototype.toString = function () {
     return new String(this);
 };
 
+Array.isArray = function (arg) {
+    if (typeof arg !== "object") {
+        return false;
+    }
+
+    return arg instanceof Array;
+};
+
 Array.prototype.at = function(index) {
     if (index < 0) {
         index = index + this.length;
