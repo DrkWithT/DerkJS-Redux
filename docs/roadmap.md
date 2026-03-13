@@ -37,16 +37,34 @@
     - **DELAYED:** Improve `as_string` method of object-base... Pretty print object literal / `[object <class name> ... ]`
  35. ~~Add `x instanceof y` operator.~~
  36. Add rest parameters by _ES6_. **WIP**
- 37. Add `delete` operator. **PENDING**
- 38. Add more support for built-in methods:
+ 37. **Rework reference system:**
+    - All objects and simple Values should have a unified metadata system of 1 - 8 flags:
+      - F0: writable
+      - F1: configurable
+      - F2: enumerable
+      - F3: handled (for handling accessor mutation)
+      - NOTE: Default flags are `F0 | F1`. Only Arrays and Objects have enumerable ON.
+    - `Value` should be able to handle local variable references, using a `Value*` with metadata.
+      - Every value assignment should check `[[Writable]]`.
+    - `PropertyDescriptor` should be redone:
+      - Contains the key `Value`
+      - Contains the parent object pointer (the "Base")
+      - Flags such as `[[Writable]]` are viewed from the `Value`.
+      - `get_value`, `set_value`, and `ref_value` methods:
+         - **F3 == ON:** run the handler after changing the property value.
+    - `PropEntry<Value, Value>` should be redone:
+      - Optional function pointer to a mutation handler... This eases `Array.length`.
+      - Struct fields: `Key, Value, Handler?` (flags come from the value)
+ 38. Add `__proto__` AKA `[[prototype]]` support:
+    - Add `__proto__` to parsing.
+    - Add `__proto__` support to bytecode & compiler.
+    - Add `__proto__` support to `Value` & VM.
+    - Add `__proto__` test cases.
+ 39. Add more support for built-in methods:
     - Number methods
     - String methods
     - Object methods: seal, isFrozen, isSealed
     - Date methods: toString?? toDateString??
     - Math methods: pow, cos, sin, tan, log, logn, floor, ceil??
     - Array methods: sort, splice??
- 39. Add `__proto__` AKA `[[prototype]]` support:
-    - Add `__proto__` to parsing.
-    - Add `__proto__` support to bytecode & compiler.
-    - Add `__proto__` support to `Value` & VM.
-    - Add `__proto__` test cases.
+ 40. Add `delete` operator. **PENDING**
