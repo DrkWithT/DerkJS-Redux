@@ -46,8 +46,7 @@ export namespace DerkJS {
     class ObjectBase;
 
     /**
-     * @brief Implementation of the data JS property descriptor needed for proper member access semantics as per https://262.ecma-international.org/5.1/#sec-8.10.
-     * @note No accessor semantics are implemented for simplicity.
+     * @brief Implementation of the data JS property descriptor needed for proper member access semantics as per https://262.ecma-international.org/5.1/#sec-8.10. However, plain old data descriptors handle local value references for variables.
      * @tparam V See `DerkJS::Value` in `./src/derkjs_impl/runtime/value.ixx`.
      */
     template <typename V>
@@ -67,13 +66,21 @@ export namespace DerkJS {
     public:
         /// NOTE: For dud property descriptors, likely from an invalid property name.
         explicit constexpr PropertyDescriptor() noexcept
-        : key_p {nullptr}, item_p {nullptr}, flags {std::to_underlying(AttrMask::dead)} {}
+        : key_p {nullptr}, item_p {nullptr}, self_p {nullptr}, flags {std::to_underlying(AttrMask::dead)} {}
 
         constexpr PropertyDescriptor(const V* key_p_, V* item_p_, ObjectBase<V>* self_p_, uint8_t parent_object_flags) noexcept
         : key_p {key_p_}, item_p {item_p_}, self_p {self_p_}, flags {parent_object_flags} {
             if (!item_p) {
                 flags = std::to_underlying(AttrMask::dead);
             }
+        }
+
+        [[nodiscard]] constexpr auto to_prop_entry() const noexcept -> PropEntry<V, V> {
+            return {
+                .key = *key_p,
+                .item = *item_p,
+                .flags = flags
+            };
         }
 
         [[nodiscard]] constexpr auto get_key() const noexcept -> const V& {

@@ -24,8 +24,9 @@ namespace DerkJS {
             m_message = m_properties.emplace_back(self_message_key, message_arg, std::to_underlying(AttrMask::immutable)).item;
 
             if (auto prototype_p = m_prototype.to_object(); prototype_p) {
-                Value temp_name_v = *prototype_p->get_property_value(self_name_key, false);
-                m_properties.emplace_back(self_name_key, temp_name_v, temp_name_v.get_parent_flags());
+                m_properties.emplace_back(
+                    prototype_p->get_property_value(self_name_key, false).to_prop_entry()
+                );
             }
         }
 

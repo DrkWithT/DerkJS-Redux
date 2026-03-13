@@ -23,16 +23,11 @@ export namespace DerkJS {
         uint8_t m_flags;
 
         void fill_gap_to_n(int index, bool should_default) {
-            int item_count = m_items.size();
-
             if (!should_default || (m_flags & std::to_underlying(AttrMask::writable)) == 0) {
                 return;
             }
 
-            while (item_count <= index) {
-                m_items.emplace_back(Value {});
-                ++item_count;
-            }
+            m_items.resize(index + 1, Value {});
         }
 
         [[nodiscard]] auto get_item(int index, bool should_default) -> Value* {
@@ -45,13 +40,6 @@ export namespace DerkJS {
             fill_gap_to_n(index, should_default);
 
             return &m_items.at(index);
-        }
-
-        [[nodiscard]] auto put_item(int index, const Value& value) -> Value* {
-            fill_gap_to_n(index, true);
-            m_items[index] = value;
-
-            return &m_items[index];
         }
 
         void try_resize_by_length(const Value& length_key, int next_length) {

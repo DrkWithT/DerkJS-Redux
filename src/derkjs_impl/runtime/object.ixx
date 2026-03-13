@@ -61,7 +61,7 @@ namespace DerkJS {
 
         [[nodiscard]] auto get_property_value(const Value& key, bool allow_filler) -> PropertyDescriptor<Value> override {
             if (key.is_prototype_key()) {
-                /// TODO: fix this to not get __proto__- instead get a new m_instance_prototype field.
+                // TODO: fix this to not get __proto__- instead get a new m_instance_prototype field.
                 return PropertyDescriptor<Value> {&key, &m_prototype, this, m_flags};
             } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
                 return prop.key == key || prop.key.compare_as_object(key);

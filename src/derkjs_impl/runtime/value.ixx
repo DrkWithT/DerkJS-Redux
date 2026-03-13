@@ -149,10 +149,6 @@ export namespace DerkJS {
             return self.m_parent_flags == 0x00;
         }
 
-        [[nodiscard]] constexpr auto get_parent_flags(this auto&& self) noexcept -> uint8_t {
-            return self.m_parent_flags;
-        }
-
         constexpr void update_parent_flags(uint8_t parent_object_flags) noexcept {
             m_parent_flags = parent_object_flags;
         }
@@ -288,7 +284,10 @@ export namespace DerkJS {
                 m_tag = ValueTag::num_nan;
                 break;
             case ValueTag::val_ref:
-                return m_data.ref_p->increment();
+                if (get_parent_flag<AttrMask::writable>()) {
+                    return m_data.ref_p->decrement();
+                }
+                return *this;
             default:
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
@@ -319,7 +318,10 @@ export namespace DerkJS {
                 m_tag = ValueTag::num_nan;
                 break;
             case ValueTag::val_ref:
-                return m_data.ref_p->decrement();
+                if (get_parent_flag<AttrMask::writable>()) {
+                    return m_data.ref_p->decrement();
+                }
+                return *this;
             default:
                 m_data.dud = dud_nan_char_v;
                 m_tag = ValueTag::num_nan;
