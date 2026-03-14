@@ -136,8 +136,7 @@ namespace DerkJS {
     }
 
     inline void op_store_upval(ExternVMCtx& ctx) {
-        if (auto new_upval_p = &ctx.frames.back().capture_p->get_property_value(ctx.stack[ctx.rsp], true); new_upval_p) {
-            *new_upval_p = ctx.stack[ctx.rsp - 1];
+        if (auto new_upval_p = ctx.frames.back().capture_p->set_property_value(ctx.stack[ctx.rsp], ctx.stack[ctx.rsp - 1]); new_upval_p) {
             ctx.rip_p++;
             ctx.rsp--;
         } else {
@@ -149,13 +148,12 @@ namespace DerkJS {
     }
 
     inline void op_ref_upval(ExternVMCtx& ctx) {
-        ctx.stack[ctx.rsp] = *ctx.frames.back().capture_p->get_property_value(ctx.stack[ctx.rsp], false);
-
-        if (ctx.stack[ctx.rsp].get_tag() == ValueTag::undefined) {
+        if (auto upval_ptr = ctx.frames.back().capture_p->get_property_value(ctx.stack[ctx.rsp], false).ref_value(); upval_ptr) {
+            ctx.stack[ctx.rsp] = Value {upval_ptr};
+            ctx.rip_p++;
+        } else {
             ctx.status = VMErrcode::bad_property_access;
         }
-
-        ctx.rip_p++;
 
         TCO_ATTR
         return dispatch_op(ctx);
@@ -311,10 +309,10 @@ namespace DerkJS {
         const auto a0 = ctx.rip_p->args[0];
 
         if (ObjectBase<Value>* target_obj_p = target_ref.to_object(); target_obj_p) {
-            ctx.stack.at(ctx.rsp - 1) = *target_obj_p->get_property_value(
+            ctx.stack.at(ctx.rsp - 1) = target_obj_p->get_property_value(
                 ctx.stack.at(ctx.rsp), // special prototype key from previous opcode `put_proto_key`
                 a0
-            );
+            ).get_value();
             ctx.rsp--;
             ctx.rip_p++;
         } else {
@@ -326,11 +324,13 @@ namespace DerkJS {
     }
 
     inline void op_put_prop(ExternVMCtx& ctx) {
-        if (auto target_object_p = ctx.stack[ctx.rsp - 2].to_object(); target_object_p) {
-            target_object_p->set_property_value(
+        if (
+            auto target_object_p = ctx.stack[ctx.rsp - 2].to_object();
+            target_object_p != nullptr && target_object_p->set_property_value(
                 ctx.stack[ctx.rsp - 1], // property key
                 ctx.stack[ctx.rsp]      // property's new value
-            );
+            ) != nullptr
+        ) {
             ctx.rsp--;
             ctx.rsp--;
             ctx.rip_p++;
