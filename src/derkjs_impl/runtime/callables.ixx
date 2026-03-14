@@ -37,9 +37,9 @@ export namespace DerkJS {
 
     public:
         NativeFunction(ObjectBase<Value>* instance_prototype_p, native_func_p procedure_ptr, ObjectBase<Value>* prototype_p, const Value& length_key, const Value& length_value) noexcept
-        : m_own_properties {}, m_prototype {(prototype_p) ? Value {prototype_p} : Value {}}, m_instance_prototype {(instance_prototype_p) ? Value {instance_prototype_p} : Value {}}, m_native_ptr {procedure_ptr}, m_min_arity {static_cast<int16_t>(length_value.to_num_i32().value_or(0))}, m_flags {std::to_underlying(AttrMask::unused)} {
-            m_prototype.update_parent_flags(m_flags);
-            m_own_properties.emplace_back(length_key, length_value, std::to_underlying(AttrMask::immutable));
+        : m_own_properties {}, m_prototype {(prototype_p) ? Value {prototype_p} : Value {}}, m_instance_prototype {(instance_prototype_p) ? Value {instance_prototype_p} : Value {}}, m_native_ptr {procedure_ptr}, m_min_arity {static_cast<int16_t>(length_value.to_num_i32().value_or(0))}, m_flags {std::to_underlying(AttrMask::defaults)} {
+            m_prototype.update_flags(m_flags);
+            m_own_properties.emplace_back(length_key, length_value, nullptr);
         }
 
         /// NativeFunction impls:
@@ -66,12 +66,8 @@ export namespace DerkJS {
             return "function";
         }
 
-        [[nodiscard]] auto is_extensible() const noexcept -> bool override {
-            return true;
-        }
-
-        [[nodiscard]] auto is_prototype() const noexcept -> bool override {
-            return false;
+        [[nodiscard]] auto flag(AttrMask flag_mask) const noexcept -> bool override {
+            return (m_flags & std::to_underlying(flag_mask)) == std::to_underlying(flag_mask);
         }
 
         [[nodiscard]] auto get_prototype() noexcept -> ObjectBase<Value>* override {
@@ -92,7 +88,7 @@ export namespace DerkJS {
 
         [[nodiscard]] auto get_property_value(const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
             if (key.is_prototype_key()) { // For prototype, not __proto__!
-                return PropertyDescriptor<Value> {&key, &m_instance_prototype, this, m_flags};
+                return PropertyDescriptor<Value> {key, &m_instance_prototype, this};
             } else if (auto prototype_p = m_prototype.to_object(); prototype_p) {
                 return prototype_p->get_property_value(key, allow_filler);
             }
@@ -101,13 +97,13 @@ export namespace DerkJS {
         }
 
         void freeze() noexcept override {
-            m_flags = std::to_underlying(AttrMask::is_parent_frozen);
+            m_flags = std::to_underlying(AttrMask::frozen);
 
             // for (auto& entry : m_own_properties) {
-            //     entry.item.update_parent_flags(m_flags);
+            //     entry.item.update_flags(m_flags);
             // }
 
-            m_prototype.update_parent_flags(m_flags);
+            m_prototype.update_flags(m_flags);
 
             if (auto prototype_object_p = m_prototype.to_object(); prototype_object_p) {
                 prototype_object_p->freeze();
@@ -121,7 +117,9 @@ export namespace DerkJS {
         [[nodiscard]] auto set_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] const Value& value) -> Value* override {
             auto property_desc = get_property_value(key, true);
 
-            return &(property_desc = value);
+            return (property_desc.set_value(key, value))
+                ? property_desc.ref_value()
+                : nullptr;
         }
 
         [[nodiscard]] auto del_property_value([[maybe_unused]] const Value& key) -> bool override {
@@ -302,9 +300,9 @@ export namespace DerkJS {
 
     public:
         Lambda(ObjectBase<Value>* instance_prototype_p, std::vector<Instruction> code, ObjectBase<Value>* prototype_p, const Value& length_key, const Value& length_value) noexcept
-        : m_own_properties {}, m_code (std::move(code)), m_prototype {(prototype_p) ? Value {prototype_p} : Value {}}, m_instance_prototype {(instance_prototype_p) ? Value {instance_prototype_p} : Value {}}, m_min_arity {static_cast<int16_t>(length_value.to_num_i32().value_or(0))}, m_flags {std::to_underlying(AttrMask::unused)} {
-            m_prototype.update_parent_flags(m_flags);
-            m_own_properties.emplace_back(length_key, length_value, std::to_underlying(AttrMask::immutable));
+        : m_own_properties {}, m_code (std::move(code)), m_prototype {(prototype_p) ? Value {prototype_p} : Value {}}, m_instance_prototype {(instance_prototype_p) ? Value {instance_prototype_p} : Value {}}, m_min_arity {static_cast<int16_t>(length_value.to_num_i32().value_or(0))}, m_flags {std::to_underlying(AttrMask::defaults)} {
+            m_prototype.update_flags(m_flags);
+            m_own_properties.emplace_back(length_key, length_value, nullptr);
         }
 
         [[nodiscard]] auto min_arity(this auto&& self) noexcept -> int16_t {
@@ -323,12 +321,8 @@ export namespace DerkJS {
             return "function";
         }
 
-        [[nodiscard]] auto is_extensible() const noexcept -> bool override {
-            return true;
-        }
-
-        [[nodiscard]] auto is_prototype() const noexcept -> bool override {
-            return false;
+        [[nodiscard]] auto flag(AttrMask flag_mask) const noexcept -> bool override {
+            return (m_flags & std::to_underlying(flag_mask)) == std::to_underlying(flag_mask);
         }
 
         [[nodiscard]] auto get_prototype() noexcept -> ObjectBase<Value>* override {
@@ -349,20 +343,18 @@ export namespace DerkJS {
 
         [[nodiscard]] auto get_property_value(const Value& key, bool allow_filler) -> PropertyDescriptor<Value> override {
             if (key.is_prototype_key()) { // For prototype, not __proto__!
-                return PropertyDescriptor<Value> {&key, &m_instance_prototype, this, m_flags};
+                return PropertyDescriptor<Value> {key, &m_instance_prototype, this};
             } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
                 return prop.key == key || prop.key.compare_as_object(key);
             }); property_entry_it != m_own_properties.end()) {
-                return PropertyDescriptor<Value> {&property_entry_it->key, &property_entry_it->item, this, static_cast<uint8_t>(m_flags & property_entry_it->flags)};
+                return PropertyDescriptor<Value> {property_entry_it->key, &property_entry_it->item, this};
             } else if ((m_flags & std::to_underlying(AttrMask::writable)) && !m_prototype && allow_filler) {
                 return PropertyDescriptor<Value> {
-                    &key,
+                    key,
                     &m_own_properties.emplace_back(
-                        key, Value {},
-                        static_cast<uint8_t>(m_flags & std::to_underlying(AttrMask::unused))
+                        key, Value {}, nullptr
                     ).item,
-                    this,
-                    m_flags
+                    this
                 };
             } else if (auto prototype_p = m_prototype.to_object(); prototype_p) {
                 return prototype_p->get_property_value(key, allow_filler);
@@ -372,9 +364,9 @@ export namespace DerkJS {
         }
 
         void freeze() noexcept override {
-            m_flags = std::to_underlying(AttrMask::is_parent_frozen);
+            m_flags = std::to_underlying(AttrMask::frozen);
 
-            m_prototype.update_parent_flags(m_flags);
+            m_prototype.update_flags(m_flags);
 
             if (auto prototype_object_p = m_prototype.to_object(); prototype_object_p) {
                 prototype_object_p->freeze();
@@ -388,7 +380,9 @@ export namespace DerkJS {
         [[nodiscard]] auto set_property_value(const Value& key, const Value& value) -> Value* override {
             auto property_desc = get_property_value(key, true);
 
-            return &(property_desc = value);
+            return (property_desc.set_value(key, value))
+                ? property_desc.ref_value()
+                : nullptr;
         }
 
         [[nodiscard]] auto del_property_value([[maybe_unused]] const Value& key) -> bool override {

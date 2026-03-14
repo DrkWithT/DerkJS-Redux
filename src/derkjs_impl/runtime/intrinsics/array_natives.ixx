@@ -67,10 +67,10 @@ namespace DerkJS::Runtime::Intrinsics {
             ctx->stack.at(passed_rsbp - 1).to_object()
         );
         /// NOTE: PropertyDescriptor of Array.length
-        auto array_length_p = &array_this_p->get_property_value(
+        auto array_length_p = array_this_p->get_property_value(
             Value {ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))},
             false
-        );
+        ).ref_value();
 
         if (!array_length_p) {
             std::println(std::cerr, "Array instance has a null length reference.");

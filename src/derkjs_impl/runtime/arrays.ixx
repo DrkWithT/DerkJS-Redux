@@ -11,14 +11,16 @@ export module runtime.arrays;
 
 import runtime.value;
 
-export namespace DerkJS {
-    class Array : public ObjectBase<Value> {
+namespace DerkJS {
+    auto handle_length_change(ObjectBase<Value>* object_p, const Value& next_length) -> bool;
+
+    export class Array : public ObjectBase<Value> {
     private:
         // Holds non-integral key properties.
         PropPool<Value, Value> m_own_properties;
         // Stores properties (items) accessed by integral keys. These are the sequential items. Sparse arrays can also be implemented via pushing `Value {}` repeatedly.
         std::vector<Value> m_items;
-        // Holds a prototype reference.
+        // Holds [[Prototype]] reference.
         Value m_prototype;
         uint8_t m_flags;
 
@@ -33,47 +35,41 @@ export namespace DerkJS {
         [[nodiscard]] auto get_item(int index, bool should_default) -> Value* {
             int item_count = m_items.size();
 
-            if (!should_default && (index < 0 || index >= item_count)) {
-                return nullptr;
+            if (index >= 0 && index < item_count) {
+                return &m_items.at(index);
+            } else if (
+                should_default && (m_flags & std::to_underlying(AttrMask::writable)) == std::to_underlying(AttrMask::writable)
+            ) {
+                fill_gap_to_n(index, should_default);
+                return &m_items.at(index);
             }
 
-            fill_gap_to_n(index, should_default);
-
-            return &m_items.at(index);
+            return nullptr;
         }
 
-        void try_resize_by_length(const Value& length_key, int next_length) {
-            set_property_value(length_key, next_length);
-
-            if (const int current_length = m_items.size(); next_length > current_length) {
-                m_items.resize(next_length, Value {});
-            } else if (next_length < current_length) {
-                m_items.resize(next_length);
-            }
-        }
     public:
         Array(ObjectBase<Value>* prototype_p, const Value& length_key, const Value& initial_length_v) noexcept (std::is_nothrow_default_constructible_v<Value>)
-        : m_own_properties {}, m_items {}, m_prototype {prototype_p}, m_flags {std::to_underlying(AttrMask::unused)} {
-            const auto length_prop_flags = static_cast<uint8_t>(std::to_underlying(AttrMask::is_accessor) | m_flags);
+        : m_own_properties {}, m_items {}, m_prototype {prototype_p}, m_flags {std::to_underlying(AttrMask::defaults)} {
+            const auto length_prop_flags = static_cast<uint8_t>(std::to_underlying(AttrMask::accessor) | m_flags);
 
-            m_prototype.update_parent_flags(m_flags);
+            m_prototype.update_flags(m_flags);
             m_own_properties.emplace_back(PropEntry<Value, Value> {
                 .key = length_key,
                 .item = initial_length_v,
-                .flags = length_prop_flags
+                .handler_p = nullptr
             });
         }
 
         Array(ObjectBase<Value>* prototype_p, const Value& length_key, const std::span<Value>& item_slice) noexcept (std::is_nothrow_default_constructible_v<Value>)
-        : m_own_properties {}, m_items {}, m_prototype {prototype_p}, m_flags {std::to_underlying(AttrMask::unused)} {
-            const auto length_prop_flags = static_cast<uint8_t>(std::to_underlying(AttrMask::is_accessor) | m_flags);
+        : m_own_properties {}, m_items {}, m_prototype {prototype_p}, m_flags {std::to_underlying(AttrMask::defaults)} {
+            const auto length_prop_flags = static_cast<uint8_t>(std::to_underlying(AttrMask::accessor) | m_flags);
 
-            m_prototype.update_parent_flags(m_flags);
+            m_prototype.update_flags(m_flags);
 
             auto& length_value_ref = m_own_properties.emplace_back(PropEntry<Value, Value> {
                 .key = length_key,
                 .item = Value {0},
-                .flags = length_prop_flags
+                .handler_p = handle_length_change
             }).item;
             auto item_count = 0;
 
@@ -105,12 +101,8 @@ export namespace DerkJS {
             return "object";
         }
 
-        [[nodiscard]] auto is_extensible() const noexcept -> bool override {
-            return true;
-        }
-
-        [[nodiscard]] auto is_prototype() const noexcept -> bool override {
-            return false;
+        [[nodiscard]] auto flag(AttrMask flag_mask) const noexcept -> bool override {
+            return (m_flags & std::to_underlying(flag_mask)) == std::to_underlying(flag_mask);
         }
 
         [[nodiscard]] auto get_prototype() noexcept -> ObjectBase<Value>* override {
@@ -131,22 +123,20 @@ export namespace DerkJS {
 
         [[maybe_unused]] auto get_property_value(const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
             if (key.is_prototype_key()) {
-                return PropertyDescriptor<Value> {&key, &m_prototype, this, m_flags};
+                return PropertyDescriptor<Value> {key, &m_prototype, this}; // TODO: add instance-specific prototype support?
             } else if (key.get_tag() == ValueTag::num_i32) {
-                return PropertyDescriptor<Value> {&key, get_item(key.to_num_i32().value(), allow_filler), this, m_flags};
+                return PropertyDescriptor<Value> {key, get_item(key.to_num_i32().value(), allow_filler), this};
             } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
                 return prop.key == key || prop.key.compare_as_object(key);
             }); property_entry_it != m_own_properties.end()) {
-                return PropertyDescriptor<Value> {&key, &property_entry_it->item, this, static_cast<uint8_t>(m_flags & property_entry_it->flags)};
+                return PropertyDescriptor<Value> {key, &property_entry_it->item, this};
             } else if ((m_flags & std::to_underlying(AttrMask::writable)) && allow_filler) {
                 return PropertyDescriptor<Value> {
-                    &key,
+                    key,
                     &m_own_properties.emplace_back(
-                        key, Value {},
-                        static_cast<uint8_t>(m_flags & std::to_underlying(AttrMask::unused))
+                        key, Value {}, nullptr
                     ).item,
-                    this,
-                    m_flags
+                    this
                 };
             } else if (auto prototype_p = m_prototype.to_object(); prototype_p) {
                 return prototype_p->get_property_value(key, allow_filler);
@@ -156,13 +146,13 @@ export namespace DerkJS {
         }
 
         void freeze() noexcept override {
-            m_flags = std::to_underlying(AttrMask::is_parent_frozen);
+            m_flags = std::to_underlying(AttrMask::frozen);
 
             for (auto& entry : m_own_properties) {
-                entry.item.update_parent_flags(m_flags);
+                entry.item.update_flags(m_flags);
             }
 
-            m_prototype.update_parent_flags(m_flags);
+            m_prototype.update_flags(m_flags);
 
             if (auto prototype_object_p = m_prototype.to_object(); prototype_object_p) {
                 prototype_object_p->freeze();
@@ -172,24 +162,22 @@ export namespace DerkJS {
         [[maybe_unused]] auto set_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] const Value& value) -> Value* override {
             auto property_desc = get_property_value(key, true);
 
-            // if (m_flags & std::to_underlying(AttrMask::writable)) {
-            //     *m_length_p = Value {static_cast<int>(m_items.size())};
-            // }
-
-            return &(property_desc = value);
+            return (property_desc.set_value(key, value))
+                ? property_desc.ref_value()
+                : nullptr;
         }
 
         [[maybe_unused]] auto del_property_value([[maybe_unused]] const Value& key) -> bool override {
             return false; // TODO
         }
 
+        //! TODO: I should not have this silently fail... Return a bool at least.
         void update_on_accessor_mut([[maybe_unused]] const Value& key, const Value& value) override {
-            if ((m_flags & std::to_underlying(AttrMask::writable)) == 0) {
-                return;
+            if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
+                return prop.key == key || prop.key.compare_as_object(key);
+            }); property_entry_it != m_own_properties.end() && property_entry_it->handler_p != nullptr) {
+                property_entry_it->handler_p(this, value);
             }
-
-            const int next_length = value.to_num_i32().value_or(0);
-            try_resize_by_length(key, std::max(0, next_length));
         }
 
         [[nodiscard]] auto call([[maybe_unused]] void* opaque_ctx_p, [[maybe_unused]] int argc, [[maybe_unused]] bool has_this_arg) -> bool override {
@@ -280,4 +268,20 @@ export namespace DerkJS {
             return self_items.size() > other_items.size();
         }
     };
+
+    [[nodiscard]] auto handle_length_change(ObjectBase<Value>* object_p, const Value& next_length) -> bool {
+        if (auto object_as_array_p = dynamic_cast<Array*>(object_p); object_as_array_p) {
+            const int next_length_i32 = next_length.to_num_i32().value_or(0);
+
+            if (const int old_length = object_as_array_p->get_seq_items()->size(); next_length_i32 > old_length) {
+                object_as_array_p->get_seq_items()->resize(next_length_i32 + 1, Value {});
+            } else if (next_length_i32 < old_length) {
+                object_as_array_p->get_seq_items()->resize(next_length_i32);
+            }
+
+            return true;
+        }
+
+        return false;
+    }
 }
