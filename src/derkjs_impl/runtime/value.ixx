@@ -10,7 +10,6 @@ export module runtime.value;
 
 export import runtime.objects;
 
-/// TODO: make Boolean, Number, Object, and Function as built-in objects registered to the interpreter before running.
 export namespace DerkJS {
     struct JSNullOpt {};
     struct JSNaNOpt {};
@@ -28,13 +27,9 @@ export namespace DerkJS {
         proto_key
     };
 
-    /// TODO: add support for Value holding a Value* as a reference.
     class Value {
     public:
-        static constexpr auto dud_undefined_char_v = '\x00';
-        static constexpr auto dud_null_char_v = '\x10';
-        static constexpr auto dud_nan_char_v = '\x01';
-        static constexpr auto dud_proto_key_v = '\xff';
+        static constexpr auto dud_member_v = '\x00';
 
     private:
         union {
@@ -47,57 +42,70 @@ export namespace DerkJS {
         } m_data;
 
         ValueTag m_tag;
-        uint8_t m_parent_flags; // flags from PropertyDescriptor if any
+
+        //? NOTE: Holds flags to indicate if the value is assignable, etc. See `enum class AttrMask` in `src/derkjs_impl/runtime/value.ixx`.
+        uint8_t m_flags;
 
     public:
-        constexpr Value(uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
-        : m_data {}, m_tag {ValueTag::undefined}, m_parent_flags {parent_flags} {
-            m_data.dud = dud_undefined_char_v;
+        constexpr Value(uint8_t parent_flags = std::to_underlying(AttrMask::defaults)) noexcept
+        : m_data {}, m_tag {ValueTag::undefined}, m_flags {parent_flags} {
+            m_data.dud = dud_member_v;
         }
 
-        constexpr Value([[maybe_unused]] JSNullOpt opt, uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
-        : m_data {}, m_tag {ValueTag::null}, m_parent_flags {parent_flags} {
-            m_data.dud = dud_null_char_v;
+        constexpr Value([[maybe_unused]] JSNullOpt opt, uint8_t parent_flags = std::to_underlying(AttrMask::defaults)) noexcept
+        : m_data {}, m_tag {ValueTag::null}, m_flags {parent_flags} {
+            m_data.dud = dud_member_v;
         }
 
-        constexpr Value([[maybe_unused]] JSNaNOpt opt, uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
-        : m_data {}, m_tag {ValueTag::num_nan}, m_parent_flags {parent_flags} {
-            m_data.dud = dud_nan_char_v;
+        constexpr Value([[maybe_unused]] JSNaNOpt opt, uint8_t parent_flags = std::to_underlying(AttrMask::defaults)) noexcept
+        : m_data {}, m_tag {ValueTag::num_nan}, m_flags {parent_flags} {
+            m_data.dud = dud_member_v;
         }
 
-        constexpr Value([[maybe_unused]] JSProtoKeyOpt opt, uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
-        : m_data {}, m_tag {ValueTag::proto_key}, m_parent_flags {parent_flags} {
-            m_data.dud = dud_proto_key_v;
+        constexpr Value([[maybe_unused]] JSProtoKeyOpt opt, uint8_t parent_flags = std::to_underlying(AttrMask::defaults)) noexcept
+        : m_data {}, m_tag {ValueTag::proto_key}, m_flags {parent_flags} {
+            m_data.dud = dud_member_v;
         }
 
-        constexpr Value(bool b, uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
-        : m_data {}, m_tag {ValueTag::boolean}, m_parent_flags {parent_flags} {
+        constexpr Value(bool b, uint8_t parent_flags = std::to_underlying(AttrMask::defaults)) noexcept
+        : m_data {}, m_tag {ValueTag::boolean}, m_flags {parent_flags} {
             m_data.b = b;
         }
 
-        constexpr Value(int i, uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
-        : m_data {}, m_tag {ValueTag::num_i32}, m_parent_flags {parent_flags} {
+        constexpr Value(int i, uint8_t parent_flags = std::to_underlying(AttrMask::defaults)) noexcept
+        : m_data {}, m_tag {ValueTag::num_i32}, m_flags {parent_flags} {
             m_data.i = i;
         }
 
-        Value(double d, uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
-        : m_data {}, m_tag {ValueTag::num_f64}, m_parent_flags {parent_flags} {
+        Value(double d, uint8_t parent_flags = std::to_underlying(AttrMask::defaults)) noexcept
+        : m_data {}, m_tag {ValueTag::num_f64}, m_flags {parent_flags} {
             m_data.d = d;
         }
 
         explicit constexpr Value([[maybe_unused]] decltype(nullptr) nullptr_v) noexcept
-        : m_data {}, m_tag {ValueTag::object}, m_parent_flags {std::to_underlying(AttrMask::unused)} {
-            m_data.obj_p = nullptr;
+        : m_data {}, m_tag {ValueTag::undefined}, m_flags {std::to_underlying(AttrMask::defaults)} {
+            m_data.dud = dud_member_v;
         }
 
-        constexpr Value(ObjectBase<Value>* object_p, uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
-        : m_data {}, m_tag {ValueTag::object}, m_parent_flags {parent_flags} {
-            m_data.obj_p = object_p;
+        constexpr Value(ObjectBase<Value>* object_p, uint8_t parent_flags = std::to_underlying(AttrMask::defaults)) noexcept
+        : m_data {}, m_tag {ValueTag::undefined}, m_flags {parent_flags} {
+            if (object_p != nullptr) {
+                m_tag = ValueTag::object;
+                m_data.obj_p = object_p;
+            } else {
+                m_data.dud = dud_member_v;
+            }
         }
 
-        constexpr Value(Value* value_p, uint8_t parent_flags = std::to_underlying(AttrMask::unused)) noexcept
-        : m_data {}, m_tag {ValueTag::val_ref}, m_parent_flags {parent_flags} {
-            m_data.ref_p = value_p;
+        constexpr Value(Value* value_p, uint8_t parent_flags = std::to_underlying(AttrMask::defaults)) noexcept
+        : m_data {}, m_tag {ValueTag::undefined}, m_flags {parent_flags} {
+            if (value_p != nullptr) {
+                m_tag = ValueTag::val_ref;
+                m_flags = value_p->m_flags;
+                m_data.ref_p = value_p;
+            } else {
+                m_data.dud = dud_member_v;
+            }
         }
 
         [[nodiscard]] constexpr auto get_tag() const noexcept -> ValueTag {
@@ -125,32 +133,21 @@ export namespace DerkJS {
         }
 
         constexpr auto is_assignable_ref() const noexcept -> bool {
-            return m_tag == ValueTag::val_ref && get_parent_flag<AttrMask::writable>();
+            return m_tag == ValueTag::val_ref && flag<AttrMask::writable>();
         }
 
         constexpr auto is_configurable_ref() const noexcept -> bool {
-            return m_tag == ValueTag::val_ref && get_parent_flag<AttrMask::configurable>();
+            return m_tag == ValueTag::val_ref && flag<AttrMask::configurable>();
         }
 
+        // TODO: The AttrMask flags should be unified for ObjectBase & Value.
         template <AttrMask M>
-        [[nodiscard]] constexpr auto get_parent_flag(this auto&& self) noexcept -> bool {
-            if constexpr (M == AttrMask::writable || M == AttrMask::unused) {
-                return self.m_parent_flags & static_cast<uint8_t>(M);
-            } else if constexpr (M == AttrMask::configurable) {
-                return (self.m_parent_flags & static_cast<uint8_t>(M)) >> 1;
-            } else if constexpr (M == AttrMask::enumerable) {
-                return (self.m_parent_flags & static_cast<uint8_t>(M)) >> 2;
-            } else if constexpr (M == AttrMask::is_data_desc) {
-                return (self.m_parent_flags & static_cast<uint8_t>(M)) >> 3;
-            } else if constexpr (M == AttrMask::is_parent_frozen) {
-                return (self.m_parent_flags & static_cast<uint8_t>(M)) >> 4;
-            }
-
-            return self.m_parent_flags == 0x00;
+        [[nodiscard]] constexpr auto flag(this auto&& self) noexcept -> bool {
+            return (self.m_flags & std::to_underlying(M)) == std::to_underlying(M);
         }
 
-        constexpr void update_parent_flags(uint8_t parent_object_flags) noexcept {
-            m_parent_flags = parent_object_flags;
+        constexpr void update_flags(uint8_t parent_object_flags) noexcept {
+            m_flags = parent_object_flags;
         }
 
         [[nodiscard]] constexpr auto is_prototype_key() const noexcept -> bool {
@@ -277,19 +274,19 @@ export namespace DerkJS {
                 ++m_data.i;
                 break;
             case ValueTag::num_f64:
-                ++m_data.d;
+                m_data.d += 1.0;
                 break;
             case ValueTag::object:
-                m_data.dud = dud_nan_char_v;
+                m_data.dud = dud_member_v;
                 m_tag = ValueTag::num_nan;
                 break;
             case ValueTag::val_ref:
-                if (get_parent_flag<AttrMask::writable>()) {
-                    return m_data.ref_p->decrement();
+                if (flag<AttrMask::writable>()) {
+                    return m_data.ref_p->increment();
                 }
                 return *this;
             default:
-                m_data.dud = dud_nan_char_v;
+                m_data.dud = dud_member_v;
                 m_tag = ValueTag::num_nan;
                 break;
             }
@@ -314,16 +311,16 @@ export namespace DerkJS {
                 --m_data.d;
                 break;
             case ValueTag::object:
-                m_data.dud = dud_nan_char_v;
+                m_data.dud = dud_member_v;
                 m_tag = ValueTag::num_nan;
                 break;
             case ValueTag::val_ref:
-                if (get_parent_flag<AttrMask::writable>()) {
+                if (flag<AttrMask::writable>()) {
                     return m_data.ref_p->decrement();
                 }
                 return *this;
             default:
-                m_data.dud = dud_nan_char_v;
+                m_data.dud = dud_member_v;
                 m_tag = ValueTag::num_nan;
                 break;
             }
@@ -356,14 +353,14 @@ export namespace DerkJS {
             const auto rhs_tag = other.get_tag();
 
             if (lhs_tag == ValueTag::num_nan || rhs_tag == ValueTag::num_nan) {
-                m_data.dud = dud_nan_char_v;
+                m_data.dud = dud_member_v;
                 m_tag = ValueTag::num_nan;
             } else if (lhs_tag == ValueTag::num_i32) {
                 if (const auto rhs_i32_v = other.to_num_i32(); !rhs_i32_v) {
-                    m_data.dud = dud_nan_char_v;
+                    m_data.dud = dud_member_v;
                     m_tag = ValueTag::num_nan;
                 } else if (*rhs_i32_v == 0) {
-                    m_data.dud = dud_nan_char_v;
+                    m_data.dud = dud_member_v;
                     m_tag = ValueTag::num_nan;
                 } else { 
                     m_data.i %= rhs_i32_v.value();
@@ -371,7 +368,7 @@ export namespace DerkJS {
             } else if (m_tag == ValueTag::val_ref && m_data.ref_p) {
                 m_data.ref_p->operator%=(other);
             } else {
-                m_data.dud = dud_nan_char_v;
+                m_data.dud = dud_member_v;
                 m_tag = ValueTag::num_nan;
             }
 
@@ -405,7 +402,7 @@ export namespace DerkJS {
             const auto rhs_tag = other.get_tag();
 
             if (lhs_tag == ValueTag::num_nan || rhs_tag == ValueTag::num_nan) {
-                m_data.dud = dud_nan_char_v;
+                m_data.dud = dud_member_v;
                 m_tag = ValueTag::num_nan;
             } else if (lhs_tag == ValueTag::num_i32) {
                 m_data.i *= other.to_num_i32().value();
@@ -414,7 +411,7 @@ export namespace DerkJS {
             } else if (m_tag == ValueTag::val_ref) {
                 m_data.ref_p->operator*=(other);
             } else {
-                m_data.dud = dud_nan_char_v;
+                m_data.dud = dud_member_v;
                 m_tag = ValueTag::num_nan;
             }
 
@@ -455,24 +452,24 @@ export namespace DerkJS {
             const auto rhs_tag = other.get_tag();
 
             if (lhs_tag == ValueTag::num_nan || rhs_tag == ValueTag::num_nan) {
-                m_data.dud = dud_nan_char_v;
+                m_data.dud = dud_member_v;
                 m_tag = ValueTag::num_nan;
             } else if (lhs_tag == ValueTag::num_i32) {
                 if (auto rhs_i32_v = other.to_num_i32(); !rhs_i32_v) {
-                    m_data.dud = dud_nan_char_v;
+                    m_data.dud = dud_member_v;
                     m_tag = ValueTag::num_nan;
                 } else if (*rhs_i32_v == 0) {
-                    m_data.dud = dud_nan_char_v;
+                    m_data.dud = dud_member_v;
                     m_tag = ValueTag::num_nan;
                 } else {   
                     m_data.i /= rhs_i32_v.value();
                 }
             } else if (lhs_tag == ValueTag::num_f64) {
                 if (auto rhs_f64_v = other.to_num_f64(); !rhs_f64_v) {
-                    m_data.dud = dud_nan_char_v;
+                    m_data.dud = dud_member_v;
                     m_tag = ValueTag::num_nan;
                 } else if (*rhs_f64_v == 0.0) {
-                    m_data.dud = dud_nan_char_v;
+                    m_data.dud = dud_member_v;
                     m_tag = ValueTag::num_nan;
                 } else {
                     m_data.d /= rhs_f64_v.value();
@@ -480,7 +477,7 @@ export namespace DerkJS {
             } else if (m_tag == ValueTag::val_ref) {
                 m_data.ref_p->operator/=(other);
             } else {
-                m_data.dud = dud_nan_char_v;
+                m_data.dud = dud_member_v;
                 m_tag = ValueTag::num_nan;
             }
 
@@ -509,7 +506,7 @@ export namespace DerkJS {
             const auto rhs_tag = other.get_tag();
             
             if (lhs_tag == ValueTag::num_nan || rhs_tag == ValueTag::num_nan) {
-                m_data.dud = dud_nan_char_v;
+                m_data.dud = dud_member_v;
                 m_tag = ValueTag::num_nan;
             } else if (lhs_tag == ValueTag::num_i32) {
                 m_data.i += other.to_num_i32().value();
@@ -518,7 +515,7 @@ export namespace DerkJS {
             } else if (lhs_tag == ValueTag::val_ref) {
                 m_data.ref_p->operator+=(other);
             } else {
-                m_data.dud = dud_nan_char_v;
+                m_data.dud = dud_member_v;
                 m_tag = ValueTag::num_nan;
             }
 
@@ -547,7 +544,7 @@ export namespace DerkJS {
             const auto rhs_tag = other.get_tag();
             
             if (lhs_tag == ValueTag::num_nan || rhs_tag == ValueTag::num_nan) {
-                m_data.dud = dud_nan_char_v;
+                m_data.dud = dud_member_v;
                 m_tag = ValueTag::num_nan;
             } else if (lhs_tag == ValueTag::num_i32) {
                 m_data.i -= other.to_num_i32().value();
@@ -556,7 +553,7 @@ export namespace DerkJS {
             } else if (m_tag == ValueTag::val_ref) {
                 m_data.ref_p->operator-=(other);
             } else {
-                m_data.dud = dud_nan_char_v;
+                m_data.dud = dud_member_v;
                 m_tag = ValueTag::num_nan;
             }
 
@@ -593,6 +590,7 @@ export namespace DerkJS {
                 }
 
                 try {
+                    //? JS unary+ on strings is equivalent to parseFloat(s)
                     return std::stod(text);
                 } catch (const std::exception& e) {
                     return {};
