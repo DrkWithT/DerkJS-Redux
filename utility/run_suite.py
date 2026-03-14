@@ -50,8 +50,14 @@ def run_tests_by_n(test_file_paths: list[str], worker_count: int = DERKJS_TEST_P
     return (total_passed, total_tests - total_passed, total_tests)   
 
 if __name__ == '__main__':
+    if not os.path.exists("./build/derkjs_tco"):
+        print(f'The executable \x1b[1;33m./build/derkjs_tco\x1b[0m is missing, please build it first.')
+        exit(1)
+
     pass_count, fail_count, test_count = run_tests_by_n(
         get_test_names()
     )
 
     print(f'\nTEST REPORT:\n\x1b[1;34mPASSED:\x1b[0m {pass_count}/{test_count}\n\x1b[1;34mFAILED:\x1b[0m {fail_count}/{test_count}')
+
+    exit(0 if fail_count == 0 else 1)
