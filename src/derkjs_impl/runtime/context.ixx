@@ -124,7 +124,7 @@ namespace DerkJS {
         }
 
         /// NOTE: Only use this to push an exception object for opcodes corresponding to JS operators e.g TypeError on an invalid `djs_get_prop`. Returns `true` if the error object was allocated AND the error ctor ID was valid.
-        [[nodiscard]] auto push_error(std::string msg, std::uint8_t builtin_id) -> bool {
+        [[nodiscard]] auto prepare_error(std::string msg, std::uint8_t builtin_id) -> bool {
             rsp++;
             stack.at(rsp) = Value {JSUndefOpt {}}; // thisArg placeholder BELOW callee
 
@@ -143,15 +143,7 @@ namespace DerkJS {
                 return false;
             }
 
-            const auto old_vm_frame_n = ending_frame_depth;
-            ending_frame_depth = frames.size();
-
-            stack.at(rsp - 1)->call_as_ctor(this, 1);
-            dispatch_op(*this);
-
-            ending_frame_depth = old_vm_frame_n;
-
-            return status == VMErrcode::ok;
+            return true;
         }
 
         /// NOTE: Only use this for "throwing" exceptions in the VM!

@@ -235,8 +235,17 @@ namespace DerkJS {
             *target_value.get_value_ref() = Value {JSUndefOpt {}};
             target_value = Value {true};
             ctx.rip_p++;
-        } else if (ctx.push_error("Invalid delete on non-configurable / non-property name.", std::to_underlying(BuiltInObjects::syntax_error_ctor)>)) {
-            ctx.status = ctx.try_recover(ctx.stack.at(ctx.rsp).to_object(), a0 == 1);
+        } else if (ctx.prepare_error("Invalid delete on non-configurable / non-property name.", std::to_underlying(BuiltInObjects::syntax_error_ctor))) {
+            const auto old_vm_frame_n = ctx.ending_frame_depth;
+            ctx.ending_frame_depth = ctx.frames.size();
+
+            if (ctx.stack.at(ctx.rsp - 1).to_object()->call_as_ctor(&ctx, 1)) {
+                dispatch_op(ctx);
+                ctx.ending_frame_depth = old_vm_frame_n;
+                ctx.status = ctx.try_recover(ctx.stack.at(ctx.rsp).to_object(), a0 == 1);
+            } else {
+                ctx.status = VMErrcode::bad_operation;
+            }
         }
 
         TCO_ATTR
@@ -334,8 +343,8 @@ namespace DerkJS {
             ).get_value();
             ctx.rsp--;
             ctx.rip_p++;
-        } else if (ctx.push_error("Invalid property access of undefined / primitive.", std::to_underlying(BuiltInObjects::type_error_ctor)>)) {
-            ctx.try_recover(ctx.stack.at(ctx.rsp).to_object(), a1 == 1);
+        } else if (ctx.prepare_error("Invalid property access of undefined / primitive.", std::to_underlying(BuiltInObjects::type_error_ctor))) {
+            ctx.status = ctx.try_recover(ctx.stack.at(ctx.rsp).to_object(), a1 == 1);
         }
 
         TCO_ATTR

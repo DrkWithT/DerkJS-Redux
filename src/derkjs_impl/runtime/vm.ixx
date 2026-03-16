@@ -25,7 +25,7 @@ namespace DerkJS {
             //? Mark all contiguous object slots in the fresh heap as permanently tenured to prevent GC sweeps of built-ins or string constants.
             m_ctx.heap.tenure_items();
         }
-∂
+
         [[nodiscard]] auto peek_final_result() const noexcept -> const Value& {
             return m_ctx.stack[0];
         }
