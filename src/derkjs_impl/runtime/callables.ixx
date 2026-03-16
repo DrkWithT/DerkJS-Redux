@@ -1,10 +1,11 @@
 module;
 
-#include <cstdint>
 #include <utility>
+#include <algorithm>
 #include <format>
 #include <string>
 #include <string_view>
+#include <vector>
 #include <span>
 #include <sstream>
 #include <iostream>
@@ -260,7 +261,6 @@ export namespace DerkJS {
             "djs_put_proto_key",
             "djs_get_prop",
             "djs_put_prop",
-            "djs_del_prop",
             "djs_ref_pack",
             "djs_numify",
             "djs_strcat",

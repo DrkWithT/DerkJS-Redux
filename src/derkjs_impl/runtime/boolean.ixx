@@ -1,8 +1,10 @@
 module;
 
 #include <utility>
+#include <algorithm>
 #include <string>
 #include <string_view>
+#include <vector>
 
 export module runtime.boolean;
 

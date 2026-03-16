@@ -1,8 +1,8 @@
 module;
 
 #include <utility>
-#include <algorithm>
 #include <type_traits>
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <iostream>

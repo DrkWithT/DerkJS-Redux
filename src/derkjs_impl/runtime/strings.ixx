@@ -1,6 +1,7 @@
 module;
 
 #include <utility>
+#include <algorithm>
 #include <vector>
 #include <string>
 #include <string_view>

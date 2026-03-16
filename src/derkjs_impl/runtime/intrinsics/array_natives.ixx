@@ -1,6 +1,7 @@
 module;
 
 #include <utility>
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <string_view>

@@ -2,6 +2,7 @@ module;
 
 #include <type_traits>
 #include <utility>
+#include <algorithm>
 #include <string>
 #include <span>
 #include <vector>

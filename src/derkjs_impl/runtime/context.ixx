@@ -2,10 +2,11 @@ module;
 
 #include <cstdint>
 #include <utility>
-#include <algorithm>
+#include <memory>
 #include <string>
 #include <array>
 #include <vector>
+#include <span>
 #include <span>
 
 export module runtime.context;
