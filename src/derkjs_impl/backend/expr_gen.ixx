@@ -80,6 +80,7 @@ namespace DerkJS::Backend {
             })();
 
             if (!primitive_locator) {
+                std::println("Compile Note: No 'primitive' locator resolved for '{}' symbol.", atom_lexeme);
                 return false;
             } else if (const auto primitive_locate_type = primitive_locator->tag; primitive_locate_type == Location::constant) {
                 context.encode_instruction(Opcode::djs_put_const, *primitive_locator);
@@ -246,13 +247,7 @@ namespace DerkJS::Backend {
 
             //? NOTE: despite std::unique_ptr<Lambda>::release(), the raw pointer is quickly re-owned in the preloaded "heap" before recording into Program.builtins later. The pre_record_object method handles this task on argument `true`.
             if (context.m_builtin_ids.contains(context.m_callee_name)) {
-                auto builtin_locator = context.pre_record_object(context.m_callee_name, temp_callable.release());
-
-                if (!builtin_locator) {
-                    return {};
-                }
-
-                next_global_ref_loc = builtin_locator;
+                next_global_ref_loc = context.pre_record_object(context.m_callee_name, temp_callable.release()).value();
             } else if (!context.m_runtime_heap_ptr) {
                 auto lambda_object_ptr = context.m_heap.add_item(context.m_heap.get_next_id(), std::move(temp_callable));
 
@@ -260,20 +255,13 @@ namespace DerkJS::Backend {
                     return {};
                 }
 
-                if (context.m_callee_name) {
-                    next_global_ref_loc = context.record_symbol(
-                        context.m_callee_name,
-                        Value {lambda_object_ptr},
-                        FindGlobalConstsOpt{}
-                    ).value();
-                } else {
-                    next_global_ref_loc = Arg {
-                        .n = next_global_ref_const_id,
-                        .tag = Location::constant,
-                        .is_str_literal = false,
-                        .from_closure = false
-                    };
-                }
+                context.m_consts.emplace_back(Value {lambda_object_ptr});
+                next_global_ref_loc = Arg {
+                    .n = next_global_ref_const_id,
+                    .tag = Location::constant,
+                    .is_str_literal = false,
+                    .from_closure = false
+                };
             } else {
                 context.m_consts.emplace_back(Value {
                     context.m_runtime_heap_ptr->add_item(context.m_runtime_heap_ptr->get_next_id(), std::move(temp_callable))
@@ -418,7 +406,7 @@ namespace DerkJS::Backend {
                             .op = Opcode::djs_nop,
                             .inner_ok = within_new_expr_ok
                         };
-                    },
+                    }
                     case AstOp::ast_op_delete: {
                         context.m_access_as_lval = true;
 
@@ -459,10 +447,9 @@ namespace DerkJS::Backend {
                 return true;
             } else if (opcode != Opcode::djs_nop) {
                 context.encode_instruction(opcode);
-                return true;
             }
 
-            return false;
+            return true;
         }
     };
 

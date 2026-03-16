@@ -534,11 +534,11 @@ namespace DerkJS::Backend {
                     record_symbol(pre_name, std::move(std::get<Value>(pre_entity)), FindGlobalConstsOpt {});
                 } break;
                 case Location::heap_obj: {
-                    auto& js_object_p = std::get<std::unique_ptr<ObjectBase<Value>>>(pre_entity);
+                    auto js_object_p = std::get<std::unique_ptr<ObjectBase<Value>>>(pre_entity).release();
                     if (pre_name.empty()) {
-                        m_heap.add_item(m_heap.get_next_id(), std::move(js_object_p));
+                        m_heap.add_item(m_heap.get_next_id(), js_object_p);
                     } else {
-                        pre_record_object(pre_name, std::move(js_object_p));
+                        pre_record_object(pre_name, js_object_p);
                     }
                 } break;
                 case Location::key_str: {
@@ -583,7 +583,7 @@ namespace DerkJS::Backend {
 
             for (const auto& [src_filename, decl, src_id] : tu) {
                 if (!emit_stmt(*decl, source_map.at(src_id))) {
-                    std::println(std::cerr, "Compile Error at source '{}' around '{}': unsupported JS construct :(\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length / 2));
+                    std::println(std::cerr, "Compile Error at source '{}' for unsupported JS construct:\nSnippet:\n{}\n\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length));
                     return {};
                 }
             }

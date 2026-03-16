@@ -428,7 +428,7 @@ int main(int argc, char* argv[]) {
         function_prototype_p,
         driver.get_length_key_str_p(),
         Value {0}
-    )
+    );
 
     auto native_read_line_fn_p = driver.add_native_object<NativeFunction>(
         "",
@@ -437,7 +437,7 @@ int main(int argc, char* argv[]) {
         function_prototype_p,
         driver.get_length_key_str_p(),
         Value {0}
-    )
+    );
 
     /// Patch prototypes & alias built-in globals ///
 
