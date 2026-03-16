@@ -18,7 +18,7 @@ namespace DerkJS {
 
     public:
         NumberBox(const Value& temp_value, ObjectBase<Value>* prototype_p)
-        : m_properties {}, m_prototype {(prototype_p) ? Value {prototype_p} : Value {}}, m_value {temp_value}, m_flags {std::to_underlying(AttrMask::defaults)} {}
+        : m_properties {}, m_prototype {prototype_p, std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::property)}, m_value {temp_value}, m_flags {std::to_underlying(AttrMask::defaults)} {}
 
         /// Begin self methods ///
 
@@ -75,7 +75,7 @@ namespace DerkJS {
                 return PropertyDescriptor<Value> {
                     key,
                     &m_properties.emplace_back(
-                        key, Value {}, nullptr
+                        key, Value {JSUndefOpt {}, std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::property)}, nullptr
                     ).item,
                     this
                 };
@@ -87,7 +87,7 @@ namespace DerkJS {
         }
 
         void freeze() noexcept override {
-            m_flags = std::to_underlying(AttrMask::frozen);
+            m_flags = std::to_underlying(AttrMask::frozen_property);
 
             for (auto& entry : m_properties) {
                 entry.item.update_flags(m_flags);
@@ -102,14 +102,13 @@ namespace DerkJS {
 
         [[nodiscard]] auto set_property_value(const Value& key, const Value& value) -> Value* override {
             auto property_desc = get_property_value(key, true);
+            auto value_copy = value;
 
-            return (property_desc.set_value(key, value))
+            value_copy.set_flag<AttrMask::property>();
+
+            return (property_desc.set_value(key, value_copy))
                 ? property_desc.ref_value()
                 : nullptr;
-        }
-
-        [[nodiscard]] auto del_property_value(const Value& key) -> bool override {
-            return false; // TODO: implement.
         }
 
         void update_on_accessor_mut([[maybe_unused]] const Value& accessor_value_p, const Value& value) override {}

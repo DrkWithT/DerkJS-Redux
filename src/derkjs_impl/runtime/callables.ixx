@@ -37,7 +37,7 @@ export namespace DerkJS {
 
     public:
         NativeFunction(ObjectBase<Value>* instance_prototype_p, native_func_p procedure_ptr, ObjectBase<Value>* prototype_p, const Value& length_key, const Value& length_value) noexcept
-        : m_own_properties {}, m_prototype {(prototype_p) ? Value {prototype_p} : Value {}}, m_instance_prototype {(instance_prototype_p) ? Value {instance_prototype_p} : Value {}}, m_native_ptr {procedure_ptr}, m_min_arity {static_cast<int16_t>(length_value.to_num_i32().value_or(0))}, m_flags {std::to_underlying(AttrMask::defaults)} {
+        : m_own_properties {}, m_prototype {prototype_p, std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::property)}, m_instance_prototype {instance_prototype_p, std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::property)}, m_native_ptr {procedure_ptr}, m_min_arity {static_cast<int16_t>(length_value.to_num_i32().value_or(0))}, m_flags {std::to_underlying(AttrMask::defaults)} {
             m_prototype.update_flags(m_flags);
             m_own_properties.emplace_back(length_key, length_value, nullptr);
         }
@@ -97,7 +97,7 @@ export namespace DerkJS {
         }
 
         void freeze() noexcept override {
-            m_flags = std::to_underlying(AttrMask::frozen);
+            m_flags = std::to_underlying(AttrMask::frozen_property);
 
             // for (auto& entry : m_own_properties) {
             //     entry.item.update_flags(m_flags);
@@ -116,8 +116,11 @@ export namespace DerkJS {
 
         [[nodiscard]] auto set_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] const Value& value) -> Value* override {
             auto property_desc = get_property_value(key, true);
+            auto value_copy = value;
 
-            return (property_desc.set_value(key, value))
+            value_copy.set_flag<AttrMask::property>();
+
+            return (property_desc.set_value(key, value_copy))
                 ? property_desc.ref_value()
                 : nullptr;
         }
@@ -296,7 +299,7 @@ export namespace DerkJS {
 
     public:
         Lambda(ObjectBase<Value>* instance_prototype_p, std::vector<Instruction> code, ObjectBase<Value>* prototype_p, const Value& length_key, const Value& length_value) noexcept
-        : m_own_properties {}, m_code (std::move(code)), m_prototype {(prototype_p) ? Value {prototype_p} : Value {}}, m_instance_prototype {(instance_prototype_p) ? Value {instance_prototype_p} : Value {}}, m_min_arity {static_cast<int16_t>(length_value.to_num_i32().value_or(0))}, m_flags {std::to_underlying(AttrMask::defaults)} {
+        : m_own_properties {}, m_code (std::move(code)), m_prototype {prototype_p, std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::property)}, m_instance_prototype {instance_prototype_p, std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::property)}, m_min_arity {static_cast<int16_t>(length_value.to_num_i32().value_or(0))}, m_flags {std::to_underlying(AttrMask::defaults)} {
             m_prototype.update_flags(m_flags);
             m_own_properties.emplace_back(length_key, length_value, nullptr);
         }
@@ -348,7 +351,12 @@ export namespace DerkJS {
                 return PropertyDescriptor<Value> {
                     key,
                     &m_own_properties.emplace_back(
-                        key, Value {}, nullptr
+                        key,
+                        Value {
+                            JSUndefOpt {},
+                            std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::property)
+                        },
+                        nullptr
                     ).item,
                     this
                 };
@@ -360,7 +368,7 @@ export namespace DerkJS {
         }
 
         void freeze() noexcept override {
-            m_flags = std::to_underlying(AttrMask::frozen);
+            m_flags = std::to_underlying(AttrMask::frozen_property);
 
             m_prototype.update_flags(m_flags);
 

@@ -21,7 +21,7 @@ namespace DerkJS::Runtime::Intrinsics {
     export auto native_function_dud(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, [[maybe_unused]] int argc) -> bool {
         const auto passed_rsbp = ctx->rsbp;
 
-        ctx->stack.at(passed_rsbp - 1) = Value {};
+        ctx->stack.at(passed_rsbp - 1) = Value {JSUndefOpt {}};
 
         return true;
     }

@@ -42,6 +42,8 @@ export namespace DerkJS {
         configurable = 0x02,
         enumerable = 0x04,
         accessor = 0x08,
+        property = 0x10,
+        frozen_property = frozen | property,
         defaults = writable | configurable
     };
 
@@ -65,7 +67,7 @@ export namespace DerkJS {
     public:
         //? NOTE: Initializes a dud property descriptor, usually from an invalid property name.
         explicit constexpr PropertyDescriptor() noexcept
-        : m_key {}, m_value {}, m_base {nullptr} {}
+        : m_key {JSUndefOpt {}}, m_value {JSUndefOpt {}}, m_base {nullptr} {}
 
         constexpr PropertyDescriptor(const V& key, const V& value, ObjectBase<V>* self_p) noexcept
         : m_key {key}, m_value {value}, m_base {self_p} {}
@@ -155,19 +157,25 @@ export namespace DerkJS {
         }
     };
 
-    /// NOTE: indexes into an array of `ObjectBase<Value>` pointers, each one to a built-in prototype:
-    /// "Base JS" Built-Ins: Boolean, Number, Object, Array, Function
-    enum class BasePrototypeID : uint8_t {
+    /// NOTE: indexes into an array of `ObjectBase<Value>` pointers, each for a JS built-in.
+    enum class BuiltInObjects : uint8_t {
+        /// Prototypes (TODO: refactor these out in favor of polyfilled ctors and intrinsics, etc.)
         boolean,
         number,
         str,
         object,
         array,
         function,
+
+        /// Extra property names for quick access (TODO: refactor these out in favor of polyfilled ctors and intrinsics, etc.)
         extra_length_key, // Not a prototype, but I have to make "length" easily accessible for array creations.
-        extra_msg_key, // Not a prototype, but patched in for `NativeError`.
-        extra_name_key, // Not a prototype either, but patched in for `NativeError`.
-        error,
+        extra_msg_key, // Not a prototype, but patched in for `ErrorXYZ`.
+        extra_name_key, // Not a prototype either, but patched in for `ErrorXYZ`.
+
+        /// Built-In error ctors here...
+        error_ctor,
+        syntax_error_ctor,
+        type_error_ctor,
         last
     };
 
@@ -195,20 +203,18 @@ export namespace DerkJS {
         virtual void freeze() noexcept = 0;
 
         virtual auto set_property_value(const V& key, const V& value) -> V* = 0;
-        virtual auto del_property_value(const V& key) -> bool = 0;
-        /// NOTE: update this to take a const V& key parameter 1st.
         virtual void update_on_accessor_mut(const V& accessor_value_p, const V& value) = 0;
 
         virtual auto call(void* opaque_ctx_p, int argc, bool has_this_arg) -> bool = 0;
         virtual auto call_as_ctor(void* opaque_ctx_p, int argc) -> bool = 0;
 
-        /// For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!
+        //? For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!
         virtual auto clone() -> ObjectBase<V>* = 0;
 
-        /// NOTE: For default printing of objects, etc. to the console (stdout). 
+        //? For default printing of objects, etc. to the console (stdout). 
         virtual auto as_string() const -> std::string = 0;
 
-        // virtual auto field_iter() noexcept -> FieldIterator<PropertyDescriptor<V>> = 0;
+        /// virtual auto field_iter() noexcept -> FieldIterator<PropertyDescriptor<V>> = 0;
         virtual auto opaque_iter() const noexcept -> OpaqueIterator = 0;
 
         virtual auto operator==(const ObjectBase& other) const noexcept -> bool = 0;
@@ -271,8 +277,8 @@ export namespace DerkJS {
             return m_items;
         }
 
-        void update_tenure_count() {
-            ++m_last_tenured_id;
+        void tenure_items() noexcept {
+            m_last_tenured_id = m_items.size() - 1;
         }
 
         [[nodiscard]] auto get_next_id() noexcept -> int {

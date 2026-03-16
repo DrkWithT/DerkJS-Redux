@@ -11,6 +11,7 @@ export module runtime.value;
 export import runtime.objects;
 
 export namespace DerkJS {
+    struct JSUndefOpt {};
     struct JSNullOpt {};
     struct JSNaNOpt {};
     struct JSProtoKeyOpt {};
@@ -47,17 +48,17 @@ export namespace DerkJS {
         uint8_t m_flags;
 
     public:
-        constexpr Value(uint8_t parent_flags = std::to_underlying(AttrMask::defaults)) noexcept
+        constexpr Value([[maybe_unused]] JSUndefOpt opt, uint8_t parent_flags = std::to_underlying(AttrMask::writable)) noexcept
         : m_data {}, m_tag {ValueTag::undefined}, m_flags {parent_flags} {
             m_data.dud = dud_member_v;
         }
 
-        constexpr Value([[maybe_unused]] JSNullOpt opt, uint8_t parent_flags = std::to_underlying(AttrMask::defaults)) noexcept
+        constexpr Value([[maybe_unused]] JSNullOpt opt, uint8_t parent_flags = std::to_underlying(AttrMask::writable)) noexcept
         : m_data {}, m_tag {ValueTag::null}, m_flags {parent_flags} {
             m_data.dud = dud_member_v;
         }
 
-        constexpr Value([[maybe_unused]] JSNaNOpt opt, uint8_t parent_flags = std::to_underlying(AttrMask::defaults)) noexcept
+        constexpr Value([[maybe_unused]] JSNaNOpt opt, uint8_t parent_flags = std::to_underlying(AttrMask::writable)) noexcept
         : m_data {}, m_tag {ValueTag::num_nan}, m_flags {parent_flags} {
             m_data.dud = dud_member_v;
         }
@@ -67,23 +68,23 @@ export namespace DerkJS {
             m_data.dud = dud_member_v;
         }
 
-        constexpr Value(bool b, uint8_t parent_flags = std::to_underlying(AttrMask::defaults)) noexcept
+        constexpr Value(bool b, uint8_t parent_flags = std::to_underlying(AttrMask::writable)) noexcept
         : m_data {}, m_tag {ValueTag::boolean}, m_flags {parent_flags} {
             m_data.b = b;
         }
 
-        constexpr Value(int i, uint8_t parent_flags = std::to_underlying(AttrMask::defaults)) noexcept
+        constexpr Value(int i, uint8_t parent_flags = std::to_underlying(AttrMask::writable)) noexcept
         : m_data {}, m_tag {ValueTag::num_i32}, m_flags {parent_flags} {
             m_data.i = i;
         }
 
-        Value(double d, uint8_t parent_flags = std::to_underlying(AttrMask::defaults)) noexcept
+        Value(double d, uint8_t parent_flags = std::to_underlying(AttrMask::writable)) noexcept
         : m_data {}, m_tag {ValueTag::num_f64}, m_flags {parent_flags} {
             m_data.d = d;
         }
 
         explicit constexpr Value([[maybe_unused]] decltype(nullptr) nullptr_v) noexcept
-        : m_data {}, m_tag {ValueTag::undefined}, m_flags {std::to_underlying(AttrMask::defaults)} {
+        : m_data {}, m_tag {ValueTag::undefined}, m_flags {std::to_underlying(AttrMask::writable)} {
             m_data.dud = dud_member_v;
         }
 
@@ -140,10 +141,39 @@ export namespace DerkJS {
             return m_tag == ValueTag::val_ref && flag<AttrMask::configurable>();
         }
 
-        // TODO: The AttrMask flags should be unified for ObjectBase & Value.
         template <AttrMask M>
         [[nodiscard]] constexpr auto flag(this auto&& self) noexcept -> bool {
             return (self.m_flags & std::to_underlying(M)) == std::to_underlying(M);
+        }
+
+        template <AttrMask M>
+        auto set_flag() noexcept -> std::uint8_t {
+            switch (m_tag) {
+            case ValueTag::val_ref:
+                m_flags |= m_data.ref_p->set_flag<M>();
+                break;
+            default:
+                m_flags |= std::to_underlying(M);
+                break;
+            }
+
+            return m_flags;
+        }
+
+        template <AttrMask M>
+        auto clear_flag() noexcept -> std::uint8_t {
+            switch (m_tag) {
+            case ValueTag::val_ref:
+                m_flags &= m_data.ref_p->clear_flag<M>();
+                break;
+            default:
+                //? NOTE: to clear a flag, do bitwise AND with its bit-flag and a 0 bit.
+                //? Example: Clear writable --> `0b0000001(1) & 1111111(0)`
+                m_flags |= ~std::to_underlying(M);
+                break;
+            }
+
+            return m_flags;
         }
 
         constexpr void update_flags(uint8_t parent_object_flags) noexcept {

@@ -42,7 +42,10 @@ namespace DerkJS::Runtime::Intrinsics {
             }
         } else if (argc == 1) {
             for (int temp_item_count = 0; temp_item_count < maybe_fill_count; temp_item_count++) {
-                temp_array->items().emplace_back(Value {});
+                temp_array->items().emplace_back(Value {
+                    JSUndefOpt {},
+                    std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::configurable)
+                });
             }
         }
 

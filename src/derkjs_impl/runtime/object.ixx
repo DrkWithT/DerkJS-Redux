@@ -19,7 +19,7 @@ namespace DerkJS {
     public:
         /// NOTE: Creates mutable instances of anonymous objects. Pass the `flag_prototype_v | flag_extensible_v` if needed for Foo.prototype!
         Object(ObjectBase<Value>* proto_p, uint8_t flags = std::to_underlying(AttrMask::defaults))
-        : m_own_properties {}, m_prototype {(proto_p) ? Value {proto_p} : Value {}}, m_flags {flags} {
+        : m_own_properties {}, m_prototype {proto_p, std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::configurable)}, m_flags {flags} {
             m_prototype.update_flags(m_flags);
         }
 
@@ -66,7 +66,11 @@ namespace DerkJS {
                 return PropertyDescriptor<Value> {
                     key,
                     &m_own_properties.emplace_back(
-                        key, Value {}, nullptr
+                        key,
+                        Value {
+                            JSUndefOpt {}, std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::configurable)
+                        },
+                        nullptr
                     ).item,
                     this
                 };
@@ -78,7 +82,7 @@ namespace DerkJS {
         }
 
         void freeze() noexcept override {
-            m_flags = std::to_underlying(AttrMask::frozen);
+            m_flags = std::to_underlying(AttrMask::frozen_property);
 
             for (auto& entry : m_own_properties) {
                 entry.item.update_flags(m_flags);
@@ -93,14 +97,13 @@ namespace DerkJS {
 
         [[maybe_unused]] auto set_property_value(const Value& key, const Value& value) -> Value* override {
             auto property_desc = get_property_value(key, true);
+            auto value_copy = value;
 
-            return (property_desc.set_value(key, value))
+            value_copy.set_flag<AttrMask::property>();
+
+            return (property_desc.set_value(key, value_copy))
                 ? property_desc.ref_value()
                 : nullptr;
-        }
-
-        [[maybe_unused]] auto del_property_value([[maybe_unused]] const Value& key) -> bool override {
-            return false; // TODO
         }
 
         void update_on_accessor_mut([[maybe_unused]] const Value& accessor_value_p, [[maybe_unused]] const Value& value) override {}

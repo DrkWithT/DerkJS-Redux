@@ -29,7 +29,10 @@ namespace DerkJS {
                 return;
             }
 
-            m_items.resize(index + 1, Value {});
+            m_items.resize(index + 1, Value {
+                JSUndefOpt {},
+                std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::property)
+            });
         }
 
         [[nodiscard]] auto get_item(int index, bool should_default) -> Value* {
@@ -49,36 +52,30 @@ namespace DerkJS {
 
     public:
         Array(ObjectBase<Value>* prototype_p, const Value& length_key, const Value& initial_length_v) noexcept (std::is_nothrow_default_constructible_v<Value>)
-        : m_own_properties {}, m_items {}, m_prototype {prototype_p}, m_flags {std::to_underlying(AttrMask::defaults)} {
-            const auto length_prop_flags = static_cast<uint8_t>(std::to_underlying(AttrMask::accessor) | m_flags);
-
-            m_prototype.update_flags(m_flags);
-            m_own_properties.emplace_back(PropEntry<Value, Value> {
+        : m_own_properties {}, m_items {}, m_prototype {prototype_p, std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::property)}, m_flags {std::to_underlying(AttrMask::defaults)} {
+            auto& length_ref = m_own_properties.emplace_back(PropEntry<Value, Value> {
                 .key = length_key,
                 .item = initial_length_v,
                 .handler_p = nullptr
-            });
+            }).item;
+
+            length_ref.set_flag<AttrMask::defaults>();
+            length_ref.set_flag<AttrMask::accessor>();
+            length_ref.set_flag<AttrMask::property>();
         }
 
         Array(ObjectBase<Value>* prototype_p, const Value& length_key, const std::span<Value>& item_slice) noexcept (std::is_nothrow_default_constructible_v<Value>)
-        : m_own_properties {}, m_items {}, m_prototype {prototype_p}, m_flags {std::to_underlying(AttrMask::defaults)} {
-            const auto length_prop_flags = static_cast<uint8_t>(std::to_underlying(AttrMask::accessor) | m_flags);
-
-            m_prototype.update_flags(m_flags);
-
+        : m_own_properties {}, m_items {}, m_prototype {prototype_p, std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::property)}, m_flags {std::to_underlying(AttrMask::defaults)} {
             auto& length_value_ref = m_own_properties.emplace_back(PropEntry<Value, Value> {
                 .key = length_key,
-                .item = Value {0},
+                .item = Value {0, std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::accessor) | std::to_underlying(AttrMask::property)},
                 .handler_p = handle_length_change
             }).item;
-            auto item_count = 0;
 
             for (const auto& item_value : item_slice) {
                 set_property_value(Value {item_count}, item_value);
-                item_count++;
+                length_value_ref.increment();
             }
-
-            length_value_ref = Value {item_count};
         }
 
         [[nodiscard]] auto items() noexcept -> std::vector<Value>& {
@@ -134,7 +131,12 @@ namespace DerkJS {
                 return PropertyDescriptor<Value> {
                     key,
                     &m_own_properties.emplace_back(
-                        key, Value {}, nullptr
+                        key,
+                        Value {
+                            JSUndefOpt {},
+                            std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::property)
+                        },
+                        nullptr
                     ).item,
                     this
                 };
@@ -146,7 +148,7 @@ namespace DerkJS {
         }
 
         void freeze() noexcept override {
-            m_flags = std::to_underlying(AttrMask::frozen);
+            m_flags = std::to_underlying(AttrMask::frozen_property);
 
             for (auto& entry : m_own_properties) {
                 entry.item.update_flags(m_flags);
@@ -161,14 +163,13 @@ namespace DerkJS {
 
         [[maybe_unused]] auto set_property_value([[maybe_unused]] const Value& key, [[maybe_unused]] const Value& value) -> Value* override {
             auto property_desc = get_property_value(key, true);
+            auto value_copy = value;
 
-            return (property_desc.set_value(key, value))
+            value_copy.set_flag<AttrMask::property>();
+
+            return (property_desc.set_value(key, value_copy))
                 ? property_desc.ref_value()
                 : nullptr;
-        }
-
-        [[maybe_unused]] auto del_property_value([[maybe_unused]] const Value& key) -> bool override {
-            return false; // TODO
         }
 
         //! TODO: I should not have this silently fail... Return a bool at least.
@@ -274,7 +275,10 @@ namespace DerkJS {
             const int next_length_i32 = next_length.to_num_i32().value_or(0);
 
             if (const int old_length = object_as_array_p->get_seq_items()->size(); next_length_i32 > old_length) {
-                object_as_array_p->get_seq_items()->resize(next_length_i32 + 1, Value {});
+                object_as_array_p->get_seq_items()->resize(next_length_i32 + 1, Value {
+                    JSUndefOpt {},
+                    std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::property)
+                });
             } else if (next_length_i32 < old_length) {
                 object_as_array_p->get_seq_items()->resize(next_length_i32);
             }
