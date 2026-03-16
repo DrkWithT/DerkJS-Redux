@@ -3,6 +3,7 @@ module;
 #include <cstdint>
 #include <utility>
 #include <algorithm>
+#include <string>
 #include <array>
 #include <vector>
 #include <span>
@@ -12,7 +13,6 @@ export module runtime.context;
 import runtime.value;
 import runtime.strings;
 import runtime.object;
-import runtime.errors;
 import runtime.bytecode;
 import runtime.gc;
 
@@ -60,7 +60,7 @@ namespace DerkJS {
 
         GC gc;
         PolyPool<ObjectBase<Value>> heap;
-        std::array<ObjectBase<Value>*, static_cast<std::size_t>(BasePrototypeID::last)> base_protos;
+        std::array<ObjectBase<Value>*, static_cast<std::size_t>(BuiltInObjects::last)> builtins;
         std::vector<Value> stack;
         std::vector<CallFrame> frames;
 
@@ -71,7 +71,7 @@ namespace DerkJS {
 
         Value* consts_view;
 
-        /// NOTE: holds a non-owning pointer to a currently thrown exception object e.g `NativeError`.
+        /// NOTE: holds a non-owning pointer to a currently thrown exception object e.g `ErrorXYZ`.
         ObjectBase<Value>* current_error;
 
         /// NOTE: holds base of bytecode blob, starts at position 0 to access offsets from.
@@ -96,7 +96,7 @@ namespace DerkJS {
         VMErrcode status;
 
         ExternVMCtx(Program& prgm, std::size_t stack_length_limit, std::size_t call_frame_limit, std::size_t gc_heap_threshold, void* lexer_ptr, void* parser_ptr, void* compile_state_ptr, compile_snippet_fn compile_proc_ptr)
-        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), base_protos(std::move(prgm.base_protos)), stack {}, frames {}, lexer_p {lexer_ptr}, parser_p {parser_ptr}, compile_state_p {compile_state_ptr}, compile_proc {compile_proc_ptr}, consts_view {prgm.consts.data()}, current_error {nullptr}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, ending_frame_depth {0}, rsbp {-1}, rsp {-1}, /*dispatch_allowance {100},*/ status {VMErrcode::pending} {
+        : gc {gc_heap_threshold}, heap (std::move(prgm.heap_items)), builtins(std::move(prgm.builtins)), stack {}, frames {}, lexer_p {lexer_ptr}, parser_p {parser_ptr}, compile_state_p {compile_state_ptr}, compile_proc {compile_proc_ptr}, consts_view {prgm.consts.data()}, current_error {nullptr}, code_bp {prgm.code.data()}, fn_table_bp {prgm.offsets.data()}, rip_p {prgm.code.data() + prgm.offsets[prgm.entry_func_id]}, ending_frame_depth {0}, rsbp {-1}, rsp {-1}, /*dispatch_allowance {100},*/ status {VMErrcode::pending} {
             stack.reserve(stack_length_limit);
             stack.resize(stack_length_limit);
             frames.reserve(call_frame_limit);
@@ -117,9 +117,40 @@ namespace DerkJS {
                 stack.at(rsp) = Value {global_this_p};
                 // 3. Push undefined as dud for implicit main function- Which cannot directly self call anyways.
                 ++rsp;
-                stack.at(rsp) = Value {};
+                stack.at(rsp) = Value {JSUndefOpt {}};
                 rsbp = rsp;
             }
+        }
+
+        /// NOTE: Only use this to push an exception object for opcodes corresponding to JS operators e.g TypeError on an invalid `djs_get_prop`. Returns `true` if the error object was allocated AND the error ctor ID was valid.
+        [[nodiscard]] auto push_error(std::string msg, std::uint8_t builtin_id) -> bool {
+            rsp++;
+            stack.at(rsp) = Value {JSUndefOpt {}}; // thisArg placeholder BELOW callee
+
+            rsp++;
+            stack.at(rsp) = Value { builtins.at(builtin_id) };
+
+            if (auto msg_string_p = heap.add_item(heap.get_next_id(), new DynamicString {
+                builtins.at(static_cast<unsigned int>(BuiltInObjects::str)),
+                Value {builtins.at(static_cast<unsigned int>(BuiltInObjects::extra_length_key))},
+                std::move(msg)
+            }); msg_string_p != nullptr) {
+                rsp++;
+                stack.at(rsp) = Value {msg_string_p};
+            } else {
+                status = VMErrcode::bad_heap_alloc;
+                return false;
+            }
+
+            const auto old_vm_frame_n = ending_frame_depth;
+            ending_frame_depth = frames.size();
+
+            stack.at(rsp - 1)->call_as_ctor(this, 1);
+            dispatch_op(*this);
+
+            ending_frame_depth = old_vm_frame_n;
+
+            return status == VMErrcode::ok;
         }
 
         /// NOTE: Only use this for "throwing" exceptions in the VM!
@@ -153,7 +184,7 @@ namespace DerkJS {
         [[nodiscard]] auto push_string(const std::string& s, const int passed_rsbp) noexcept -> bool {
             if (auto temp_str_p = heap.add_item(heap.get_next_id(), std::make_unique<DynamicString>(
                 stack.at(passed_rsbp).to_object()->get_instance_prototype(),
-                base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
+                builtins.at(static_cast<unsigned int>(BuiltInObjects::extra_length_key)),
                 s
             )); temp_str_p) {
                 stack.at(passed_rsbp - 1) = Value {temp_str_p};

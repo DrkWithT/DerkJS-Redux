@@ -10,7 +10,6 @@ import runtime.value;
 import runtime.strings;
 import runtime.object;
 import runtime.arrays;
-import runtime.errors;
 import runtime.bytecode;
 import runtime.gc;
 export import runtime.context;
@@ -45,6 +44,7 @@ namespace DerkJS {
     inline void op_put_this(ExternVMCtx& ctx);
     inline void op_ref_error(ExternVMCtx& ctx);
     inline void op_discard(ExternVMCtx& ctx);
+    inline void op_try_del(ExternVMCtx& ctx);
     inline void op_typename(ExternVMCtx& ctx);
     inline void op_put_obj_dud(ExternVMCtx& ctx);
     inline void op_make_arr(ExternVMCtx& ctx);
@@ -85,7 +85,7 @@ namespace DerkJS {
     constexpr tco_opcode_fn tco_opcodes[static_cast<std::size_t>(Opcode::last)] = {
         op_nop,
         op_dup, op_dup_local, op_ref_local, op_store_upval, op_ref_upval, op_put_const, op_deref, op_pop, op_emplace,
-        op_put_this, op_ref_error, op_discard, op_typename, op_put_obj_dud, op_make_arr, op_put_proto_key, op_get_prop, op_put_prop, op_del_prop, op_ref_pack,
+        op_put_this, op_ref_error, op_discard, op_try_del, op_typename, op_put_obj_dud, op_make_arr, op_put_proto_key, op_get_prop, op_put_prop, op_del_prop, op_ref_pack,
         op_numify, op_strcat, op_pre_inc, op_pre_dec,
         op_mod, op_mul, op_div, op_add, op_sub,
         op_test_falsy, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte, op_cmp_protos,
@@ -137,6 +137,7 @@ namespace DerkJS {
 
     inline void op_store_upval(ExternVMCtx& ctx) {
         if (auto new_upval_p = ctx.frames.back().capture_p->set_property_value(ctx.stack[ctx.rsp], ctx.stack[ctx.rsp - 1]); new_upval_p) {
+            new_upval_p->clear_flag<AttrMask::configurable>();
             ctx.rip_p++;
             ctx.rsp--;
         } else {
@@ -218,8 +219,26 @@ namespace DerkJS {
     }
 
     inline void op_discard(ExternVMCtx& ctx) {
-        ctx.stack[ctx.rsp] = Value {};
+        ctx.stack[ctx.rsp] = Value {JSUndefOpt {}};
         ctx.rip_p++;
+
+        TCO_ATTR
+        return dispatch_op(ctx);
+    }
+
+    inline void op_try_del(ExternVMCtx& ctx) {
+        const auto a0 = ctx.rip_p->args[0];
+
+        if (auto& target_value = ctx.stack.at(ctx.rsp); target_value.get_tag() != ValueTag::val_ref) {
+            ctx.stack.at(ctx.rsp) = Value {true};
+            ctx.rip_p++;
+        } else if (target_value.flag<AttrMask::property>()) {
+            *target_value.get_value_ref() = Value {JSUndefOpt {}};
+            target_value = Value {true};
+            ctx.rip_p++;
+        } else if (ctx.push_error("Invalid delete on non-configurable / non-property name.", std::to_underlying(BuiltInObjects::syntax_error_ctor)>)) {
+            ctx.status = ctx.try_recover(ctx.stack.at(ctx.rsp).to_object(), a0 == 1);
+        }
 
         TCO_ATTR
         return dispatch_op(ctx);
@@ -229,8 +248,8 @@ namespace DerkJS {
         const auto& temp_value_ref = ctx.stack[ctx.rsp];
 
         if (auto js_typename_p = ctx.heap.add_item(ctx.heap.get_next_id(), DynamicString {
-            ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
-            Value {ctx.base_protos[static_cast<unsigned int>(BasePrototypeID::extra_length_key)]},
+            ctx.builtins.at(static_cast<unsigned int>(BuiltInObjects::str)),
+            Value {ctx.builtins[static_cast<unsigned int>(BuiltInObjects::extra_length_key)]},
             temp_value_ref.get_typename()
         })) {
             // For `typeof` result: typename string.
@@ -249,7 +268,7 @@ namespace DerkJS {
 
         auto obj_ref_p = ctx.heap.add_item(ctx.heap.get_next_id(), Object {
             /// NOTE: {}.__proto__ === Object.prototype
-            ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::object))
+            ctx.builtins.at(static_cast<unsigned int>(BuiltInObjects::object))
         });
 
         if (obj_ref_p) {
@@ -270,8 +289,8 @@ namespace DerkJS {
         const auto a0 = ctx.rip_p->args[0];
         auto array_p = new Array {
             /// NOTE: [].__proto__ === Array.prototype
-            ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::array)),
-            Value { ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)) },
+            ctx.builtins.at(static_cast<unsigned int>(BuiltInObjects::array)),
+            Value { ctx.builtins.at(static_cast<unsigned int>(BuiltInObjects::extra_length_key)) },
             Value {a0}
         };
         
@@ -307,6 +326,7 @@ namespace DerkJS {
     inline void op_get_prop(ExternVMCtx& ctx) {
         auto& target_ref = ctx.stack.at(ctx.rsp - 1);
         const auto a0 = ctx.rip_p->args[0];
+        const auto a1 = ctx.rip_p->args[1];
 
         if (ObjectBase<Value>* target_obj_p = target_ref.to_object(); target_obj_p) {
             ctx.stack.at(ctx.rsp - 1) = target_obj_p->get_property_value(
@@ -315,8 +335,8 @@ namespace DerkJS {
             ).get_value();
             ctx.rsp--;
             ctx.rip_p++;
-        } else {
-            ctx.status = VMErrcode::bad_property_access;
+        } else if (ctx.push_error("Invalid property access of undefined / primitive.", std::to_underlying(BuiltInObjects::type_error_ctor)>)) {
+            ctx.try_recover(ctx.stack.at(ctx.rsp).to_object(), a1 == 1);
         }
 
         TCO_ATTR
@@ -375,7 +395,7 @@ namespace DerkJS {
         /// NOTE: For making TCO possible, just allocate the new string on the heap via raw ptr to avoid non-trivial destructor problems. The heap will manage that anyways.
         auto result_p = new DynamicString {
             ctx.stack[ctx.rsp].to_object()->get_prototype(),
-            Value {ctx.base_protos[static_cast<unsigned int>(BasePrototypeID::extra_length_key)]},
+            Value {ctx.builtins[static_cast<unsigned int>(BuiltInObjects::extra_length_key)]},
             ctx.stack[ctx.rsp].to_string()};
         result_p->append_back(ctx.stack[ctx.rsp - 1].to_string());
 
@@ -606,7 +626,7 @@ namespace DerkJS {
             /// NOTE: The initialized `this` object from the ctor must be at CALLEE_RSBP - 1.
             // ctx.stack.at(callee_sbp - 1) = Value {...};
         } else {
-            ctx.stack.at(callee_sbp - 1) = Value {};
+            ctx.stack.at(callee_sbp - 1) = Value {JSUndefOpt {}};
         }
 
         ctx.rsp = callee_sbp - 1;
@@ -623,27 +643,17 @@ namespace DerkJS {
         return dispatch_op(ctx);
     }
 
+    // TODO: refactor to call ErrorXYZ ctor, using IDs to select a built-in Error ctor to invoke with the stack top.
     inline void op_throw(ExternVMCtx& ctx) {
         const auto a0 = ctx.rip_p->args[0];
 
+        //? NOTEs: index ctx.builtins for the Error ctor with an `a1` as index of the built-in object pointer array.
         if (auto thrown_value_as_obj = ctx.stack.at(ctx.rsp).to_object(); thrown_value_as_obj != nullptr && thrown_value_as_obj->get_class_name() == "Error") {
             ctx.status = ctx.try_recover(thrown_value_as_obj, a0 == 1);
-        } else if (auto error_object_p = ctx.heap.add_item(
-            ctx.heap.get_next_id(),
-            new NativeError {
-                ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::error)),
-                Value {
-                    ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_msg_key))
-                },
-                ctx.stack.at(ctx.rsp),
-                Value {
-                    ctx.base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_name_key))
-                }
-            }
-        ); error_object_p) {
-            ctx.status = ctx.try_recover(error_object_p, a0 == 1);
+        } else if (auto error_ctor_ptr = ctx.builtins.at(std::to_underlying(BuiltInObjects::error_ctor)); error_ctor_ptr->call_as_ctor(&ctx, 1)) {
+            ctx.status = ctx.try_recover(ctx.stack.at(ctx.rsp).to_object(), a0 == 1);
         } else {
-            ctx.status = VMErrcode::bad_heap_alloc;
+            ctx.status = VMErrcode::bad_operation;
         }
 
         TCO_ATTR
