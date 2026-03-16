@@ -27,7 +27,7 @@ export namespace DerkJS {
             if (length_key.is_valid_object_ref()) {
                 m_own_properties.emplace_back(PropEntry<Value, Value> {
                     .key = length_key,
-                    .item = Value {static_cast<int>(s.length())},
+                    .item = Value {static_cast<int>(m_data.length()), std::to_underlying(AttrMask::frozen) | std::to_underlying(AttrMask::property)},
                     .handler_p = nullptr
                 });
             }
@@ -40,7 +40,7 @@ export namespace DerkJS {
             if (length_key.is_valid_object_ref()) {
                 m_own_properties.emplace_back(PropEntry<Value, Value> {
                     .key = length_key,
-                    .item = Value {static_cast<int>(sv.length())},
+                    .item = Value {static_cast<int>(m_data.length()), std::to_underlying(AttrMask::frozen) | std::to_underlying(AttrMask::property)},
                     .handler_p = nullptr
                 });
             }
@@ -50,7 +50,7 @@ export namespace DerkJS {
         void patch_length_property(const Value& length_key, int length) {
             m_own_properties.emplace_back(PropEntry<Value, Value> {
                 .key = length_key,
-                .item = Value {length, std::to_underlying(AttrMask::property)},
+                .item = Value {length, std::to_underlying(AttrMask::frozen) | std::to_underlying(AttrMask::property)},
                 .handler_p = nullptr
             });
         }

@@ -74,7 +74,7 @@ namespace DerkJS {
             }).item;
 
             for (const auto& item_value : item_slice) {
-                set_property_value(Value {item_count}, item_value);
+                m_items.emplace_back(item_value);
                 length_value_ref.increment();
             }
         }
@@ -281,7 +281,10 @@ namespace DerkJS {
                     std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::property)
                 });
             } else if (next_length_i32 < old_length) {
-                object_as_array_p->get_seq_items()->resize(next_length_i32);
+                object_as_array_p->get_seq_items()->resize(next_length_i32, Value {
+                    JSUndefOpt {},
+                    std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::property)
+                });
             }
 
             return true;

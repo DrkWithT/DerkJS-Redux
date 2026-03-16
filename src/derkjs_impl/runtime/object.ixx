@@ -69,7 +69,8 @@ namespace DerkJS {
                     &m_own_properties.emplace_back(
                         key,
                         Value {
-                            JSUndefOpt {}, std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::configurable)
+                            JSUndefOpt {},
+                            std::to_underlying(AttrMask::writable) | std::to_underlying(AttrMask::property)
                         },
                         nullptr
                     ).item,

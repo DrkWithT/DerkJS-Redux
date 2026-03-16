@@ -11,11 +11,6 @@ export module runtime.value;
 export import runtime.objects;
 
 export namespace DerkJS {
-    struct JSUndefOpt {};
-    struct JSNullOpt {};
-    struct JSNaNOpt {};
-    struct JSProtoKeyOpt {};
-
     enum class ValueTag : uint8_t {
         undefined,
         null,
@@ -48,6 +43,9 @@ export namespace DerkJS {
         uint8_t m_flags;
 
     public:
+        constexpr Value() noexcept
+        : Value (JSUndefOpt {}) {}
+
         constexpr Value([[maybe_unused]] JSUndefOpt opt, uint8_t parent_flags = std::to_underlying(AttrMask::writable)) noexcept
         : m_data {}, m_tag {ValueTag::undefined}, m_flags {parent_flags} {
             m_data.dud = dud_member_v;

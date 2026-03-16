@@ -13,6 +13,11 @@ export module runtime.objects;
 import meta.enums;
 
 export namespace DerkJS {
+    struct JSUndefOpt {};
+    struct JSNullOpt {};
+    struct JSNaNOpt {};
+    struct JSProtoKeyOpt {};
+
     /// NOTE: forward declaration of JS object interface.
     template <typename V>
     class ObjectBase;
@@ -54,7 +59,7 @@ export namespace DerkJS {
     template <typename V>
     class PropertyDescriptor {
     private:
-        static constexpr auto dud_item = V {};
+        static constexpr auto dud_item = V {JSUndefOpt {}};
 
         V m_key;                // copy of the object key
         V m_value;              // Value wrapping a pointer to property's Value
@@ -92,7 +97,7 @@ export namespace DerkJS {
         [[nodiscard]] constexpr auto get_value(this auto&& self) -> V {
             return (self.has_item())
                 ? self.m_value
-                : V {};
+                : V {JSUndefOpt {}};
         }
 
         //? NOTE: tries updating the referenced property value, returning true on success.
@@ -357,7 +362,7 @@ export namespace DerkJS {
         }
 
         template <typename ItemKind> requires (std::is_base_of_v<ItemBase, ItemKind>)
-        [[nodiscard]] auto add_item(int id, ItemKind* item_p) -> ItemBase* {
+        [[maybe_unused]] auto add_item(int id, ItemKind* item_p) -> ItemBase* {
             if (id < 0 || id >= static_cast<int>(m_items.size())) {
                 return nullptr;
             }
