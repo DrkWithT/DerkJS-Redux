@@ -472,6 +472,7 @@ export namespace DerkJS {
                 case TokenTag::symbol_plus: return AstOp::ast_op_plus;
                 case TokenTag::symbol_two_pluses: return AstOp::ast_op_prefix_inc;
                 case TokenTag::symbol_two_minuses: return AstOp::ast_op_prefix_dec;
+                case TokenTag::keyword_delete: return AstOp::ast_op_delete;
                 case TokenTag::keyword_typeof: return AstOp::ast_op_typeof;
                 case TokenTag::keyword_void: return AstOp::ast_op_void;
                 default: return AstOp::ast_op_noop;

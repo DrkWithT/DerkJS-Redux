@@ -31,6 +31,7 @@ export namespace DerkJS {
         ast_op_prefix_inc,      // prefix '++' operator
         ast_op_prefix_dec,      // prefix '--' operator
         ast_op_new,             // 'new' for objects
+        ast_op_delete,          // 'delete' for object properties
         ast_op_void,            // 'void' for discarded evaluations
         ast_op_typeof,          // `typeof` for getting a typename string of exprs.
         ast_op_instance_of,     // `instanceof` for checking A.__proto__ === B.prototype
