@@ -122,11 +122,6 @@ export namespace DerkJS {
                 : nullptr;
         }
 
-        [[nodiscard]] auto del_property_value([[maybe_unused]] const Value& key) -> bool override {
-            // return m_own_properties.erase(m_own_properties.find(handle)) != m_own_properties.end();
-            return false;
-        }
-
         void update_on_accessor_mut([[maybe_unused]] const Value& accessor_p, [[maybe_unused]] const Value& value) override {}
 
         [[nodiscard]] auto call(void* opaque_ctx_p, int argc, [[maybe_unused]] bool has_this_arg) -> bool override {
@@ -255,6 +250,7 @@ export namespace DerkJS {
             "djs_put_this",
             "djs_ref_error",
             "djs_discard",
+            "djs_try_del",
             "djs_typename",
             "djs_put_obj_dud",
             "djs_make_arr",
@@ -385,10 +381,6 @@ export namespace DerkJS {
                 : nullptr;
         }
 
-        [[nodiscard]] auto del_property_value([[maybe_unused]] const Value& key) -> bool override {
-            return false;
-        }
-
         void update_on_accessor_mut([[maybe_unused]] const Value& accessor_p, [[maybe_unused]] const Value& value) override {}
 
         [[maybe_unused]] auto call(void* opaque_ctx_p, int argc, bool has_this_arg) -> bool override {
@@ -410,8 +402,8 @@ export namespace DerkJS {
                     callee_pack_p = vm_context_p->heap.add_item(
                         vm_context_p->heap.get_next_id(),
                         std::make_unique<Array>(
-                            vm_context_p->base_protos.at(static_cast<unsigned int>(BasePrototypeID::array)),
-                            vm_context_p->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
+                            vm_context_p->builtins.at(static_cast<unsigned int>(BuiltInObjects::array)),
+                            vm_context_p->builtins.at(static_cast<unsigned int>(BuiltInObjects::extra_length_key)),
                             std::span<Value> {
                                 vm_context_p->stack.begin() + callee_rsbp + named_arity + 1,
                                 static_cast<std::size_t>(argc - named_arity)
