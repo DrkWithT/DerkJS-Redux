@@ -23,7 +23,6 @@ target_sources(
     src/derkjs_impl/runtime/arrays.ixx
     src/derkjs_impl/runtime/callables.ixx
     src/derkjs_impl/runtime/strings.ixx
-    src/derkjs_impl/runtime/errors.ixx
     src/derkjs_impl/runtime/value.ixx
     src/derkjs_impl/runtime/bytecode.ixx
     src/derkjs_impl/runtime/gc.ixx
@@ -37,7 +36,6 @@ target_sources(
     src/derkjs_impl/runtime/intrinsics/object_natives.ixx
     src/derkjs_impl/runtime/intrinsics/array_natives.ixx
     src/derkjs_impl/runtime/intrinsics/function_natives.ixx
-    src/derkjs_impl/runtime/intrinsics/error_natives.ixx
 )
 
 add_executable(derkjs_tco src/main_tco.cpp)
