@@ -14,8 +14,20 @@ function isNaN(arg) {
     return +arg !== +arg;
 }
 
+function Error(msg) {
+    this.message = new String(msg);
+}
+
+function SyntaxError(msg) {
+    this.message = new String(msg);
+}
+
+function TypeError(msg) {
+    this.message = new String(msg);
+}
+
 function displayAnyError() {
-    return String(this.name) + " " + String(this.message);
+    return "" + this.name + ": " + this.message;
 }
 
 Object.prototype.toString = function () {
@@ -31,10 +43,6 @@ Object.prototype.toString = function () {
 Object.prototype.constructor = Object;
 
 Boolean.prototype.toString = function () {
-    if (this instanceof Boolean === false) {
-        throw new Error("Only booleans are allowed for Boolean.toString().");
-    }
-
     if (this.valueOf()) {
         return "true";
     }
@@ -45,17 +53,17 @@ Boolean.prototype.toString = function () {
 Boolean.prototype.constructor = Boolean;
 
 Number.prototype.toString = function () {
-    return String(this.valueOf());
+    return new String(this.valueOf());
 };
 
 Number.prototype.constructor = Number;
 
-// Workaround for a bug within DerkJS setup: native function this-ptr mysteriously mutates before runtime.
-String.prototype.constructor = String;
-
 String.prototype.toString = function () {
     return new String(this);
 };
+
+// Workaround for a bug within DerkJS setup: native function this-ptr mysteriously mutates before runtime.
+String.prototype.constructor = String;
 
 Array.isArray = function (arg) {
     if (typeof arg !== "object") {
@@ -241,10 +249,6 @@ Function.prototype.toString = function () {
 
 Function.prototype.constructor = Function;
 
-function Error(msg) {
-    this.message = String(msg);
-}
-
 Error.prototype = {
     name: "Error",
     message: "",
@@ -252,20 +256,12 @@ Error.prototype = {
     toString: displayAnyError
 };
 
-function SyntaxError(msg) {
-    this.message = String(msg);
-}
-
 SyntaxError.prototype = {
     name: "SyntaxError",
     message: "",
     constructor: SyntaxError,
     toString: displayAnyError
 };
-
-function TypeError(msg) {
-    this.message = String(msg);
-}
 
 TypeError.prototype = {
     name: "TypeError",

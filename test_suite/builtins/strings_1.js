@@ -15,7 +15,7 @@ if (a.charCodeAt(0) == 111) {
 if (a.length === 4) {
     ok = ok + 1;
 } else {
-    console.log("Unexpected a.len(): not 4.");
+    console.log("Unexpected a.length, not 4:", a.length);
 }
 
 if (a.substr(0, 3) === "one") {
