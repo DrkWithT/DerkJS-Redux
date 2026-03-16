@@ -72,8 +72,8 @@ namespace DerkJS::Runtime::Intrinsics {
         if (auto substring_p = ctx->heap.add_item(
             ctx->heap.get_next_id(),
             std::make_unique<DynamicString>(
-                ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
-                ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
+                ctx->builtins.at(static_cast<unsigned int>(BuiltInObjects::str)),
+                ctx->builtins.at(static_cast<unsigned int>(BuiltInObjects::extra_length_key)),
                 std::string_view {str_this_p->as_str_view().substr(from_index, to_index - from_index)}
             )
         )) {
@@ -99,8 +99,8 @@ namespace DerkJS::Runtime::Intrinsics {
         const int last_no_space_index = old_source.find_last_not_of(' ');
 
         if (auto trimmed_string_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::make_unique<DynamicString>(
-            ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
-            ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
+            ctx->builtins.at(static_cast<unsigned int>(BuiltInObjects::str)),
+            ctx->builtins.at(static_cast<unsigned int>(BuiltInObjects::extra_length_key)),
             old_source.substr(first_no_space_index, last_no_space_index - first_no_space_index + 1)
         )); trimmed_string_p) {
             ctx->stack.at(passed_rsbp - 1) = Value {trimmed_string_p};
@@ -128,8 +128,8 @@ namespace DerkJS::Runtime::Intrinsics {
         if (auto created_str_p = ctx->heap.add_item(
             ctx->heap.get_next_id(),
             DynamicString {
-                ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
-                Value {ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))},
+                ctx->builtins.at(static_cast<unsigned int>(BuiltInObjects::str)),
+                Value {ctx->builtins.at(static_cast<unsigned int>(BuiltInObjects::extra_length_key))},
                 temp_substr
             }); created_str_p) {
             ctx->stack.at(passed_rsbp - 1) = Value {created_str_p};

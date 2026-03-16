@@ -40,13 +40,13 @@ namespace DerkJS::Runtime::Intrinsics {
 
     /// NOTE: Helps determine the appropriate prototype pointer for the primitive boxing object type... @see ~ line 574.
     template <typename T>
-    constexpr auto js_primitive_box_proto_tag_v = BasePrototypeID::last; // dud terminator of enum class
+    constexpr auto js_primitive_box_proto_tag_v = BuiltInObjects::last; // dud terminator of enum class
 
     template <>
-    constexpr auto js_primitive_box_proto_tag_v<BooleanBox> = BasePrototypeID::boolean;
+    constexpr auto js_primitive_box_proto_tag_v<BooleanBox> = BuiltInObjects::boolean;
 
     template <>
-    constexpr auto js_primitive_box_proto_tag_v<NumberBox> = BasePrototypeID::number;
+    constexpr auto js_primitive_box_proto_tag_v<NumberBox> = BuiltInObjects::number;
 
     /// Object.prototype impls:
 
@@ -58,7 +58,7 @@ namespace DerkJS::Runtime::Intrinsics {
 
         constexpr auto boxing_prototype_id = static_cast<unsigned int>(js_primitive_box_proto_tag_v<deduced_derkjs_box_t>);
 
-        ObjectBase<Value>* boxing_prototype_p = ctx->base_protos.at(boxing_prototype_id);
+        ObjectBase<Value>* boxing_prototype_p = ctx->builtins.at(boxing_prototype_id);
 
         if constexpr (std::is_same_v<deduced_derkjs_box_t, BooleanBox>) {
             return ctx->heap.add_item(
@@ -141,14 +141,17 @@ namespace DerkJS::Runtime::Intrinsics {
         const auto& search_key = ctx->stack.at(passed_rsbp + 1);
         const auto& target_items = target_this_p->get_own_prop_pool();
 
-        ctx->stack.at(passed_rsbp - 1) = Value {
-            std::ranges::find_if(
-                target_items,
-                [&search_key] (const auto& prop_entry) -> bool {
-                    return search_key == prop_entry.key;
-                }
-            ) != target_items.end()
-        };
+        if (auto prop_it = std::ranges::find_if(
+            target_items,
+            [&search_key] (const auto& prop_entry) -> bool {
+                return search_key == prop_entry.key;
+            }
+        ); prop_it == target_items.end()) {
+            ctx->stack.at(passed_rsbp - 1) = Value { false };
+        } else {
+            ctx->stack.at(passed_rsbp - 1) = Value { prop_it->item.get_tag() != ValueTag::undefined };
+        }
+
 
         return true;
     }
