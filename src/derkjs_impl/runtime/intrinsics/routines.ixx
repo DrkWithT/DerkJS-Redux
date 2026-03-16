@@ -53,24 +53,17 @@ namespace DerkJS::Runtime::Intrinsics {
 
     //// BEGIN console impls:
 
-    export auto native_console_log(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
+    export auto native_print(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
+        const char passed_terminator = static_cast<char>(ctx->stack.at(passed_rsbp + 2).to_num_i32().value_or(32) & 0xff);
 
-        for (auto passed_arg_local_offset = 0; passed_arg_local_offset < argc; ++passed_arg_local_offset) {
-            std::print(
-                "{} ",
-                ctx->stack.at(passed_rsbp + passed_arg_local_offset + 1).to_string()
-            );
-        }
-
-        std::println();
-
-        ctx->stack.at(passed_rsbp - 1) = Value {};
+        std::print("{}{}", ctx->stack.at(passed_rsbp + 1).to_string(), passed_terminator);
+        ctx->stack.at(passed_rsbp - 1) = Value {JSUndefOpt {}};
 
         return true;
     }
 
-    export auto native_console_read_line(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {    
+    export auto native_read_line(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         /// NOTE: Show user the passed-in prompt string: It MUST be the 1st argument on the stack.
         const auto passed_rsbp = ctx->rsbp;
         const auto& prompt_value = ctx->stack.at(passed_rsbp + 1);
@@ -83,8 +76,8 @@ namespace DerkJS::Runtime::Intrinsics {
         ObjectBase<Value>* line_str_p = ctx->heap.add_item(
             ctx->heap.get_next_id(),
             DynamicString {
-                ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::str)),
-                Value {ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))},
+                ctx->builtins.at(static_cast<unsigned int>(BuiltInObjects::str)),
+                Value {ctx->builtins.at(static_cast<unsigned int>(BuiltInObjects::extra_length_key))},
                 temp_line
             }
         );

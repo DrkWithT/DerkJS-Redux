@@ -14,6 +14,10 @@ function isNaN(arg) {
     return +arg !== +arg;
 }
 
+function displayAnyError() {
+    return String(this.name) + " " + String(this.message);
+}
+
 Object.prototype.toString = function () {
     if (this === undefined) {
         return "[object Undefined]";
@@ -26,8 +30,6 @@ Object.prototype.toString = function () {
 
 Object.prototype.constructor = Object;
 
-Boolean.prototype.constructor = Boolean;
-
 Boolean.prototype.toString = function () {
     if (this instanceof Boolean === false) {
         throw new Error("Only booleans are allowed for Boolean.toString().");
@@ -38,6 +40,12 @@ Boolean.prototype.toString = function () {
     }
 
     return "false";
+};
+
+Boolean.prototype.constructor = Boolean;
+
+Number.prototype.toString = function () {
+    return String(this.valueOf());
 };
 
 Number.prototype.constructor = Number;
@@ -227,11 +235,69 @@ Array.prototype.toString = function () {
 
 Array.prototype.constructor = Array;
 
+Function.prototype.toString = function () {
+    return new String(this);
+};
+
 Function.prototype.constructor = Function;
 
-Error.prototype.name = "Error";
-Error.prototype.message = "";
-Error.prototype.constructor = Error;
+function Error(msg) {
+    this.message = String(msg);
+}
+
+Error.prototype = {
+    name: "Error",
+    message: "",
+    constructor: Error,
+    toString: displayAnyError
+};
+
+function SyntaxError(msg) {
+    this.message = String(msg);
+}
+
+SyntaxError.prototype = {
+    name: "SyntaxError",
+    message: "",
+    constructor: SyntaxError,
+    toString: displayAnyError
+};
+
+function TypeError(msg) {
+    this.message = String(msg);
+}
+
+TypeError.prototype = {
+    name: "TypeError",
+    message: "",
+    constructor: TypeError,
+    toString: displayAnyError
+};
+
+console.log = function (...args) {
+    var argCount = args.length;
+    var temp;
+    var discard;
+
+    for (var argPos = 0; argPos < argCount; ++argPos) {
+        temp = args.at(argPos);
+
+        //? TODO: support Function.toString().
+        if (temp === null) {
+            discard = nativePrint("null", 32);
+        } else if (typeof temp === "object") {
+            discard = nativePrint(temp.toString(), 32);
+        } else {
+            discard = nativePrint(temp, 32);
+        }
+    }
+
+    discard = nativePrint(" ", 10);
+
+    return discard; // undefined
+};
+
+console.readln = nativeReadLine;
 
 /// By the spec, freeze built-in prototypes:
 
