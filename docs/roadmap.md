@@ -46,7 +46,7 @@
          - Throw errors as indicated below.
       - Errors:
          - Attempting a variable, argument parameter, or function name deletion will throw a `SyntaxError`.
-         - Attempting a deletion of non-configurable properties accessing an `undefined.property_name` will throw a `TypeError`. See `djs_get_prop` opcode for adding a `TypeError` throw check.
+         - Accessing an `undefined.property_name` will throw a `TypeError`. See `djs_get_prop` opcode for adding a `TypeError` throw check.
  38. Improve runtime errors:
    - `ReferenceError` on bad property accesses.
    - `SyntaxError` on bad syntax evaluation / Function ctor calls.
