@@ -34,7 +34,6 @@ int main(int argc, char* argv[]) {
     };
 
     std::string source_path;
-    std::string polyfill_path {"./test_suite/stdlib/polyfill.js"};
     std::string_view arg_1 = argv[1];
 
     if (arg_1 == "-h") {
@@ -472,5 +471,5 @@ int main(int argc, char* argv[]) {
 
     /// 6. Run the script after all configuration. ///
 
-    return driver.run(source_path, polyfill_path, derkjs_gc_threshold);
+    return driver.run(source_path, derkjs_gc_threshold);
 }

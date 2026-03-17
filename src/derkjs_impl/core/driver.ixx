@@ -21,6 +21,7 @@ export import frontend.ast;
 import frontend.parse;
 import runtime.vm;
 import backend.bc_generate;
+import core.polyfills;
 
 export namespace DerkJS::Core {
     struct DriverInfo {
@@ -87,8 +88,11 @@ export namespace DerkJS::Core {
             return src_buffer.str();
         }
 
-        [[nodiscard]] auto parse_script(const std::string& file_path, const std::string& polyfill_file_path) -> std::optional<ASTUnit> {
-            std::string source_with_prelude = read_script(polyfill_file_path);
+        [[nodiscard]] auto parse_script(const std::string& file_path) -> std::optional<ASTUnit> {
+            std::string source_with_prelude;
+
+            //? SEE core/polyfills.ixx for embedded JS polyfill code.
+            source_with_prelude.append_range(polyfill_code);
             source_with_prelude.append_range(read_script(file_path));
 
             m_src_map.emplace_back(std::move(source_with_prelude));
@@ -230,8 +234,8 @@ export namespace DerkJS::Core {
             return DriverInfo {m_app_name, m_app_author, m_version_major, m_version_minor, m_version_patch};
         }
 
-        [[nodiscard]] auto run(const std::string& file_path, const std::string& polyfill_file_path, std::size_t gc_threshold) -> int {
-            auto script_ast = parse_script(file_path, polyfill_file_path);
+        [[nodiscard]] auto run(const std::string& file_path, std::size_t gc_threshold) -> int {
+            auto script_ast = parse_script(file_path);
 
             if (!script_ast) {
                 return 1;
