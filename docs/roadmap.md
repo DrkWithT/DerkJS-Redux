@@ -47,11 +47,11 @@
       - Errors:
          - Attempting a variable, argument parameter, or function name deletion will throw a `SyntaxError`.
          - Accessing an `undefined.property_name` will throw a `TypeError`. See `djs_get_prop` opcode for adding a `TypeError` throw check.
- 38. Improve runtime errors:
+ 39. Add postfix `++` and `--` operators. **WIP**
+ 40. Improve runtime errors: **WIP**
    - `ReferenceError` on bad property accesses.
    - `SyntaxError` on bad syntax evaluation / Function ctor calls.
- 39. Add postfix `++` and `--` operators.
- 40. Add `__proto__` AKA `[[prototype]]` support:
+ 41. Add `__proto__` AKA `[[prototype]]` support:
     - Add `__proto__` to parsing.
     - Add `__proto__` support to bytecode & compiler.
     - Add `__proto__` support to `Value` & VM.
