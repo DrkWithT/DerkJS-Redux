@@ -266,6 +266,8 @@ export namespace DerkJS {
             "djs_strcat",
             "djs_pre_inc",
             "djs_pre_dec",
+            "djs_post_inc",
+            "djs_post_dec",
             "djs_mod",
             "djs_mul",
             "djs_div",

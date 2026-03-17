@@ -139,6 +139,10 @@ export namespace DerkJS {
             return m_tag == ValueTag::val_ref && flag<AttrMask::configurable>();
         }
 
+        [[nodiscard]] constexpr auto flags(this auto&& self) noexcept -> std::uint8_t {
+            return self.m_flags;
+        }
+
         template <AttrMask M>
         [[nodiscard]] constexpr auto flag(this auto&& self) noexcept -> bool {
             return (self.m_flags & std::to_underlying(M)) == std::to_underlying(M);
