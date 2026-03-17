@@ -7,6 +7,7 @@ var test2 = 1.5;
 var test3 = {
     secret: 68
 };
+var test4 = 0;
 
 ++test1;
 
@@ -32,7 +33,14 @@ if (test3.secret === 69) {
     console.log("++test3 failed:", test3);
 }
 
-if (ok === 3) {
+if (test4++ === 0) {
+    console.log("after test4++:", test4);
+    ++ok;
+} else {
+    console.log("Failed test4++.");
+}
+
+if (ok === 4) {
     console.log("PASS");
 } else {
     throw new Error("Test failed, see logs.");

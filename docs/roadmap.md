@@ -1,6 +1,6 @@
 ### Roadmap:
  1. ~~Fix duplicate constant storage in bytecode.~~
- 2. Shrink VM value to 8B. (**WONT-FIX**)
+ 2. NaN boxing (cancelled)
  3. ~~Refactor VM to use TCO?~~
  4. ~~Add `||` or `&&` operator support.~~
  5. ~~Add `else` statement support.~~
@@ -36,17 +36,30 @@
  34. Improve operations for objects:
     - **DELAYED:** Improve `as_string` method of object-base... Pretty print object literal / `[object <class name> ... ]`
  35. ~~Add `x instanceof y` operator.~~
- 36. Add rest parameters by _ES6_. **WIP**
- 37. Add `delete` operator. **PENDING**
- 38. Add more support for built-in methods:
+ 36. ~~Add rest parameters by _ES6_.~~
+ 37. Add `delete` operator.
+   - Add `delete` operator bytecode support:
+      - `djs_try_del` opcode:
+         - If the value is not a reference, return `true`.
+         - If the value holds an "own property" reference of some object, try removing it. The value must be configurable.
+         - If the value holds an environment (capture object) property's reference, try removing it. The value must be configurable.
+         - Throw errors as indicated below.
+      - Errors:
+         - Attempting a variable, argument parameter, or function name deletion will throw a `SyntaxError`.
+         - Accessing an `undefined.property_name` will throw a `TypeError`. See `djs_get_prop` opcode for adding a `TypeError` throw check.
+ 39. Add postfix `++` and `--` operators. **WIP**
+ 40. Improve runtime errors: **WIP**
+   - `ReferenceError` on bad property accesses.
+   - `SyntaxError` on bad syntax evaluation / Function ctor calls.
+ 41. Add `__proto__` AKA `[[prototype]]` support:
+    - Add `__proto__` to parsing.
+    - Add `__proto__` support to bytecode & compiler.
+    - Add `__proto__` support to `Value` & VM.
+    - Add `__proto__` test cases.
+ 41. Add more support for built-in methods:
     - Number methods
     - String methods
     - Object methods: seal, isFrozen, isSealed
     - Date methods: toString?? toDateString??
     - Math methods: pow, cos, sin, tan, log, logn, floor, ceil??
     - Array methods: sort, splice??
- 39. Add `__proto__` AKA `[[prototype]]` support:
-    - Add `__proto__` to parsing.
-    - Add `__proto__` support to bytecode & compiler.
-    - Add `__proto__` support to `Value` & VM.
-    - Add `__proto__` test cases.

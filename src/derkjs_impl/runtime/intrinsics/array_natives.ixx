@@ -1,6 +1,7 @@
 module;
 
 #include <utility>
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -31,7 +32,7 @@ namespace DerkJS::Runtime::Intrinsics {
         // 1. Create blank JS array with the appropriate prototype
         auto temp_array = std::make_unique<Array>(
             instance_prototype_p,
-            Value {ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))},
+            Value {ctx->builtins.at(static_cast<unsigned int>(BuiltInObjects::extra_length_key))},
             Value {(argc > 1) ? argc : maybe_fill_count}
         );
 
@@ -42,7 +43,10 @@ namespace DerkJS::Runtime::Intrinsics {
             }
         } else if (argc == 1) {
             for (int temp_item_count = 0; temp_item_count < maybe_fill_count; temp_item_count++) {
-                temp_array->items().emplace_back(Value {});
+                temp_array->items().emplace_back(Value {
+                    JSUndefOpt {},
+                    std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::configurable)
+                });
             }
         }
 
@@ -67,10 +71,10 @@ namespace DerkJS::Runtime::Intrinsics {
             ctx->stack.at(passed_rsbp - 1).to_object()
         );
         /// NOTE: PropertyDescriptor of Array.length
-        auto array_length_p = &array_this_p->get_property_value(
-            Value {ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))},
+        auto array_length_p = array_this_p->get_property_value(
+            Value {ctx->builtins.at(static_cast<unsigned int>(BuiltInObjects::extra_length_key))},
             false
-        );
+        ).ref_value();
 
         if (!array_length_p) {
             std::println(std::cerr, "Array instance has a null length reference.");
@@ -123,8 +127,8 @@ namespace DerkJS::Runtime::Intrinsics {
 
         if (array_this_p == nullptr) {
             if (auto result_array_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::make_unique<Array>(
-                ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::array)),
-                Value {ctx->base_protos.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key))},
+                ctx->builtins.at(static_cast<unsigned int>(BuiltInObjects::array)),
+                Value {ctx->builtins.at(static_cast<unsigned int>(BuiltInObjects::extra_length_key))},
                 Value {0}
             )); result_array_p) {
                 array_this_p = dynamic_cast<Array*>(result_array_p);

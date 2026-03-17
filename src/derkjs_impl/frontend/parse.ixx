@@ -398,7 +398,7 @@ export namespace DerkJS {
             return std::make_unique<Expr>(
                 Unary {
                     .inner = std::move(inner_primary),
-                    .op = AstOp::ast_op_new,
+                    .op = AstOp::ast_op_new
                 },
                 0,
                 snippet_begin,
@@ -462,16 +462,50 @@ export namespace DerkJS {
             );
         }
 
-        [[nodiscard]] auto parse_unary(Lexer& lexer, const std::string& source) -> ExprPtr {
+        [[nodiscard]] auto parse_postfix_unary(Lexer& lexer, const std::string& source) -> ExprPtr {
             m_syntax = SyntaxTag::expr_unary;
 
             const auto snippet_begin = m_current.start;
-            const auto unary_op = ([](TokenTag tag) -> AstOp {
+            auto inner_expr = parse_call(lexer, source);
+
+            const auto postfix_unary_op = ([](TokenTag tag) noexcept -> AstOp {
+                switch (tag) {
+                case TokenTag::symbol_two_pluses: return AstOp::ast_op_postfix_inc;
+                case TokenTag::symbol_two_minuses: return AstOp::ast_op_postfix_dec;
+                default: return AstOp::ast_op_noop;
+                }
+            })(m_current.tag);
+
+            if (postfix_unary_op != AstOp::ast_op_noop) {
+                consume_any(lexer, source);
+
+                return std::make_unique<Expr>(
+                    Unary {
+                        .inner = std::move(inner_expr),
+                        .op = postfix_unary_op
+                    },
+                    0,
+                    snippet_begin,
+                    m_current.start - snippet_begin + 1,
+                    ExprNodeTag::unary
+                );
+            }
+
+            return inner_expr;
+        }
+
+        [[nodiscard]] auto parse_prefix_unary(Lexer& lexer, const std::string& source) -> ExprPtr {
+            m_syntax = SyntaxTag::expr_unary;
+
+            const auto snippet_begin = m_current.start;
+
+            const auto unary_op = ([](TokenTag tag) noexcept -> AstOp {
                 switch (tag) {
                 case TokenTag::symbol_bang: return AstOp::ast_op_bang;
                 case TokenTag::symbol_plus: return AstOp::ast_op_plus;
                 case TokenTag::symbol_two_pluses: return AstOp::ast_op_prefix_inc;
                 case TokenTag::symbol_two_minuses: return AstOp::ast_op_prefix_dec;
+                case TokenTag::keyword_delete: return AstOp::ast_op_delete;
                 case TokenTag::keyword_typeof: return AstOp::ast_op_typeof;
                 case TokenTag::keyword_void: return AstOp::ast_op_void;
                 default: return AstOp::ast_op_noop;
@@ -483,7 +517,7 @@ export namespace DerkJS {
 
                 return std::make_unique<Expr>(
                     Unary {
-                        .inner = parse_call(lexer, source),
+                        .inner = parse_postfix_unary(lexer, source),
                         .op = unary_op
                     },
                     0,
@@ -493,14 +527,14 @@ export namespace DerkJS {
                 );
             }
 
-            return parse_call(lexer, source);
+            return parse_postfix_unary(lexer, source);
         }
 
         [[nodiscard]] auto parse_factor(Lexer& lexer, const std::string& source) -> ExprPtr {
             m_syntax = SyntaxTag::expr_factor;
 
             const auto snippet_begin = m_current.start;
-            auto lhs = parse_unary(lexer, source);
+            auto lhs = parse_prefix_unary(lexer, source);
 
             while (!at_eof()) {
                 if (!m_current.match_tag_to(TokenTag::symbol_percent, TokenTag::symbol_times, TokenTag::symbol_slash)) {
@@ -520,7 +554,7 @@ export namespace DerkJS {
                 lhs = std::make_unique<Expr>(
                     Binary {
                         .lhs = std::move(lhs),
-                        .rhs = parse_unary(lexer, source),
+                        .rhs = parse_prefix_unary(lexer, source),
                         .op = factor_op
                     },
                     0,
@@ -1099,7 +1133,7 @@ export namespace DerkJS {
             m_syntax = SyntaxTag::stmt_expr;
 
             const auto snippet_begin = m_current.start;
-            auto lhs_expr = parse_unary(lexer, source);
+            auto lhs_expr = parse_prefix_unary(lexer, source);
 
             if (!m_current.match_tag_to(TokenTag::symbol_assign)) {
                 consume(lexer, source, TokenTag::semicolon);

@@ -49,5 +49,5 @@
  - `throw new Error(msg);` will place an error in a special `ExternVMCtx` field. `catch` blocks will clear this field after they run.
    - TODO: Fix `polyfill.js:211` once Error ctor is done.
 
-### Pass 1: emit pass
- - Purpose: Generates bytecode using the context from the earlier pass(es).
+### Deletions
+ - Before evaluating `delete` targets: Dupe the object reference (if any) before a chain of `get_prop` instructions. This allows usage of the parent's reference to remove a property by its key, as only that reference and the fully resolved property value pointer remain.

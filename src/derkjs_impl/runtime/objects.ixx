@@ -13,11 +13,23 @@ export module runtime.objects;
 import meta.enums;
 
 export namespace DerkJS {
+    struct JSUndefOpt {};
+    struct JSNullOpt {};
+    struct JSNaNOpt {};
+    struct JSProtoKeyOpt {};
+
+    /// NOTE: forward declaration of JS object interface.
+    template <typename V>
+    class ObjectBase;
+
+    template <typename V>
+    using AccessorHandler = bool(*)(ObjectBase<V>*, const V&);
+
     template <typename K, typename V>
     struct PropEntry {
         K key;
         V item;
-        uint8_t flags;
+        AccessorHandler<V> handler_p;
     };
 
     /**
@@ -30,107 +42,85 @@ export namespace DerkJS {
     using PropPool = std::vector<PropEntry<K, V>>;
 
     enum class AttrMask : uint8_t {
-        dead = 0xff,
-        immutable = 0x00,
-        writable = 0b00000001,
-        configurable = 0b00000010,
-        enumerable = 0b00000100,
-        is_data_desc = 0b00001000,
-        is_parent_frozen = 0b00010000,
-        is_accessor = 0b10000000,
-        unused = 0b00000011
+        frozen = 0x00,
+        writable = 0x01,
+        configurable = 0x02,
+        enumerable = 0x04,
+        accessor = 0x08,
+        property = 0x10,
+        frozen_property = frozen | property,
+        defaults = writable | configurable
     };
 
-    /// NOTE: forward declaration of JS object interface.
-    template <typename V>
-    class ObjectBase;
-
     /**
-     * @brief Implementation of the data JS property descriptor needed for proper member access semantics as per https://262.ecma-international.org/5.1/#sec-8.10.
-     * @note No accessor semantics are implemented for simplicity.
+     * @brief Implementation of the data JS property descriptor needed for proper member access semantics as per https://262.ecma-international.org/5.1/#sec-8.10. However, plain old data descriptors handle local value references for variables.
      * @tparam V See `DerkJS::Value` in `./src/derkjs_impl/runtime/value.ixx`.
      */
     template <typename V>
     class PropertyDescriptor {
     private:
-        static constexpr auto dud_item = V {};
+        static constexpr auto dud_item = V {JSUndefOpt {}};
 
-        const V* key_p;         // Views the PropPool entry's key member.
-        V* item_p;              // Refers to the property value.
-        ObjectBase<V>* self_p;  // Refers to the parent object.
-        uint8_t flags;          // By the ES5 spec, this determines how properties allow some operations, but they're taken from the parent object if so.
+        V m_key;                // copy of the object key
+        V m_value;              // Value wrapping a pointer to property's Value
+        ObjectBase<V>* m_base;  // pointer of parent object holding property
 
         [[nodiscard]] constexpr auto has_item(this auto&& self) noexcept -> bool {
-            return self.flags != std::to_underlying(AttrMask::dead);
+            return self.m_base != nullptr;
         }
 
     public:
-        /// NOTE: For dud property descriptors, likely from an invalid property name.
+        //? NOTE: Initializes a dud property descriptor, usually from an invalid property name.
         explicit constexpr PropertyDescriptor() noexcept
-        : key_p {nullptr}, item_p {nullptr}, flags {std::to_underlying(AttrMask::dead)} {}
+        : m_key {JSUndefOpt {}}, m_value {JSUndefOpt {}}, m_base {nullptr} {}
 
-        constexpr PropertyDescriptor(const V* key_p_, V* item_p_, ObjectBase<V>* self_p_, uint8_t parent_object_flags) noexcept
-        : key_p {key_p_}, item_p {item_p_}, self_p {self_p_}, flags {parent_object_flags} {
-            if (!item_p) {
-                flags = std::to_underlying(AttrMask::dead);
-            }
-        }
-
-        [[nodiscard]] constexpr auto get_key() const noexcept -> const V& {
-            return *key_p;
-        }
+        constexpr PropertyDescriptor(const V& key, const V& value, ObjectBase<V>* self_p) noexcept
+        : m_key {key}, m_value {value}, m_base {self_p} {}
 
         explicit constexpr operator bool(this auto&& self) noexcept {
             return self.has_item();
         }
 
-        [[nodiscard]] constexpr auto operator&() noexcept -> V* {
-            return item_p;
+        [[nodiscard]] constexpr auto get_key(this auto&& self) noexcept -> V {
+            return self.m_key;
         }
 
-        [[nodiscard]] constexpr auto operator*() const noexcept -> V {
+        [[nodiscard]] constexpr auto get_base_object() const noexcept -> const ObjectBase<V>* {
+            return m_base;
+        }
+
+        [[nodiscard]] constexpr auto get_base_object_mut() noexcept -> ObjectBase<V>* {
+            return m_base;
+        }
+
+        //? NOTE: retrieves the property by cloned value. This is different vs. ref_value().
+        [[nodiscard]] constexpr auto get_value(this auto&& self) -> V {
+            return (self.has_item())
+                ? self.m_value
+                : V {JSUndefOpt {}};
+        }
+
+        //? NOTE: tries updating the referenced property value, returning true on success.
+        [[nodiscard]] constexpr auto set_value(const V& key, const V& arg) -> bool {
             if (!has_item()) {
-                return dud_item;
-            }
+                return false;
+            } else if (m_value.template flag<AttrMask::writable>()) {
+                *m_value.get_value_ref() = arg;
 
-            return V {item_p, flags};
-        }
-
-        /**
-         * @brief Very roughly follows the ES5 specification, 8.12.1:
-         * @note The assignment to the referenced V (Value) only works if the property was present AND it's marked as writable.
-         * @param value 
-         * @return PropertyDescriptor& 
-         */
-        [[nodiscard]] auto operator=(const V& value) noexcept -> PropertyDescriptor& {
-            if (get_flag<AttrMask::writable>()) {
-                if (get_flag<AttrMask::is_accessor>()) {
-                    self_p->update_on_accessor_mut(*item_p, value);
-                } else {
-                    *item_p = value;
+                if (m_value.template flag<AttrMask::accessor>()) {
+                    //? NOTE: only accessors may require any side effects done. 
+                    m_base->update_on_accessor_mut(key, arg);
                 }
+
+                return true;
             }
 
-            return *this;
+            return false;
         }
 
-        template <AttrMask M>
-        [[nodiscard]] constexpr auto get_flag() const noexcept -> bool {
-            if constexpr (M == AttrMask::writable || M == AttrMask::unused) {
-                return (flags & static_cast<uint8_t>(M)) == 1;
-            } else if constexpr (M == AttrMask::configurable) {
-                return (flags & static_cast<uint8_t>(M)) >> 1;
-            } else if constexpr (M == AttrMask::enumerable) {
-                return (flags & static_cast<uint8_t>(M)) >> 2;
-            } else if constexpr (M == AttrMask::is_data_desc) {
-                return (flags & static_cast<uint8_t>(M)) >> 3;
-            } else if constexpr (M == AttrMask::is_parent_frozen) {
-                return (flags & static_cast<uint8_t>(M)) >> 4;
-            } else if constexpr (M == AttrMask::is_accessor) {
-                return ((flags & static_cast<uint8_t>(M)) >> 7) && self_p;
-            }
-
-            return flags == 0x00;
+        //? NOTE: attempts to get the property value by pointer since JS references behave akin to pointers.
+        [[nodiscard]] constexpr auto ref_value() -> V* {
+            return m_value.get_value_ref();
         }
     };
 
@@ -172,19 +162,25 @@ export namespace DerkJS {
         }
     };
 
-    /// NOTE: indexes into an array of `ObjectBase<Value>` pointers, each one to a built-in prototype:
-    /// "Base JS" Built-Ins: Boolean, Number, Object, Array, Function
-    enum class BasePrototypeID : uint8_t {
+    /// NOTE: indexes into an array of `ObjectBase<Value>` pointers, each for a JS built-in.
+    enum class BuiltInObjects : uint8_t {
+        /// Prototypes (TODO: refactor these out in favor of polyfilled ctors and intrinsics, etc.)
         boolean,
         number,
         str,
         object,
         array,
         function,
+        /// Extra property names for quick access (TODO: refactor these out in favor of polyfilled ctors and intrinsics, etc.)
         extra_length_key, // Not a prototype, but I have to make "length" easily accessible for array creations.
-        extra_msg_key, // Not a prototype, but patched in for `NativeError`.
-        extra_name_key, // Not a prototype either, but patched in for `NativeError`.
-        error,
+        extra_msg_key, // Not a prototype, but patched in for `ErrorXYZ`.
+        extra_name_key, // Not a prototype either, but patched in for `ErrorXYZ`.
+
+        /// Built-In error ctors here...
+        error_ctor,
+        syntax_error_ctor,
+        type_error_ctor,
+        ref_error_ctor,
         last
     };
 
@@ -194,17 +190,12 @@ export namespace DerkJS {
     template <typename V>
     class ObjectBase {
     public:
-        static constexpr auto flag_extensible_v = 0b00000001;
-        static constexpr auto flag_frozen_v = 0b00000010;
-        static constexpr auto flag_prototype_v = 0b10000000;
-
         virtual ~ObjectBase() = default;
 
         virtual auto get_unique_addr() noexcept -> void* = 0;
         virtual auto get_class_name() const noexcept -> std::string = 0;
         virtual auto get_typename() const noexcept -> std::string_view = 0;
-        virtual auto is_extensible() const noexcept -> bool = 0;
-        virtual auto is_prototype() const noexcept -> bool = 0;
+        virtual auto flag(AttrMask flag_mask) const noexcept -> bool = 0;
 
         virtual auto get_prototype() noexcept -> ObjectBase<V>* = 0;
 
@@ -217,20 +208,18 @@ export namespace DerkJS {
         virtual void freeze() noexcept = 0;
 
         virtual auto set_property_value(const V& key, const V& value) -> V* = 0;
-        virtual auto del_property_value(const V& key) -> bool = 0;
-        /// NOTE: update this to take a const V& key parameter 1st.
         virtual void update_on_accessor_mut(const V& accessor_value_p, const V& value) = 0;
 
         virtual auto call(void* opaque_ctx_p, int argc, bool has_this_arg) -> bool = 0;
         virtual auto call_as_ctor(void* opaque_ctx_p, int argc) -> bool = 0;
 
-        /// For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!
+        //? For prototypes, this creates a self-clone which is practically an object instance. This raw pointer must be quickly owned by a `PolyPool<ObjectBase<V>>`!
         virtual auto clone() -> ObjectBase<V>* = 0;
 
-        /// NOTE: For default printing of objects, etc. to the console (stdout). 
+        //? For default printing of objects, etc. to the console (stdout). 
         virtual auto as_string() const -> std::string = 0;
 
-        // virtual auto field_iter() noexcept -> FieldIterator<PropertyDescriptor<V>> = 0;
+        /// virtual auto field_iter() noexcept -> FieldIterator<PropertyDescriptor<V>> = 0;
         virtual auto opaque_iter() const noexcept -> OpaqueIterator = 0;
 
         virtual auto operator==(const ObjectBase& other) const noexcept -> bool = 0;
@@ -293,8 +282,8 @@ export namespace DerkJS {
             return m_items;
         }
 
-        void update_tenure_count() {
-            ++m_last_tenured_id;
+        void tenure_items() noexcept {
+            m_last_tenured_id = m_next_id;
         }
 
         [[nodiscard]] auto get_next_id() noexcept -> int {
@@ -373,7 +362,7 @@ export namespace DerkJS {
         }
 
         template <typename ItemKind> requires (std::is_base_of_v<ItemBase, ItemKind>)
-        [[nodiscard]] auto add_item(int id, ItemKind* item_p) -> ItemBase* {
+        [[maybe_unused]] auto add_item(int id, ItemKind* item_p) -> ItemBase* {
             if (id < 0 || id >= static_cast<int>(m_items.size())) {
                 return nullptr;
             }

@@ -80,6 +80,7 @@ namespace DerkJS::Backend {
             })();
 
             if (!primitive_locator) {
+                std::println("Compile Note: No 'primitive' locator resolved for '{}' symbol.", atom_lexeme);
                 return false;
             } else if (const auto primitive_locate_type = primitive_locator->tag; primitive_locate_type == Location::constant) {
                 context.encode_instruction(Opcode::djs_put_const, *primitive_locator);
@@ -228,32 +229,49 @@ namespace DerkJS::Backend {
 
             context.m_in_callable = false;
 
-            // 2. Record the Lambda's code as a wrapper object into the VM heap, preloaded.
+            // 2. Record the Lambda's code as a wrapper object into the VM heap, preloaded. This arg may be used if the name is not for a built-in.
             const int16_t next_global_ref_const_id = context.m_consts.size();
-            Arg next_global_ref_loc {
-                .n = next_global_ref_const_id,
-                .tag = Location::constant
-            };
+            Arg next_global_ref_loc;
 
             auto dud_instance_prototype_p = context.m_heap.add_item(context.m_heap.get_next_id(), std::make_unique<Object>(
-                context.m_base_prototypes.at(static_cast<unsigned int>(BasePrototypeID::object))
+                context.m_builtin_ptrs.at(static_cast<unsigned int>(BuiltInObjects::object))
             ));
 
-            Lambda temp_callable {
+            auto temp_callable = std::make_unique<Lambda>(
                 dud_instance_prototype_p,
                 std::move(context.m_code_blobs.front()),
-                context.m_base_prototypes.at(static_cast<unsigned int>(BasePrototypeID::function)),
-                context.m_base_prototypes.at(static_cast<unsigned int>(BasePrototypeID::extra_length_key)),
+                context.m_builtin_ptrs.at(static_cast<unsigned int>(BuiltInObjects::function)),
+                context.m_builtin_ptrs.at(static_cast<unsigned int>(BuiltInObjects::extra_length_key)),
                 Value {lambda_arity}
-            };
-            
-            if (auto lambda_object_ptr = context.m_heap.add_item(context.m_heap.get_next_id(), std::move(temp_callable)); lambda_object_ptr) {
-                // As per any DerkJS object, the real thing is owned by the VM heap but is referenced by many non-owning raw pointers to its base: `ObjectBase<Value>*`.
+            );
+
+            //? NOTE: despite std::unique_ptr<Lambda>::release(), the raw pointer is quickly re-owned in the preloaded "heap" before recording into Program.builtins later. The pre_record_object method handles this task on argument `true`.
+            if (context.m_builtin_ids.contains(context.m_callee_name)) {
+                next_global_ref_loc = context.pre_record_object(context.m_callee_name, temp_callable.release()).value();
+            } else if (!context.m_runtime_heap_ptr) {
+                auto lambda_object_ptr = context.m_heap.add_item(context.m_heap.get_next_id(), std::move(temp_callable));
+
+                if (!lambda_object_ptr) {
+                    return {};
+                }
+
                 context.m_consts.emplace_back(Value {lambda_object_ptr});
-            } else if (context.m_runtime_heap_ptr) {
-                context.m_runtime_heap_ptr->add_item(context.m_runtime_heap_ptr->get_next_id(), std::move(temp_callable));
+                next_global_ref_loc = Arg {
+                    .n = next_global_ref_const_id,
+                    .tag = Location::constant,
+                    .is_str_literal = false,
+                    .from_closure = false
+                };
             } else {
-                return false;
+                context.m_consts.emplace_back(Value {
+                    context.m_runtime_heap_ptr->add_item(context.m_runtime_heap_ptr->get_next_id(), std::move(temp_callable))
+                });
+                next_global_ref_loc = Arg {
+                    .n = next_global_ref_const_id,
+                    .tag = Location::constant,
+                    .is_str_literal = false,
+                    .from_closure = false
+                };
             }
 
             context.m_code_blobs.pop_front();
@@ -289,7 +307,7 @@ namespace DerkJS::Backend {
 
             context.m_pass_key_raw = parent_is_passing_key_raw;
 
-            // If a property call is enclosing the member access: The callee's parent object is over the copied reference for `this`...
+            //? For method calls, those callables require `thisArg`s.
             if (context.m_has_call && context.m_member_depth <= 1) {
                 context.encode_instruction(Opcode::djs_dup);
             }
@@ -305,7 +323,15 @@ namespace DerkJS::Backend {
             context.encode_instruction(
                 Opcode::djs_get_prop,
                 Arg {
-                    .n = static_cast<int16_t>(!context.m_has_call && context.m_access_as_lval),
+                    .n = static_cast<int16_t>(
+                        !context.m_has_call && context.m_access_as_lval
+                    ),
+                    .tag = Location::immediate,
+                    .is_str_literal = false,
+                    .from_closure = false
+                },
+                Arg {
+                    .n = static_cast<int16_t>(context.m_in_try_block),
                     .tag = Location::immediate,
                     .is_str_literal = false,
                     .from_closure = false
@@ -349,37 +375,51 @@ namespace DerkJS::Backend {
                     case AstOp::ast_op_prefix_inc: {
                         const bool old_access_as_lval = context.m_access_as_lval;
                         context.m_access_as_lval = true;
-                        
-                        OpcodeWithGenFlag temp_inc_result {
+
+                        OpcodeWithGenFlag temp_prefix_result {
                             .op = Opcode::djs_pre_inc,
                             .inner_ok = context.emit_expr(*inner_expr, source)
                         };
 
                         context.m_access_as_lval = old_access_as_lval;
-                        return temp_inc_result;
+                        return temp_prefix_result;
                     }
                     case AstOp::ast_op_prefix_dec: {
                         const bool old_access_as_lval = context.m_access_as_lval;
                         context.m_access_as_lval = true;
                         
-                        OpcodeWithGenFlag temp_inc_result {
+                        OpcodeWithGenFlag temp_prefix_result {
                             .op = Opcode::djs_pre_dec,
+                            .inner_ok = context.emit_expr(*inner_expr, source)
+                        };
+
+                        context.m_access_as_lval = old_access_as_lval;
+                        return temp_prefix_result;
+                    }
+                    case AstOp::ast_op_postfix_inc: {
+                        const bool old_access_as_lval = context.m_access_as_lval;
+                        context.m_access_as_lval = true;
+
+                        OpcodeWithGenFlag temp_inc_result {
+                            .op = Opcode::djs_post_inc,
                             .inner_ok = context.emit_expr(*inner_expr, source)
                         };
 
                         context.m_access_as_lval = old_access_as_lval;
                         return temp_inc_result;
                     }
-                    case AstOp::ast_op_void:
-                        return OpcodeWithGenFlag {
-                            .op = Opcode::djs_discard,
+                    case AstOp::ast_op_postfix_dec: {
+                        const bool old_access_as_lval = context.m_access_as_lval;
+                        context.m_access_as_lval = true;
+
+                        OpcodeWithGenFlag temp_inc_result {
+                            .op = Opcode::djs_post_dec,
                             .inner_ok = context.emit_expr(*inner_expr, source)
                         };
-                    case AstOp::ast_op_typeof:
-                        return OpcodeWithGenFlag {
-                            .op = Opcode::djs_typename,
-                            .inner_ok = context.emit_expr(*inner_expr, source)
-                        };
+
+                        context.m_access_as_lval = old_access_as_lval;
+                        return temp_inc_result;
+                    }
                     case AstOp::ast_op_new: {
                         context.m_has_new_applied = true;
 
@@ -391,6 +431,28 @@ namespace DerkJS::Backend {
                             .inner_ok = within_new_expr_ok
                         };
                     }
+                    case AstOp::ast_op_delete: {
+                        context.m_access_as_lval = true;
+
+                        const auto within_delete_expr_ok = context.emit_expr(*inner_expr, source);
+
+                        context.m_access_as_lval = false;
+
+                        return OpcodeWithGenFlag {
+                            .op = Opcode::djs_try_del,
+                            .inner_ok = within_delete_expr_ok
+                        };
+                    }
+                    case AstOp::ast_op_void:
+                        return OpcodeWithGenFlag {
+                            .op = Opcode::djs_discard,
+                            .inner_ok = context.emit_expr(*inner_expr, source)
+                        };
+                    case AstOp::ast_op_typeof:
+                        return OpcodeWithGenFlag {
+                            .op = Opcode::djs_typename,
+                            .inner_ok = context.emit_expr(*inner_expr, source)
+                        };
                     default: return {};
                 }
             })();
@@ -399,6 +461,14 @@ namespace DerkJS::Backend {
                 return false;
             } else if (const auto [opcode, inner_ok] = *opcode_and_check; !inner_ok) {
                 return false;
+            } else if (opcode == Opcode::djs_try_del || opcode == Opcode::djs_pre_inc || opcode == Opcode::djs_pre_dec || opcode == Opcode::djs_post_inc || opcode == Opcode::djs_post_dec) {
+                context.encode_instruction(opcode, Arg {
+                    .n = static_cast<int16_t>(context.m_in_try_block),
+                    .tag = Location::immediate,
+                    .is_str_literal = false,
+                    .from_closure = false
+                });
+                return true;
             } else if (opcode != Opcode::djs_nop) {
                 context.encode_instruction(opcode);
             }

@@ -87,6 +87,9 @@ namespace DerkJS::Backend {
 
         std::array<std::unique_ptr<StmtEmitterBase<Stmt>>, static_cast<std::size_t>(StmtNodeTag::last)> m_stmt_emitters;
 
+        // Name-to-BuiltIn-ObjectBase-ptr-ID map
+        std::flat_map<std::string, BuiltInObjects> m_builtin_ids;
+
         // 1st priority lookup: maps primitive constants / native object names of top-level
         std::flat_map<std::string, Arg> m_global_consts_map;
         
@@ -94,7 +97,7 @@ namespace DerkJS::Backend {
         std::flat_map<std::string, Arg> m_key_consts_map;
         
         // Pre-Tracked prototypes:
-        std::array<ObjectBase<Value>*, static_cast<std::size_t>(BasePrototypeID::last)> m_base_prototypes;
+        std::array<ObjectBase<Value>*, static_cast<std::size_t>(BuiltInObjects::last)> m_builtin_ptrs;
 
         // 3rd priority lookup: maps local variable names to locations
         std::vector<CodeGenScope> m_local_maps;
@@ -126,7 +129,7 @@ namespace DerkJS::Backend {
         // Whether an addition has any string operands or not.
         bool m_has_string_ops;
 
-        // Whether the parent expression is something like `new Foo(...)`.
+        // Whether the parent expression has the `new` operator.
         bool m_has_new_applied;
 
         // Whether an object member access is assignable or read-from.
@@ -240,13 +243,12 @@ namespace DerkJS::Backend {
                 };
 
                 if (auto heap_dyn_str_p = m_heap.add_item(m_heap.get_next_id(), std::make_unique<DynamicString>(
-                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::str)],
-                    Value {m_base_prototypes[static_cast<unsigned int>(BasePrototypeID::extra_length_key)]},
+                    m_builtin_ptrs[static_cast<unsigned int>(BuiltInObjects::str)],
+                    Value {m_builtin_ptrs[static_cast<unsigned int>(BuiltInObjects::extra_length_key)]},
                     std::forward<Item>(item)
                 )); heap_dyn_str_p) {
                     m_consts.emplace_back(Value {heap_dyn_str_p});
                     m_global_consts_map[symbol] = next_global_ref_loc;
-                    m_heap.update_tenure_count();
                 } else {
                     return {};
                 }
@@ -263,13 +265,12 @@ namespace DerkJS::Backend {
                 };
 
                 if (auto heap_dyn_str_p = m_heap.add_item(m_heap.get_next_id(), std::make_unique<DynamicString>(
-                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::str)],
-                    Value {m_base_prototypes[static_cast<unsigned int>(BasePrototypeID::extra_length_key)]},
+                    m_builtin_ptrs[static_cast<std::size_t>(BuiltInObjects::str)],
+                    Value {m_builtin_ptrs[static_cast<unsigned int>(BuiltInObjects::extra_length_key)]},
                     std::forward<Item>(item)
                 )); heap_dyn_str_p) {
                     m_consts.emplace_back(Value {heap_dyn_str_p});
                     m_key_consts_map[symbol] = next_global_ref_loc;
-                    m_heap.update_tenure_count();
                 } else {
                     return {};
                 }
@@ -287,7 +288,6 @@ namespace DerkJS::Backend {
 
                 m_consts.emplace_back(Value {m_heap.add_item(m_heap.get_next_id(), std::move(item))});
                 m_key_consts_map[symbol] = next_global_ref_loc;
-                m_heap.update_tenure_count();
 
                 return next_global_ref_loc;
             } else if constexpr (std::is_same_v<plain_item_type, std::string> && std::is_same_v<RecordOpt, FindCaptureOpt>) {
@@ -298,8 +298,8 @@ namespace DerkJS::Backend {
                     existing_capture_key_loc->from_closure = true;
                     return existing_capture_key_loc;
                 } else if (auto heap_dyn_str_p = m_heap.add_item(m_heap.get_next_id(), std::make_unique<DynamicString>(
-                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::str)],
-                    Value {m_base_prototypes[static_cast<unsigned int>(BasePrototypeID::extra_length_key)]},
+                    m_builtin_ptrs[static_cast<std::size_t>(BuiltInObjects::str)],
+                    Value {m_builtin_ptrs[static_cast<unsigned int>(BuiltInObjects::extra_length_key)]},
                     std::forward<Item>(item)
                 )); heap_dyn_str_p) {
                     m_consts.emplace_back(Value {heap_dyn_str_p});
@@ -309,7 +309,6 @@ namespace DerkJS::Backend {
                         .is_str_literal = true,
                         .from_closure = false // the variable name may also mirror a string literal, so keep the actual symbol's flag false!
                     };
-                    m_heap.update_tenure_count();
 
                     auto temp_as_capture_key = m_key_consts_map.at(symbol);
                     temp_as_capture_key.from_closure = true;
@@ -353,7 +352,7 @@ namespace DerkJS::Backend {
             return {};
         }
 
-        [[maybe_unused]] auto pre_record_object(const std::string& symbol, std::unique_ptr<ObjectBase<Value>> object_p) -> bool {
+        [[maybe_unused]] auto pre_record_object(const std::string& symbol, ObjectBase<Value>* object_p) -> std::optional<Arg> {
             // 1a, 1b. For global & interned string references as constants:
             const int16_t next_global_ref_const_id = m_consts.size();
             Arg next_global_ref_loc {
@@ -361,33 +360,24 @@ namespace DerkJS::Backend {
                 .tag = Location::constant
             };
 
-            if (auto heap_native_object_p = m_heap.add_item(m_heap.get_next_id(), std::move(object_p)); heap_native_object_p) {
-                m_consts.emplace_back(Value {heap_native_object_p});
-                m_global_consts_map[symbol] = next_global_ref_loc;
-                m_heap.update_tenure_count();
+            auto builtin_object_id_it = m_builtin_ids.find(symbol);
 
-                if (symbol == "Boolean::prototype") {
-                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::boolean)] = heap_native_object_p;
-                } else if (symbol == "Number::prototype") {
-                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::number)] = heap_native_object_p;
-                } else if (symbol == "String::prototype") {
-                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::str)] = heap_native_object_p;
-                } else if (symbol == "Object::prototype") {
-                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::object)] = heap_native_object_p;
-                } else if (symbol == "Array::prototype") {
-                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::array)] = heap_native_object_p;
-                } else if (symbol == "Function::prototype") {
-                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::function)] = heap_native_object_p;
-                } else if (symbol == "Error::prototype") {
-                    m_base_prototypes[static_cast<std::size_t>(BasePrototypeID::error)] = heap_native_object_p;
-                } else {
-                    return false;
-                }
-
-                return true;
+            if (builtin_object_id_it == m_builtin_ids.end()) {
+                return {};
             }
 
-            return false;
+            m_consts.emplace_back(Value {object_p});
+            m_global_consts_map[symbol] = next_global_ref_loc;
+
+            if (auto heap_native_object_p = m_heap.add_item(m_heap.get_next_id(), object_p); heap_native_object_p) {
+                const auto builtin_object_id = std::to_underlying(builtin_object_id_it->second);
+
+                m_builtin_ptrs.at(builtin_object_id) = heap_native_object_p;
+
+                return next_global_ref_loc;
+            }
+
+            return {};
         }
 
         /// NOTE: This overload is for no-argument opcodes
@@ -415,7 +405,18 @@ namespace DerkJS::Backend {
         }
 
         BytecodeEmitterContext()
-        : m_global_consts_map {}, m_key_consts_map {}, m_base_prototypes {}, m_local_maps {}, m_heap {}, m_consts {}, m_code_blobs {}, m_callee_name {}, m_chunk_offsets {}, m_runtime_heap_ptr {nullptr}, m_member_depth {0}, m_in_callable {false}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_pass_key_raw {false}, m_has_call {false}, m_in_try_block {false}, m_prepass_vars {true} {}
+        : m_builtin_ids {}, m_global_consts_map {}, m_key_consts_map {}, m_builtin_ptrs {}, m_local_maps {}, m_heap {}, m_consts {}, m_code_blobs {}, m_callee_name {}, m_chunk_offsets {}, m_runtime_heap_ptr {nullptr}, m_member_depth {0}, m_in_callable {false}, m_has_string_ops {false}, m_has_new_applied {false}, m_access_as_lval {false}, m_accessing_property {false}, m_pass_key_raw {false}, m_has_call {false}, m_in_try_block {false}, m_prepass_vars {true} {
+            m_builtin_ids["Boolean::prototype"] = BuiltInObjects::boolean;
+            m_builtin_ids["Number::prototype"] = BuiltInObjects::number;
+            m_builtin_ids["String::prototype"] = BuiltInObjects::str;
+            m_builtin_ids["Object::prototype"] = BuiltInObjects::object;
+            m_builtin_ids["Array::prototype"] = BuiltInObjects::array;
+            m_builtin_ids["Function::prototype"] = BuiltInObjects::function;
+            m_builtin_ids["Error"] = BuiltInObjects::error_ctor;
+            m_builtin_ids["SyntaxError"] = BuiltInObjects::syntax_error_ctor;
+            m_builtin_ids["TypeError"] = BuiltInObjects::type_error_ctor;
+            m_builtin_ids["ReferenceError"] = BuiltInObjects::ref_error_ctor;
+        }
 
         void add_expr_emitter(ExprNodeTag expr_type_tag, std::unique_ptr<ExprEmitterBase<Expr>> helper) noexcept {
             const auto expr_helper_index = static_cast<std::size_t>(expr_type_tag);
@@ -521,7 +522,7 @@ namespace DerkJS::Backend {
             m_heap = PolyPool<ObjectBase<Value>> {heap_object_capacity};
 
             // 1.2: Record fundamental primitive constants once to avoid extra work.
-            record_symbol("undefined", Value {}, FindGlobalConstsOpt {});
+            record_symbol("undefined", Value {JSUndefOpt {}}, FindGlobalConstsOpt {});
             record_symbol("null", Value {JSNullOpt {}}, FindGlobalConstsOpt {});
             record_symbol("NaN", Value {JSNaNOpt {}}, FindGlobalConstsOpt {});
             record_symbol("true", Value {true}, FindGlobalConstsOpt {});
@@ -534,12 +535,11 @@ namespace DerkJS::Backend {
                     record_symbol(pre_name, std::move(std::get<Value>(pre_entity)), FindGlobalConstsOpt {});
                 } break;
                 case Location::heap_obj: {
-                    auto& js_object_p = std::get<std::unique_ptr<ObjectBase<Value>>>(pre_entity);
+                    auto js_object_p = std::get<std::unique_ptr<ObjectBase<Value>>>(pre_entity).release();
                     if (pre_name.empty()) {
-                        m_heap.add_item(m_heap.get_next_id(), std::move(js_object_p));
-                        m_heap.update_tenure_count();
+                        m_heap.add_item(m_heap.get_next_id(), js_object_p);
                     } else {
-                        pre_record_object(pre_name, std::move(js_object_p));
+                        pre_record_object(pre_name, js_object_p);
                     }
                 } break;
                 case Location::key_str: {
@@ -551,13 +551,13 @@ namespace DerkJS::Backend {
 
             // 2.2: Add "length" for array accessor name.
             const int length_key_const_id = lookup_symbol("length", FindKeyConstOpt {})->n;
-            m_base_prototypes[static_cast<unsigned int>(BasePrototypeID::extra_length_key)] = m_consts.at(length_key_const_id).to_object();
+            m_builtin_ptrs[static_cast<unsigned int>(BuiltInObjects::extra_length_key)] = m_consts.at(length_key_const_id).to_object();
 
             const int message_key_const_id = lookup_symbol("message", FindKeyConstOpt {})->n;
-            m_base_prototypes[static_cast<unsigned int>(BasePrototypeID::extra_msg_key)] = m_consts.at(message_key_const_id).to_object();
+            m_builtin_ptrs[static_cast<unsigned int>(BuiltInObjects::extra_msg_key)] = m_consts.at(message_key_const_id).to_object();
 
             const int name_key_const_id = lookup_symbol("name", FindKeyConstOpt {})->n;
-            m_base_prototypes[static_cast<unsigned int>(BasePrototypeID::extra_name_key)] = m_consts.at(name_key_const_id).to_object();
+            m_builtin_ptrs[static_cast<unsigned int>(BuiltInObjects::extra_name_key)] = m_consts.at(name_key_const_id).to_object();
 
             // 3. Prepare initial mapping of symbols & code buffer to build.
             m_local_maps.emplace_back(CodeGenScope {
@@ -584,7 +584,7 @@ namespace DerkJS::Backend {
 
             for (const auto& [src_filename, decl, src_id] : tu) {
                 if (!emit_stmt(*decl, source_map.at(src_id))) {
-                    std::println(std::cerr, "Compile Error at source '{}' around '{}': unsupported JS construct :(\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length / 2));
+                    std::println(std::cerr, "Compile Error at source '{}' for unsupported JS construct:\nSnippet:\n{}\n\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length));
                     return {};
                 }
             }
@@ -601,7 +601,7 @@ namespace DerkJS::Backend {
 
             return Program {
                 .heap_items = std::move(m_heap), // PolyPool<ObjectBase<Value>>
-                .base_protos = std::move(m_base_prototypes),
+                .builtins = std::move(m_builtin_ptrs),
                 .consts = std::move(m_consts), // std::vector<Value>
                 .code = std::move(global_code_buffer), // std::vector<Instruction>
                 .offsets = std::move(m_chunk_offsets), // std::vector<int>

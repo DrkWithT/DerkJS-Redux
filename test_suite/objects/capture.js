@@ -1,7 +1,9 @@
 var outside = 10;
 
 function test() {
+    outside = 42;
     console.log(outside);
+
     return outside;
 }
 
@@ -18,7 +20,7 @@ var ans1 = test();
 var ans2 = test2();
 var ok = 0;
 
-if (ans1 === 10) {
+if (ans1 === 42) {
     ++ok;
 } else {
     console.log("wrong ans1 value:", ans1);

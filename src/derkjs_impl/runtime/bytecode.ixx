@@ -31,20 +31,22 @@ export namespace DerkJS {
         djs_pop, // Lazy pops by N given <pop-n>.
         djs_emplace, // Pops the temporary and stores it into the under value (local variable reference / property reference) which gets popped afterwards.
         djs_put_this, // Pushes a reference to the current `this` object.
-        djs_ref_error, // Pushes an object reference in a Value for the current exception (`NativeError`).
+        djs_ref_error, // Pushes an object reference in a Value for the current exception (`mostly errors`).
         djs_discard, // For `void`, replaces the evaluated expression value with an `undefined`.
+        djs_try_del,
         djs_typename, // For `typeof`, replaces the expression value with a newly created string to its typename.
         djs_put_obj_dud, // Pushes a newly created, empty JS object.
         djs_make_arr, // Args: <item-count>; Pushes a newly created, empty JS array from the top N stack items. The Array prototype is automatically bound to the new array.
         djs_put_proto_key, // Replaces top stack obj-ref with proto-ref.
         djs_get_prop, // djs_get_prop gets a property value's ref based on an object's ref below a pooled string ref on the stack... the result is placed where the targeted ref was. --> Stack placement: <OBJ-REF-LOCAL> <PROP-KEY-HANDLE> --> <PROP-VALUE-REF>
         djs_put_prop, // djs_put_prop --> Stack placement: <OBJ-REF> <PROP-KEY-HANDLE-VALUE> <NEW-VALUE> --> <OBJ-REF>
-        djs_del_prop, // TODO!
         djs_ref_pack, // TODO, please see roadmap todos under "rest parameters"
         djs_numify, // converts the VM stack's top value to a number
         djs_strcat, // concatenates 2 string copies since the ref-wrapping `Value` is decoupled from VM state --> Stack placement: <STRING-1> <STRING-2> --> <NEW-STRING>
         djs_pre_inc, // puts the VM stack's top value copy, increments, then clones it
-        djs_pre_dec, // puts the VM stack's top value copy, decrements, then clones it
+        djs_pre_dec, // like `djs_pre_inc` but decrements
+        djs_post_inc, // dupes the top stack value & tries to increment the brief copy's reference
+        djs_post_dec, // like `djs_post_inc` but decrements
         djs_mod,
         djs_mul,
         djs_div,
@@ -102,7 +104,7 @@ export namespace DerkJS {
         PolyPool<ObjectBase<Value>> heap_items;
 
         /// Stores JS intrinsic prototypes.
-        std::array<ObjectBase<Value>*, static_cast<std::size_t>(BasePrototypeID::last)> base_protos;
+        std::array<ObjectBase<Value>*, static_cast<std::size_t>(BuiltInObjects::last)> builtins;
         
         std::vector<Value> consts;
         std::vector<Instruction> code;
@@ -125,18 +127,20 @@ export namespace DerkJS {
             "djs_put_this",
             "djs_ref_error",
             "djs_discard",
+            "djs_try_del",
             "djs_typename",
             "djs_put_obj_dud",
             "djs_make_arr",
             "djs_put_proto_key",
             "djs_get_prop", // Args: <should-default>: gets a property value based on RSP: <OBJ-REF>, RSP - 1: <POOLED-STR-REF>; IF should-default == 1, default any invalid key to `undefined`.
             "djs_put_prop", // SEE: djs_get_prop for stack args passing...
-            "djs_del_prop", // SEE: djs_del_prop for stack args passing...
             "djs_ref_pack",
             "djs_numify",
             "djs_strcat",
             "djs_pre_inc",
             "djs_pre_dec",
+            "djs_post_inc",
+            "djs_post_dec",
             "djs_mod",
             "djs_mul",
             "djs_div",

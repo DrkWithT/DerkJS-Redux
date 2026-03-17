@@ -34,7 +34,6 @@ int main(int argc, char* argv[]) {
     };
 
     std::string source_path;
-    std::string polyfill_path {"./test_suite/stdlib/polyfill.js"};
     std::string_view arg_1 = argv[1];
 
     if (arg_1 == "-h") {
@@ -70,6 +69,7 @@ int main(int argc, char* argv[]) {
     driver.add_js_lexical("prototype", TokenTag::keyword_prototype);
     driver.add_js_lexical("this", TokenTag::keyword_this);
     driver.add_js_lexical("new", TokenTag::keyword_new);
+    driver.add_js_lexical("delete", TokenTag::keyword_delete);
     driver.add_js_lexical("void", TokenTag::keyword_void);
     driver.add_js_lexical("typeof", TokenTag::keyword_typeof);
     driver.add_js_lexical("instanceof", TokenTag::keyword_instanceof);
@@ -141,8 +141,6 @@ int main(int argc, char* argv[]) {
         driver.get_length_key_str_p(),
         Value {0}
     );
-
-    auto error_prototype_p = driver.add_native_object<Object>("Error::prototype", object_prototype_p);
 
     /// 4.2 Patch properties of native prototypes. These are VERY important for DerkJS to interpret certain scripts properly. ///
 
@@ -333,30 +331,6 @@ int main(int argc, char* argv[]) {
         }
     };
 
-    /// Console items
-    Core::NativePropertyStub console_props[] {
-        Core::NativePropertyStub {
-            .name_str = "log",
-            .item = std::make_unique<NativeFunction>(
-                function_prototype_p,
-                DerkJSNatives::native_console_log,
-                function_prototype_p,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
-        },
-        Core::NativePropertyStub {
-            .name_str = "readln",
-            .item = std::make_unique<NativeFunction>(
-                function_prototype_p,
-                DerkJSNatives::native_console_read_line,
-                function_prototype_p,
-                driver.get_length_key_str_p(),
-                Value {1}
-            )
-        }
-    };
-
     /// Date items
     Core::NativePropertyStub date_props[] {
         Core::NativePropertyStub {
@@ -425,15 +399,6 @@ int main(int argc, char* argv[]) {
         Value {1}
     );
 
-    auto error_ctor_p = driver.add_native_object<NativeFunction>(
-        "",
-        error_prototype_p,
-        DerkJSNatives::native_error_ctor,
-        function_prototype_p,
-        driver.get_length_key_str_p(),
-        Value {1}
-    );
-
     auto console_p = driver.add_native_object<Object>("", object_prototype_p);
     auto date_p = driver.add_native_object<Object>("", object_prototype_p);
 
@@ -453,6 +418,24 @@ int main(int argc, char* argv[]) {
         function_prototype_p,
         driver.get_length_key_str_p(),
         Value {1}
+    );
+
+    auto native_print_fn_p = driver.add_native_object<NativeFunction>(
+        "",
+        function_prototype_p,
+        DerkJSNatives::native_print,
+        function_prototype_p,
+        driver.get_length_key_str_p(),
+        Value {0}
+    );
+
+    auto native_read_line_fn_p = driver.add_native_object<NativeFunction>(
+        "",
+        function_prototype_p,
+        DerkJSNatives::native_read_line,
+        function_prototype_p,
+        driver.get_length_key_str_p(),
+        Value {0}
     );
 
     /// Patch prototypes & alias built-in globals ///
@@ -476,10 +459,6 @@ int main(int argc, char* argv[]) {
     driver.patch_native_object(function_prototype_p, string_prototype_p, std::to_array(std::move(function_prototype_props)));
     driver.add_native_object_alias("Function", function_ctor_p);
 
-    // driver.patch_native_object(error_prototype_p, string_prototype_p, std::to_array(std::move(error_prototype_props)));
-    driver.add_native_object_alias("Error", error_ctor_p);
-
-    driver.patch_native_object(console_p, string_prototype_p, std::to_array(std::move(console_props)));
     driver.add_native_object_alias("console", console_p);
 
     driver.patch_native_object(date_p, string_prototype_p, std::to_array(std::move(date_props)));
@@ -487,8 +466,10 @@ int main(int argc, char* argv[]) {
 
     driver.add_native_object_alias("parseInt", parse_int_fn_p);
     driver.add_native_object_alias("parseFloat", parse_float_fn_p);
+    driver.add_native_object_alias("nativePrint", native_print_fn_p);
+    driver.add_native_object_alias("nativeReadLine", native_read_line_fn_p);
 
     /// 6. Run the script after all configuration. ///
 
-    return driver.run(source_path, polyfill_path, derkjs_gc_threshold);
+    return driver.run(source_path, derkjs_gc_threshold);
 }

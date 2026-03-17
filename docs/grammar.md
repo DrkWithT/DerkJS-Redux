@@ -12,8 +12,9 @@
     ; TODO: Update member grammar rule to support longer accesses.
 <new> = "new"? <member>
 <call> = <new> ( "(" ( <expr> ( "," <expr> )* )? ")" )?
-<unary> = ( "!" | "+" | "++" | "--" | "typeof" | "void" )? <call>
-<factor> = <unary> ( ( "%" | "*" | "/" ) <unary> )*
+<postfix-unary> = <call> ( "++" | "--" )?
+<prefix-unary> = ( "!" | "+" | "++" | "--" | "typeof" | "void" )? <postfix-unary>
+<factor> = <prefix-unary> ( ( "%" | "*" | "/" ) <prefix-unary> )*
 <term> = <factor> ( ( "+" | "-" ) <factor> )*
 <compare> = <term> ( ( "<" | ">" | "<=" | ">=" | "instanceof" ) <term> )*
 <equality> = <compare> ( ( "==" | "!=" | "===" | "!==" ) <compare> )*
@@ -38,7 +39,7 @@
 <try-catch> = "try" <block> "catch" "(" <identifier> ")" <block>
 <function> = "function" <identifier> "(" ( <identifier> ( "," <identifier> )* )? ")" <block>
 <block> = "{" <stmt>+ "}"
-<expr-stmt> = <call> ( "=" <expr> )? ";"
+<expr-stmt> = <prefix-unary> ( "=" <expr> )? ";"
 ```
 
 ### Other Notes

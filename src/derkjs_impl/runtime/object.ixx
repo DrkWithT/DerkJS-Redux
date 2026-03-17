@@ -1,6 +1,7 @@
 module;
 
 #include <utility>
+#include <algorithm>
 #include <vector>
 #include <string>
 #include <string_view>
@@ -18,9 +19,9 @@ namespace DerkJS {
 
     public:
         /// NOTE: Creates mutable instances of anonymous objects. Pass the `flag_prototype_v | flag_extensible_v` if needed for Foo.prototype!
-        Object(ObjectBase<Value>* proto_p, uint8_t flags = std::to_underlying(AttrMask::unused))
-        : m_own_properties {}, m_prototype {(proto_p) ? Value {proto_p} : Value {}}, m_flags {flags} {
-            m_prototype.update_parent_flags(m_flags);
+        Object(ObjectBase<Value>* proto_p, uint8_t flags = std::to_underlying(AttrMask::defaults))
+        : m_own_properties {}, m_prototype {proto_p, std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::configurable)}, m_flags {flags} {
+            m_prototype.update_flags(m_flags);
         }
 
         [[nodiscard]] auto get_unique_addr() noexcept -> void* override {
@@ -35,12 +36,8 @@ namespace DerkJS {
             return "object";
         }
 
-        [[nodiscard]] auto is_extensible() const noexcept -> bool override {
-            return m_flags & flag_extensible_v;
-        }
-
-        [[nodiscard]] auto is_prototype() const noexcept -> bool override {
-            return (m_flags & flag_prototype_v) >> 7;
+        [[nodiscard]] auto flag(AttrMask flag_mask) const noexcept -> bool override {
+            return (m_flags & std::to_underlying(flag_mask)) == std::to_underlying(flag_mask);
         }
 
         [[nodiscard]] auto get_prototype() noexcept -> ObjectBase<Value>* override {
@@ -61,21 +58,23 @@ namespace DerkJS {
 
         [[nodiscard]] auto get_property_value(const Value& key, bool allow_filler) -> PropertyDescriptor<Value> override {
             if (key.is_prototype_key()) {
-                /// TODO: fix this to not get __proto__- instead get a new m_instance_prototype field.
-                return PropertyDescriptor<Value> {&key, &m_prototype, this, m_flags};
+                return PropertyDescriptor<Value> {key, &m_prototype, this};
             } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
                 return prop.key == key || prop.key.compare_as_object(key);
             }); property_entry_it != m_own_properties.end()) {
-                return PropertyDescriptor<Value> {&key, &property_entry_it->item, this, static_cast<uint8_t>(m_flags & property_entry_it->flags)};
+                return PropertyDescriptor<Value> {key, &property_entry_it->item, this};
             } else if ((m_flags & std::to_underlying(AttrMask::writable)) && allow_filler) {
                 return PropertyDescriptor<Value> {
-                    &key,
+                    key,
                     &m_own_properties.emplace_back(
-                        key, Value {},
-                        static_cast<uint8_t>(m_flags & std::to_underlying(AttrMask::unused))
+                        key,
+                        Value {
+                            JSUndefOpt {},
+                            std::to_underlying(AttrMask::writable) | std::to_underlying(AttrMask::property)
+                        },
+                        nullptr
                     ).item,
-                    this,
-                    m_flags
+                    this
                 };
             } else if (auto prototype_p = m_prototype.to_object(); prototype_p) {
                 return prototype_p->get_property_value(key, allow_filler);
@@ -85,13 +84,13 @@ namespace DerkJS {
         }
 
         void freeze() noexcept override {
-            m_flags = std::to_underlying(AttrMask::is_parent_frozen);
+            m_flags = std::to_underlying(AttrMask::frozen_property);
 
             for (auto& entry : m_own_properties) {
-                entry.item.update_parent_flags(m_flags);
+                entry.item.update_flags(m_flags);
             }
 
-            m_prototype.update_parent_flags(m_flags);
+            m_prototype.update_flags(m_flags);
 
             if (auto prototype_object_p = m_prototype.to_object(); prototype_object_p) {
                 prototype_object_p->freeze();
@@ -100,12 +99,13 @@ namespace DerkJS {
 
         [[maybe_unused]] auto set_property_value(const Value& key, const Value& value) -> Value* override {
             auto property_desc = get_property_value(key, true);
+            auto value_copy = value;
 
-            return &(property_desc = value);
-        }
+            value_copy.set_flag<AttrMask::property>();
 
-        [[maybe_unused]] auto del_property_value([[maybe_unused]] const Value& key) -> bool override {
-            return false; // TODO
+            return (property_desc.set_value(key, value_copy))
+                ? property_desc.ref_value()
+                : nullptr;
         }
 
         void update_on_accessor_mut([[maybe_unused]] const Value& accessor_value_p, [[maybe_unused]] const Value& value) override {}

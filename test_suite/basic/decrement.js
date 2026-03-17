@@ -7,6 +7,7 @@ var b = 43;
 var c = {
     secret: 70
 };
+var d = 0;
 
 --a;
 
@@ -32,7 +33,14 @@ if (c.secret === 69) {
     console.log("--c.secret failed:", c.secret);
 }
 
-if (ok === 3) {
+if (d-- === 0) {
+    console.log("after d--:", d);
+    ++ok;
+} else {
+    console.log("Failed d--.");
+}
+
+if (ok === 4) {
     console.log("PASS");
 } else {
     throw new Error("Test failed, see logs.");

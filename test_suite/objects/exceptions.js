@@ -4,5 +4,5 @@ try {
     throw new Error("TESTING!");
 } catch (err) {
     console.log("Caught:");
-    console.log(err);
+    console.log(err.toString());
 }

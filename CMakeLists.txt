@@ -14,6 +14,7 @@ target_sources(
     src/derkjs_impl/backend/bc_generate.ixx
     src/derkjs_impl/backend/expr_gen.ixx
     src/derkjs_impl/backend/stmt_gen.ixx
+    src/derkjs_impl/core/polyfills.ixx
     src/derkjs_impl/core/driver.ixx
     src/derkjs_impl/meta/enums.ixx
     src/derkjs_impl/runtime/objects.ixx
@@ -23,7 +24,6 @@ target_sources(
     src/derkjs_impl/runtime/arrays.ixx
     src/derkjs_impl/runtime/callables.ixx
     src/derkjs_impl/runtime/strings.ixx
-    src/derkjs_impl/runtime/errors.ixx
     src/derkjs_impl/runtime/value.ixx
     src/derkjs_impl/runtime/bytecode.ixx
     src/derkjs_impl/runtime/gc.ixx
@@ -37,15 +37,16 @@ target_sources(
     src/derkjs_impl/runtime/intrinsics/object_natives.ixx
     src/derkjs_impl/runtime/intrinsics/array_natives.ixx
     src/derkjs_impl/runtime/intrinsics/function_natives.ixx
-    src/derkjs_impl/runtime/intrinsics/error_natives.ixx
 )
 
 add_executable(derkjs_tco src/main_tco.cpp)
 
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    message(WARNING "CMAKE_BUILD_TYPE was set to 'Debug'- TCO will not apply & the VM can stack overflow.")
+if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    message(NOTICE "Sanitizers are enabled for this ${CMAKE_BUILD_TYPE} build.")
     target_link_options(derkjs_impl PRIVATE "-fsanitize=address")
-elseif (DEFINED SETUP_USES_CLANG)
+endif()
+
+if (DEFINED SETUP_USES_CLANG)
     set_property(SOURCE src/derkjs_impl/runtime/vm.ixx APPEND PROPERTY COMPILE_OPTIONS "-foptimize-sibling-calls")
     target_link_directories(derkjs_tco PUBLIC ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} PUBLIC ${MY_LLVM_LIBCXX_DIR})
 else ()
