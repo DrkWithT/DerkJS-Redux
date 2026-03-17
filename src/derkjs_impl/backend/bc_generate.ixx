@@ -574,6 +574,10 @@ namespace DerkJS::Backend {
 
             // 4.2: emit all vars (especially function declaration syntax sugar) FIRST as per JS hoisting.
             for (const auto& [src_filename, decl, src_id] : tu) {
+                if (!decl) {
+                    continue;
+                }
+
                 if (!emit_stmt(*decl, source_map.at(src_id))) {
                     std::println(std::cerr, "Compile Error at source '{}' for unsupported JS construct:\nSnippet:\n'{}'\n\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length / 2));
                     return {};
@@ -583,6 +587,10 @@ namespace DerkJS::Backend {
             m_prepass_vars = false;
 
             for (const auto& [src_filename, decl, src_id] : tu) {
+                if (!decl) {
+                    continue;
+                }
+
                 if (!emit_stmt(*decl, source_map.at(src_id))) {
                     std::println(std::cerr, "Compile Error at source '{}' for unsupported JS construct:\nSnippet:\n{}\n\n", src_filename, source_map.at(src_id).substr(decl->text_begin, decl->text_length));
                     return {};

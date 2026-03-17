@@ -190,6 +190,7 @@ export namespace DerkJS {
     struct While {
         ExprPtr check;
         StmtPtr body;
+        bool has_do;
     };
 
     struct ForStepped {

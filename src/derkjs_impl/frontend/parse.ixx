@@ -732,26 +732,34 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] auto parse_stmt(Lexer& lexer, const std::string& source) -> StmtPtr {
-            if (const auto stmt_keyword = m_current.tag; stmt_keyword == TokenTag::keyword_var) {
+            if (const auto stmt_begin = m_current.tag; stmt_begin == TokenTag::keyword_var) {
                 return parse_variable(lexer, source);
-            } else if (stmt_keyword == TokenTag::keyword_if) {
+            } else if (stmt_begin == TokenTag::keyword_if) {
                 return parse_if(lexer, source);
-            } else if (stmt_keyword == TokenTag::keyword_return) {
+            } else if (stmt_begin == TokenTag::keyword_return) {
                 return parse_return(lexer, source);
-            } else if (stmt_keyword == TokenTag::keyword_while) {
+            } else if (stmt_begin == TokenTag::keyword_while) {
                 return parse_while(lexer, source);
-            } else if (stmt_keyword == TokenTag::keyword_for) {
+            } else if (stmt_begin == TokenTag::keyword_do) {
+                return parse_do_while(lexer, source);
+            } else if (stmt_begin == TokenTag::keyword_for) {
                 return parse_for_stepped(lexer, source);
-            } else if (stmt_keyword == TokenTag::keyword_break) {
+            } else if (stmt_begin == TokenTag::keyword_break) {
                 return parse_break(lexer, source);
-            } else if (stmt_keyword == TokenTag::keyword_continue) {
+            } else if (stmt_begin == TokenTag::keyword_continue) {
                 return parse_continue(lexer, source);
-            } else if (stmt_keyword == TokenTag::keyword_throw) {
+            } else if (stmt_begin == TokenTag::keyword_throw) {
                 return parse_throw(lexer, source);
-            } else if (stmt_keyword == TokenTag::keyword_try) {
+            } else if (stmt_begin == TokenTag::keyword_try) {
                 return parse_try_catch(lexer, source);
-            } else if (stmt_keyword == TokenTag::keyword_function) {
+            } else if (stmt_begin == TokenTag::keyword_function) {
                 return parse_function(lexer, source);
+            } else if (stmt_begin == TokenTag::left_brace) {
+                return parse_block(lexer, source);
+            } else if (stmt_begin == TokenTag::semicolon) {
+                //? NOTE: Handle blank statements: no AST node -> no bytecode
+                consume_any(lexer, source);
+                return {};
             } else {
                 return parse_expr_stmt(lexer, source);
             }
@@ -834,30 +842,20 @@ export namespace DerkJS {
 
             consume(lexer, source, TokenTag::right_paren);
 
-            /// TODO: add looser syntax paths for ifs' true bodies...
-            auto block_true = parse_block(lexer, source);
+            auto truthy_stmt = parse_stmt(lexer, source);
 
-            std::unique_ptr<Stmt> stmt_falsy;
+            std::unique_ptr<Stmt> falsy_stmt;
 
             if (const auto current_token_tag = m_current.tag; current_token_tag == TokenTag::keyword_else) {
                 consume_any(lexer, source);
-
-                if (const auto current_token_tag = m_current.tag; current_token_tag == TokenTag::left_brace) {
-                    stmt_falsy = parse_block(lexer, source);
-                } else if (current_token_tag == TokenTag::keyword_if) {
-                    stmt_falsy = parse_if(lexer, source);
-                } else if (current_token_tag == TokenTag::keyword_return) {
-                    stmt_falsy = parse_return(lexer, source);
-                } else {
-                    stmt_falsy = parse_expr_stmt(lexer, source);
-                }
+                falsy_stmt = parse_stmt(lexer, source);
             }
 
             return std::make_unique<Stmt>(
                 If {
                     .check = std::move(condition_expr),
-                    .body_true = std::move(block_true),
-                    .body_false = std::move(stmt_falsy)
+                    .body_true = std::move(truthy_stmt),
+                    .body_false = std::move(falsy_stmt)
                 },
                 0,
                 snippet_begin,
@@ -873,7 +871,22 @@ export namespace DerkJS {
 
             consume_any(lexer, source); // skip 'return'
 
-            auto result_expr = parse_logical_or(lexer, source);
+            ExprPtr result_expr;
+
+            if (m_current.tag != TokenTag::semicolon) {
+                result_expr = parse_logical_or(lexer, source);
+            } else {
+                result_expr = std::make_unique<Expr>(
+                    Primitive {
+                        .token = Token {TokenTag::keyword_undefined, 0, 0, m_previous.line, m_previous.column + m_previous.length},
+                        .is_key = false
+                    },
+                    0,
+                    snippet_begin,
+                    snippet_begin,
+                    ExprNodeTag::primitive
+                );
+            }
 
             consume(lexer, source, TokenTag::semicolon);
 
@@ -900,12 +913,43 @@ export namespace DerkJS {
 
             consume(lexer, source, TokenTag::right_paren);
 
-            auto loop_body = parse_block(lexer, source);
+            auto loop_stmt = parse_stmt(lexer, source);
 
             return std::make_unique<Stmt>(
                 While {
                     .check = std::move(loop_check_expr),
-                    .body = std::move(loop_body)
+                    .body = std::move(loop_stmt),
+                    .has_do = false
+                },
+                0,
+                snippet_begin,
+                m_current.start - snippet_begin + 1,
+                StmtNodeTag::stmt_while
+            );
+        }
+
+        [[nodiscard]] auto parse_do_while(Lexer& lexer, const std::string& source) -> StmtPtr {
+            m_syntax = SyntaxTag::stmt_while;
+
+            const auto snippet_begin = m_current.start;
+
+            consume_any(lexer, source); // skip pre-checked 'do'
+
+            auto loop_stmt = parse_stmt(lexer, source);
+
+            consume(lexer, source, TokenTag::keyword_while);
+            consume(lexer, source, TokenTag::left_paren);
+
+            auto loop_check_expr = parse_logical_or(lexer, source);
+
+            consume(lexer, source, TokenTag::right_paren);
+            consume(lexer, source, TokenTag::semicolon);
+
+            return std::make_unique<Stmt>(
+                While {
+                    .check = std::move(loop_check_expr),
+                    .body = std::move(loop_stmt),
+                    .has_do = true
                 },
                 0,
                 snippet_begin,
@@ -947,13 +991,7 @@ export namespace DerkJS {
 
             consume(lexer, source, TokenTag::right_paren);
 
-            StmtPtr body_stmt;
-
-            if (m_current.match_tag_to(TokenTag::left_brace)) {
-                body_stmt = parse_block(lexer, source);
-            } else {
-                body_stmt = parse_stmt(lexer, source);
-            }
+            StmtPtr body_stmt = parse_stmt(lexer, source);
 
             return std::make_unique<Stmt>(
                 ForStepped {

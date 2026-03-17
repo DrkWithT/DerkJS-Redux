@@ -27,8 +27,8 @@ int main(int argc, char* argv[]) {
             .name = fancy_name,
             .author = "DrkWithT (GitHub)",
             .version_major = 0,
-            .version_minor = 5,
-            .version_patch = 4
+            .version_minor = 6,
+            .version_patch = 1
         },
         derkjs_heap_count // increase object count limit for VM if needed
     };
@@ -59,6 +59,7 @@ int main(int argc, char* argv[]) {
     driver.add_js_lexical("else", TokenTag::keyword_else);
     driver.add_js_lexical("return", TokenTag::keyword_return);
     driver.add_js_lexical("while", TokenTag::keyword_while);
+    driver.add_js_lexical("do", TokenTag::keyword_do);
     driver.add_js_lexical("for", TokenTag::keyword_for);
     driver.add_js_lexical("break", TokenTag::keyword_break);
     driver.add_js_lexical("continue", TokenTag::keyword_continue);
