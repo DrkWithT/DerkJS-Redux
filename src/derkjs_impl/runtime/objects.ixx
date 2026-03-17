@@ -171,7 +171,6 @@ export namespace DerkJS {
         object,
         array,
         function,
-
         /// Extra property names for quick access (TODO: refactor these out in favor of polyfilled ctors and intrinsics, etc.)
         extra_length_key, // Not a prototype, but I have to make "length" easily accessible for array creations.
         extra_msg_key, // Not a prototype, but patched in for `ErrorXYZ`.
@@ -181,6 +180,7 @@ export namespace DerkJS {
         error_ctor,
         syntax_error_ctor,
         type_error_ctor,
+        ref_error_ctor,
         last
     };
 
@@ -283,7 +283,7 @@ export namespace DerkJS {
         }
 
         void tenure_items() noexcept {
-            m_last_tenured_id = m_items.size() - 1;
+            m_last_tenured_id = m_next_id;
         }
 
         [[nodiscard]] auto get_next_id() noexcept -> int {

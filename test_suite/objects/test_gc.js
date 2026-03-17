@@ -1,8 +1,7 @@
 var count = 2001;
-var temp;
 
 while (count > 0) {
-    temp = {x: 1};
+    void ({});
 
     count = count - 1;
 }
