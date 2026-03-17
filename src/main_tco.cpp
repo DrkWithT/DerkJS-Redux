@@ -27,8 +27,8 @@ int main(int argc, char* argv[]) {
             .name = fancy_name,
             .author = "DrkWithT (GitHub)",
             .version_major = 0,
-            .version_minor = 5,
-            .version_patch = 4
+            .version_minor = 6,
+            .version_patch = 1
         },
         derkjs_heap_count // increase object count limit for VM if needed
     };

@@ -169,12 +169,8 @@ namespace DerkJS::Backend {
     };
 
     export class WhileEmitter : public StmtEmitterBase<Stmt> {
-    public:
-        WhileEmitter() noexcept = default;
-
-        [[nodiscard]] auto emit(BytecodeEmitterContext& context, const Stmt& node, const std::string& source) -> bool override {
-            const auto& [loop_check, loop_body] = std::get<While>(node.data);
-
+    private:
+        [[nodiscard]] auto emit_normal_variant(BytecodeEmitterContext& context, const ExprPtr& loop_check, const StmtPtr& loop_body, const std::string& source) -> bool {
             if (context.m_prepass_vars) {
                 if (!context.emit_stmt(*loop_body, source)) {
                     return false;
@@ -223,6 +219,64 @@ namespace DerkJS::Backend {
             context.m_active_loops.pop_front();
 
             return true;
+        }
+
+        [[nodiscard]] auto emit_do_variant(BytecodeEmitterContext& context, const ExprPtr& loop_check, const StmtPtr& loop_body, const std::string& source) -> bool {
+            if (context.m_prepass_vars) {
+                if (!context.emit_stmt(*loop_body, source)) {
+                    return false;
+                }
+
+                return true;
+            }
+
+            context.m_active_loops.push_front(ActiveLoop {
+                .exits = {},
+                .repeats = {}
+            });
+
+            const int loop_begin_pos = context.m_code_blobs.front().size();
+
+            if (!context.emit_stmt(*loop_body, source)) {
+                return false;
+            }
+
+            if (!context.emit_expr(*loop_check, source)) {
+                return false;
+            }
+
+            const int loop_repeat_jump_pos = context.m_code_blobs.front().size();
+            const int loop_end_pos = loop_repeat_jump_pos + 1;
+
+            context.encode_instruction(Opcode::djs_jump_if); // "loop repeat jump"
+            context.m_code_blobs.front().at(loop_repeat_jump_pos).args[0] = loop_begin_pos - loop_repeat_jump_pos;
+            context.encode_instruction(Opcode::djs_nop); // "loop end"
+
+            const auto& [wloop_exits, wloop_repeats] = context.m_active_loops.front();
+
+            for (auto wloop_break_pos : wloop_exits) {
+                context.m_code_blobs.front().at(wloop_break_pos).args[0] = loop_end_pos - wloop_break_pos;
+            }
+
+            for (auto wloop_repeat_pos : wloop_repeats) {
+                context.m_code_blobs.front().at(wloop_repeat_pos).args[0] = loop_begin_pos - wloop_repeat_pos;
+            }
+
+            context.m_active_loops.pop_front();
+
+            return true;
+        }
+    public:
+        WhileEmitter() noexcept = default;
+
+        [[nodiscard]] auto emit(BytecodeEmitterContext& context, const Stmt& node, const std::string& source) -> bool override {
+            const auto& [loop_check, loop_body, has_do] = std::get<While>(node.data);
+
+            if (has_do) {
+                return emit_do_variant(context, loop_check, loop_body, source);
+            } else {
+                return emit_normal_variant(context, loop_check, loop_body, source);
+            }
         }
     };
 
@@ -361,6 +415,10 @@ namespace DerkJS::Backend {
             context.m_local_maps.back().block_level++;
 
             for (const auto& temp_stmt : items) {
+                if (!temp_stmt) {
+                    continue;
+                }
+
                 if (!context.emit_stmt(*temp_stmt, source)) {
                     return false;
                 }
