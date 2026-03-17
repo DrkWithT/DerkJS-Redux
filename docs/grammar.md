@@ -26,12 +26,15 @@
 ### Grammar (Statements)
 ```
 <program> = <stmt>+
-<stmt> = <variable> | <if> | <return> | <break> | <continue> | <throw> | <try-catch> | <while> | <for> | <function> | <expr-stmt>
+<stmt> = <variable> | <if> | <return> | <break> | <continue> | <throw> | <try-catch> | <while> | <do-while> | <for> | <function> | <expr-stmt> | <empty-stmt>
 <variable> = "var" <var-decl> ( "," <var-decl>)* ";"
 <var-decl> = <identifier> ( "=" <expr> )?
-<if> = "if" "(" <expr> ")" <block> ( "else" ( <block> | <if> | <return> | <expr-stmt> ) )? ; maybe add dangling while loops later, meh
-<return> = "return" <expr> ";"
-<while> = "while" "(" <expr> ")" <block>   ; just have loops contain block bodies for simplicity!
+<if> = "if" "(" <expr> ")" <stmt> ( "else" <stmt> )? ; maybe add dangling while loops later, meh
+<return> = "return" <expr>? ";"
+<while> = "while" "(" <expr> ")" <stmt>
+
+<do-while> = "do" <stmt> "while" "(" <expr> ")" ";"
+
 <for> = "for" "(" <expr> | <variable>? ";" <expr>? ";" <expr>? ")" <stmt>   ; omitted check-expr becomes `djs_push <true>` but other parts become NOPs.
 <break> = "break" ";"
 <continue> = "continue" ";"
@@ -40,7 +43,9 @@
 <function> = "function" <identifier> "(" ( <identifier> ( "," <identifier> )* )? ")" <block>
 <block> = "{" <stmt>+ "}"
 <expr-stmt> = <prefix-unary> ( "=" <expr> )? ";"
+<empty-stmt> = ";"
 ```
 
 ### Other Notes
- - I should check if breaks & continues are in a loop, even at top-level.
+ - `break` / `continue` must be in loops -> SyntaxError
+ - `return` must be in a function -> SyntaxError

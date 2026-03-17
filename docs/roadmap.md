@@ -37,29 +37,27 @@
     - **DELAYED:** Improve `as_string` method of object-base... Pretty print object literal / `[object <class name> ... ]`
  35. ~~Add `x instanceof y` operator.~~
  36. ~~Add rest parameters by _ES6_.~~
- 37. Add `delete` operator.
-   - Add `delete` operator bytecode support:
-      - `djs_try_del` opcode:
-         - If the value is not a reference, return `true`.
-         - If the value holds an "own property" reference of some object, try removing it. The value must be configurable.
-         - If the value holds an environment (capture object) property's reference, try removing it. The value must be configurable.
-         - Throw errors as indicated below.
-      - Errors:
-         - Attempting a variable, argument parameter, or function name deletion will throw a `SyntaxError`.
-         - Accessing an `undefined.property_name` will throw a `TypeError`. See `djs_get_prop` opcode for adding a `TypeError` throw check.
- 39. Add postfix `++` and `--` operators. **WIP**
- 40. Improve runtime errors: **WIP**
-   - `ReferenceError` on bad property accesses.
-   - `SyntaxError` on bad syntax evaluation / Function ctor calls.
- 41. Add `__proto__` AKA `[[prototype]]` support:
+ 37. ~~Add `delete` operator.~~
+ 38. ~~Add postfix `++` and `--` operators.~~
+ 39. Add more statement support:
+   - Empty statement
+   - `return;` semantics
+   - `do {} while (cond);` semantics
+   - Allow _any_ statement in if/else, while, for...
+
+### Ongoing:
+ 1. Improve runtime errors: **WIP**
+    - `ReferenceError` on bad property accesses.
+    - `SyntaxError` on bad syntax evaluation / Function ctor calls.
+ 2. Add `__proto__` AKA `[[prototype]]` support:
     - Add `__proto__` to parsing.
     - Add `__proto__` support to bytecode & compiler.
     - Add `__proto__` support to `Value` & VM.
     - Add `__proto__` test cases.
- 41. Add more support for built-in methods:
-    - Number methods
-    - String methods
-    - Object methods: seal, isFrozen, isSealed
-    - Date methods: toString?? toDateString??
-    - Math methods: pow, cos, sin, tan, log, logn, floor, ceil??
-    - Array methods: sort, splice??
+ 3. Add more support for built-in methods:
+    - Number methods: NaN property?
+    - String methods: charAt, concat, split
+    - Object methods: seal, isFrozen, isSealed, isConfigurable, hasOwnProperty
+    - Date methods: instance getters & setters, toString?? toDateString??
+    - Math methods: E, LOG, PI constants, pow, cos, sin, tan, log, logn, floor, ceil
+    - Array methods: some, reduce, shift, unshift, splice, sort
