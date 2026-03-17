@@ -3,8 +3,8 @@
 ### Brief
 My latest attempt at implmenting a subset of JavaScript, specifically ES5 with cherry-picked ES6+ features, in modern C++.
 
-### Dependencies
- - LLVM 21.1.7+ (just the Homebrew distribution for now)
+### Required
+ - Clang 21+ (just the Homebrew distribution for now)
  - CMake 4.2+
  - Ninja
 
@@ -14,12 +14,6 @@ My latest attempt at implmenting a subset of JavaScript, specifically ES5 with c
  - No `arguments`, but rest parameters are given.
  - No BigInt.
  - No Promise API yet.
-
-#### Demo: Function Expressions
-<img src="imgs/DerkJS_lambda_test.png" size="25%">
-
-#### Demo: Array methods
-<img src="imgs/DerkJS_array_methods.png" size="25%">
 
 ### Usage
  1. Give `./utility.sh` run permissions.
