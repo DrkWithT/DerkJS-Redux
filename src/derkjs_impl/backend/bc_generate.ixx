@@ -415,6 +415,7 @@ namespace DerkJS::Backend {
             m_builtin_ids["Error"] = BuiltInObjects::error_ctor;
             m_builtin_ids["SyntaxError"] = BuiltInObjects::syntax_error_ctor;
             m_builtin_ids["TypeError"] = BuiltInObjects::type_error_ctor;
+            m_builtin_ids["ReferenceError"] = BuiltInObjects::ref_error_ctor;
         }
 
         void add_expr_emitter(ExprNodeTag expr_type_tag, std::unique_ptr<ExprEmitterBase<Expr>> helper) noexcept {

@@ -375,21 +375,45 @@ namespace DerkJS::Backend {
                     case AstOp::ast_op_prefix_inc: {
                         const bool old_access_as_lval = context.m_access_as_lval;
                         context.m_access_as_lval = true;
-                        
-                        OpcodeWithGenFlag temp_inc_result {
+
+                        OpcodeWithGenFlag temp_prefix_result {
                             .op = Opcode::djs_pre_inc,
+                            .inner_ok = context.emit_expr(*inner_expr, source)
+                        };
+
+                        context.m_access_as_lval = old_access_as_lval;
+                        return temp_prefix_result;
+                    }
+                    case AstOp::ast_op_prefix_dec: {
+                        const bool old_access_as_lval = context.m_access_as_lval;
+                        context.m_access_as_lval = true;
+                        
+                        OpcodeWithGenFlag temp_prefix_result {
+                            .op = Opcode::djs_pre_dec,
+                            .inner_ok = context.emit_expr(*inner_expr, source)
+                        };
+
+                        context.m_access_as_lval = old_access_as_lval;
+                        return temp_prefix_result;
+                    }
+                    case AstOp::ast_op_postfix_inc: {
+                        const bool old_access_as_lval = context.m_access_as_lval;
+                        context.m_access_as_lval = true;
+
+                        OpcodeWithGenFlag temp_inc_result {
+                            .op = Opcode::djs_post_inc,
                             .inner_ok = context.emit_expr(*inner_expr, source)
                         };
 
                         context.m_access_as_lval = old_access_as_lval;
                         return temp_inc_result;
                     }
-                    case AstOp::ast_op_prefix_dec: {
+                    case AstOp::ast_op_postfix_dec: {
                         const bool old_access_as_lval = context.m_access_as_lval;
                         context.m_access_as_lval = true;
-                        
+
                         OpcodeWithGenFlag temp_inc_result {
-                            .op = Opcode::djs_pre_dec,
+                            .op = Opcode::djs_post_dec,
                             .inner_ok = context.emit_expr(*inner_expr, source)
                         };
 
@@ -437,7 +461,7 @@ namespace DerkJS::Backend {
                 return false;
             } else if (const auto [opcode, inner_ok] = *opcode_and_check; !inner_ok) {
                 return false;
-            } else if (opcode == Opcode::djs_try_del) {
+            } else if (opcode == Opcode::djs_try_del || opcode == Opcode::djs_pre_inc || opcode == Opcode::djs_pre_dec || opcode == Opcode::djs_post_inc || opcode == Opcode::djs_post_dec) {
                 context.encode_instruction(opcode, Arg {
                     .n = static_cast<int16_t>(context.m_in_try_block),
                     .tag = Location::immediate,
