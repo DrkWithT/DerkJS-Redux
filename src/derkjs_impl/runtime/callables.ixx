@@ -90,6 +90,23 @@ export namespace DerkJS {
         [[nodiscard]] auto get_property_value(const Value& key, [[maybe_unused]] bool allow_filler) -> PropertyDescriptor<Value> override {
             if (key.is_prototype_key()) { // For prototype, not __proto__!
                 return PropertyDescriptor<Value> {key, &m_instance_prototype, this};
+            } else if (auto property_entry_it = std::find_if(m_own_properties.begin(), m_own_properties.end(), [&key](const auto& prop) -> bool {
+                return prop.key == key || prop.key.compare_as_object(key);
+            }); property_entry_it != m_own_properties.end()) {
+                return PropertyDescriptor<Value> {key, &property_entry_it->item, this};
+            } else if ((m_flags & std::to_underlying(AttrMask::writable)) && allow_filler) {
+                return PropertyDescriptor<Value> {
+                    key,
+                    &m_own_properties.emplace_back(
+                        key,
+                        Value {
+                            JSUndefOpt {},
+                            std::to_underlying(AttrMask::defaults) | std::to_underlying(AttrMask::property)
+                        },
+                        nullptr
+                    ).item,
+                    this
+                };
             } else if (auto prototype_p = m_prototype.to_object(); prototype_p) {
                 return prototype_p->get_property_value(key, allow_filler);
             }

@@ -29,18 +29,22 @@ namespace DerkJS::Runtime::Intrinsics {
         const auto passed_rsbp = ctx->rsbp;
         std::span<Value> passed_args {ctx->stack.begin() + passed_rsbp + 1, ctx->stack.begin() + passed_rsbp + 1 + argc};
 
-        auto callable_object_p = ctx->compile_proc(
+        if (passed_args.empty()) {
+            if (auto func_proto_copy = ctx->heap.add_item(ctx->heap.get_next_id(), ctx->stack.at(passed_rsbp).to_object()->get_instance_prototype()->clone()); func_proto_copy) {
+                ctx->stack.at(passed_rsbp - 1) = Value { func_proto_copy };
+            } else {
+                return false;
+            }
+        } else if (auto callable_object_p = ctx->compile_proc(
             ctx->lexer_p, ctx->parser_p, ctx->compile_state_p, &ctx->heap,
             passed_args
-        );
-
-        if (!callable_object_p) {
+        ); callable_object_p != nullptr) {
+            ctx->stack.at(passed_rsbp - 1) = Value { callable_object_p };
+        } else {
             ctx->status = VMErrcode::bad_operation;
             std::println(std::cerr, "Failed to allocate Function object on the heap.");
             return false;
         }
-
-        ctx->stack.at(passed_rsbp - 1) = Value { callable_object_p };
 
         return true;
     }
