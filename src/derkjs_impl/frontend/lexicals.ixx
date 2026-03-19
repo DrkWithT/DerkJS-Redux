@@ -26,6 +26,7 @@ export namespace DerkJS {
         keyword_throw,
         keyword_try,
         keyword_catch,
+        keyword_finally,
         keyword_function,
         keyword_prototype,
         keyword_new,

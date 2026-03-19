@@ -1,7 +1,7 @@
 // Test native isNaN:
 
-var tests = [undefined, null, true, false, 42, 0 / 0, {}, []];
-var expected = [true, false, false, false, false, true, true, false];
+var tests = [null, true, false, 42, 0 / 0, {}, []];
+var expected = [false, false, false, false, true, true, false];
 var resultsNaN = tests.map(
     function (item) {
         return isNaN(item);

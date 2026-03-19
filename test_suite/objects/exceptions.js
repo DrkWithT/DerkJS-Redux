@@ -5,4 +5,6 @@ try {
 } catch (err) {
     console.log("Caught:");
     console.log(err.toString());
+} finally {
+    console.log("DONE");
 }
