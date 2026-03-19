@@ -66,6 +66,7 @@ int main(int argc, char* argv[]) {
     driver.add_js_lexical("throw", TokenTag::keyword_throw);
     driver.add_js_lexical("try", TokenTag::keyword_try);
     driver.add_js_lexical("catch", TokenTag::keyword_catch);
+    driver.add_js_lexical("finally", TokenTag::keyword_finally);
     driver.add_js_lexical("function", TokenTag::keyword_function);
     driver.add_js_lexical("prototype", TokenTag::keyword_prototype);
     driver.add_js_lexical("this", TokenTag::keyword_this);

@@ -222,6 +222,7 @@ export namespace DerkJS {
         Token error_name;
         StmtPtr body_try;
         StmtPtr body_catch;
+        StmtPtr body_finally;
     };
 
     /// BEGIN AST WRAPPER ///

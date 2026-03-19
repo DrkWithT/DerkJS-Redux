@@ -471,7 +471,7 @@ namespace DerkJS::Backend {
         TryCatchEmitter() noexcept = default;
 
         [[nodiscard]] auto emit(BytecodeEmitterContext& context, const Stmt& node, const std::string& source) -> bool override {
-            const auto& [error_name_token, block_try, block_catch] = std::get<TryCatch>(node.data);
+            const auto& [error_name_token, block_try, block_catch, block_finally] = std::get<TryCatch>(node.data);
             std::string error_name_prepassed = error_name_token.as_string(source);
 
             if (context.m_prepass_vars) {
@@ -512,10 +512,16 @@ namespace DerkJS::Backend {
             }
 
             const int end_catch_pos = context.m_code_blobs.front().size();
-            context.encode_instruction(Opcode::djs_nop);
 
             // 4. backpatch try's jump over the catch for non-errorneous runs.
+            context.encode_instruction(Opcode::djs_nop);
             context.m_code_blobs.front().at(skip_catch_jump_pos).args[0] = end_catch_pos - skip_catch_jump_pos;
+
+            if (block_finally) {
+                if (!context.emit_stmt(*block_finally, source)) {
+                    return false;
+                }
+            }
 
             return true;
         }

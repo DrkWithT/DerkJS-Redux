@@ -1072,11 +1072,20 @@ export namespace DerkJS {
 
             auto block_catch = parse_block(lexer, source);
 
+            StmtPtr block_finally;
+
+            if (m_current.match_tag_to(TokenTag::keyword_finally)) {
+                consume_any(lexer, source);
+
+                block_finally = parse_block(lexer, source);
+            }
+
             return std::make_unique<Stmt>(
                 TryCatch {
                     .error_name = error_name_token,
                     .body_try = std::move(block_try),
-                    .body_catch = std::move(block_catch)
+                    .body_catch = std::move(block_catch),
+                    .body_finally = std::move(block_finally)
                 },
                 0,
                 snippet_begin,

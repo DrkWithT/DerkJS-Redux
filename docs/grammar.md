@@ -39,7 +39,7 @@
 <break> = "break" ";"
 <continue> = "continue" ";"
 <throw> = "throw" <expr> ";"
-<try-catch> = "try" <block> "catch" "(" <identifier> ")" <block>
+<try-catch> = "try" <block> "catch" "(" <identifier> ")" <block> ( "finally" <block> )?
 <function> = "function" <identifier> "(" ( <identifier> ( "," <identifier> )* )? ")" <block>
 <block> = "{" <stmt>+ "}"
 <expr-stmt> = <prefix-unary> ( "=" <expr> )? ";"
