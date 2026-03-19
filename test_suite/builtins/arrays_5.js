@@ -5,7 +5,7 @@ var info = {
     total: 0
 };
 
-function updateChecks(arg) {
+function updateChecks(arg, index, items) {
     ++this.calls;
     this.total = this.total + arg;
 
