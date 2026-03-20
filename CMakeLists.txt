@@ -31,6 +31,7 @@ target_sources(
     src/derkjs_impl/runtime/op_handlers.ixx
     src/derkjs_impl/runtime/vm.ixx
     src/derkjs_impl/runtime/intrinsics/routines.ixx
+    src/derkjs_impl/runtime/intrinsics/conversions.ixx
     src/derkjs_impl/runtime/intrinsics/boolean_natives.ixx
     src/derkjs_impl/runtime/intrinsics/number_natives.ixx
     src/derkjs_impl/runtime/intrinsics/string_natives.ixx
