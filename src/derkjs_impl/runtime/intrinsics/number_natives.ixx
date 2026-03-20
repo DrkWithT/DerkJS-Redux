@@ -23,25 +23,24 @@ namespace DerkJS::Runtime::Intrinsics {
             instance_prototype_p
         );
 
-        Value arg_value = ctx->stack.at(passed_rsbp + 1).deep_clone();
-
         if (!temp_number_ptr) {
             ctx->status = VMErrcode::bad_heap_alloc;
             return false;
         }
 
+        Value arg_value = ctx->stack.at(passed_rsbp + 1).deep_clone();
         auto temp_number_instance_p = temp_number_ptr.get();
         auto temp_number_object_p = ctx->heap.add_item(
             ctx->heap.get_next_id(),
             std::move(temp_number_ptr)
         );
 
-        if (arg_value.get_tag() == ValueTag::num_i32) {
+        if (arg_value.get_tag() == ValueTag::null || argc == 0) {
+            temp_number_instance_p->get_native_value() = Value {0};
+        } else if (arg_value.get_tag() == ValueTag::num_i32) {
             temp_number_instance_p->get_native_value() = Value { arg_value.to_num_i32().value() };
         } else if (arg_value.get_tag() == ValueTag::num_f64) {
             temp_number_instance_p->get_native_value() = Value { arg_value.to_num_f64().value() };
-        } else if (arg_value.get_tag() == ValueTag::null) {
-            temp_number_instance_p->get_native_value() = Value {0};
         }
 
         ctx->stack.at(passed_rsbp - 1) = Value {temp_number_object_p};

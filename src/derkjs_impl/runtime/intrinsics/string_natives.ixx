@@ -19,10 +19,17 @@ namespace DerkJS::Runtime::Intrinsics {
     export auto native_str_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
 
-        return ctx->push_string(
-            ctx->stack.at(passed_rsbp + 1).to_string(),
-            passed_rsbp
-        );
+        if (argc <= 0) {
+            return ctx->push_string(
+                std::string {},
+                passed_rsbp
+            );
+        } else {
+            return ctx->push_string(
+                ctx->stack.at(passed_rsbp + 1).to_string(),
+                passed_rsbp
+            );
+        }
     }
 
     export auto native_str_charcode_at(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
