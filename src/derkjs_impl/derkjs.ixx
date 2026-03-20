@@ -10,6 +10,7 @@ export import runtime.intrinsics.string_natives;
 export import runtime.intrinsics.array_natives;
 export import runtime.intrinsics.object_natives;
 export import runtime.intrinsics.function_natives;
+export import runtime.intrinsics.conversions;
 export import backend.expr_gen;
 export import backend.stmt_gen;
 export import core.driver;

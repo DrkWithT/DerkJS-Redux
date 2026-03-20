@@ -47,7 +47,7 @@ export namespace DerkJS::Core {
             "ERROR: bad Function call or assignment operation.",
             "ERROR: heap allocation failed.",
             "ERROR: VM aborted via halt.",
-            "ERROR: Uncaught error:\n",
+            "ERROR: Uncaught error:\n\n",
             "OK",
         };
 
