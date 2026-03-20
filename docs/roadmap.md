@@ -44,6 +44,7 @@
    - `return;` semantics
    - `do {} while (cond);` semantics
    - Allow _any_ statement in if/else, while, for...
+ 40. Add whitespace escapes and hex ASCII escapes in string literals.
 
 ### Ongoing:
  1. Improve runtime errors: **WIP**
@@ -55,9 +56,8 @@
     - Add `__proto__` support to `Value` & VM.
     - Add `__proto__` test cases.
  3. Add more support for built-in methods:
-    - Number methods: NaN property?
-    - String methods: charAt, concat, split
-    - Object methods: seal, isFrozen, isSealed, isConfigurable, hasOwnProperty
+    - String methods: concat, split
+    - Object methods: keys, seal, isFrozen, isSealed, isConfigurable, hasOwnProperty
     - Date methods: instance getters & setters, toString?? toDateString??
     - Math methods: E, LOG, PI constants, pow, cos, sin, tan, log, logn, floor, ceil
     - Array methods: some, reduce, shift, unshift, splice, sort
