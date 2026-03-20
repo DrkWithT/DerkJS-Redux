@@ -7,6 +7,7 @@ module;
 #include <variant>
 #include <forward_list>
 #include <string>
+#include <sstream>
 #include <iostream>
 #include <print>
 
@@ -16,6 +17,66 @@ import backend.bc_generate;
 
 namespace DerkJS::Backend {
     export class PrimitiveEmitter : public ExprEmitterBase<Expr> {
+    private:
+        static constexpr auto decode_hex_digit(char c) noexcept -> int {
+            if (c >= '0' && c <= '9') {
+                return c - '0';
+            } else if (c >= 'a' && c <= 'f') {
+                return c - 'a';
+            }
+
+            return 0;
+        }
+
+        //? NOTE: use for singular escapes e.g `\n`.
+        static constexpr auto unescape_sequence(char c) noexcept -> char {
+            switch (c) {
+            case '\'': case '\"': case '\\': return c;
+            case 'b': return '\b';
+            case 'f': return '\f';
+            case 'n': return '\n';
+            case 'r': return '\r';
+            case 't': return '\t';
+            case 'v': return '\v';
+            case '0': default: return '\0';
+            }
+        }
+
+        //? NOTE: use for double digit hex escapes e.g `\x1f`.
+        static constexpr auto unescape_sequence(char c1, char c2) noexcept -> char {
+            const int upper_hex_code = (decode_hex_digit(c1) << 4);
+            const int lower_hex_code = decode_hex_digit(c2);
+
+            return static_cast<char>(upper_hex_code + lower_hex_code);
+        } 
+
+        static auto unescape_string_literal(const std::string& s) noexcept -> std::string {
+            std::ostringstream sout;
+
+            for (int pos = 0, len = s.length(); pos < len; ) {
+                const auto c1 = s.at(pos);
+                ++pos;
+
+                if (c1 != '\\') {
+                    sout << c1;
+                    continue;
+                }
+
+                if (const auto c2 = s.at(pos); c2 != 'x') {
+                    ++pos;
+                    sout << unescape_sequence(c2);
+                    continue;
+                } else {
+                    ++pos;
+                }
+
+                sout << unescape_sequence(s.at(pos), s[pos + 1]);
+                ++pos;
+                ++pos;
+            }
+
+            return sout.str();
+        }
     public:
         PrimitiveEmitter() noexcept = default;
 
@@ -50,9 +111,17 @@ namespace DerkJS::Backend {
                     context.m_accessing_property = false;
                     return context.record_symbol(atom_lexeme, Value {std::stod(atom_lexeme)}, FindGlobalConstsOpt {});
                 case TokenTag::literal_string: {
-                    context.m_has_string_ops = true;
                     // Map '"abc"' -> "abc"
-                    return context.record_symbol(atom_lexeme, atom_lexeme.substr(1, atom_lexeme.length() - 2), FindGlobalConstsOpt {});
+                    std::string temp_contents {atom_lexeme.substr(1, atom_lexeme.length() - 2)};
+                    context.m_has_string_ops = true;
+
+                    return context.record_symbol(atom_lexeme, temp_contents, FindGlobalConstsOpt {});
+                }
+                case TokenTag::literal_escaped_string: {
+                    std::string temp_contents {atom_lexeme.substr(1, atom_lexeme.length() - 2)};
+                    context.m_has_string_ops = true;
+
+                    return context.record_symbol(atom_lexeme, unescape_string_literal(temp_contents), FindGlobalConstsOpt {});
                 }
                 case TokenTag::keyword_prototype: {
                     context.m_has_string_ops = false;
@@ -94,6 +163,8 @@ namespace DerkJS::Backend {
                 }
             } else if (const auto local_var_opcode = (context.m_access_as_lval && !context.m_accessing_property) ? Opcode::djs_ref_local : Opcode::djs_dup_local; primitive_locate_type == Location::local) {
                 context.encode_instruction(local_var_opcode, *primitive_locator);
+            } else if (primitive_locate_type == Location::heap_obj && primitive_locator->n == -1) {
+                context.encode_instruction(Opcode::djs_put_global_this);
             } else if (primitive_locate_type == Location::heap_obj && primitive_locator->n == -2) {
                 context.encode_instruction(Opcode::djs_put_this);
             } else if (primitive_locate_type == Location::heap_obj && primitive_locator->n == -3) {
