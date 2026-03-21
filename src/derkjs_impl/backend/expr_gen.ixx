@@ -7,6 +7,7 @@ module;
 #include <variant>
 #include <forward_list>
 #include <string>
+#include <sstream>
 #include <iostream>
 #include <print>
 
@@ -16,6 +17,70 @@ import backend.bc_generate;
 
 namespace DerkJS::Backend {
     export class PrimitiveEmitter : public ExprEmitterBase<Expr> {
+    private:
+        static constexpr auto decode_hex_digit(char c) noexcept -> int {
+            if (c >= '0' && c <= '9') {
+                return c - '0';
+            } else if (c >= 'a' && c <= 'f') {
+                return c - 'a' + 10;
+            } else if (c >= 'A' && c <= 'F') {
+                return c - 'A' + 10;
+            }
+
+            return 0;
+        }
+
+        //? NOTE: use for singular escapes e.g `\n`.
+        static constexpr auto unescape_sequence(char c) noexcept -> char {
+            switch (c) {
+            case '\'': case '\"': case '\\': return c;
+            case 'n': return '\n';
+            case 't': return '\t';
+            case 'r': return '\r';
+            case 'v': return '\v';
+            case 'f': return '\f';
+            case 'b': return '\b';
+            case '0': default: return '\0';
+            }
+        }
+
+        //? NOTE: use for double digit hex escapes e.g `\x1f`.
+        static constexpr auto unescape_sequence(char c1, char c2) noexcept -> char {
+            const int upper_hex_code = (decode_hex_digit(c1) << 4);
+            const int lower_hex_code = decode_hex_digit(c2);
+
+            return static_cast<char>(upper_hex_code + lower_hex_code);
+        }
+
+        static auto unescape_string_literal(const std::string& s) noexcept -> std::string {
+            std::ostringstream sout;
+
+            for (int pos = 0, len = s.length(); pos < len; ) {
+                const auto c1 = s.at(pos);
+
+                if (c1 != '\\') {
+                    ++pos;
+                    sout << c1;
+                    continue;
+                } else {
+                    ++pos;
+                }
+
+                if (const auto c2 = s.at(pos); c2 != 'x') {
+                    ++pos;
+                    sout << unescape_sequence(c2);
+                    continue;
+                } else {
+                    ++pos;
+                }
+
+                sout << unescape_sequence(s.at(pos), s[pos + 1]);
+                ++pos;
+                ++pos;
+            }
+
+            return sout.str();
+        }
     public:
         PrimitiveEmitter() noexcept = default;
 
@@ -50,9 +115,17 @@ namespace DerkJS::Backend {
                     context.m_accessing_property = false;
                     return context.record_symbol(atom_lexeme, Value {std::stod(atom_lexeme)}, FindGlobalConstsOpt {});
                 case TokenTag::literal_string: {
-                    context.m_has_string_ops = true;
                     // Map '"abc"' -> "abc"
-                    return context.record_symbol(atom_lexeme, atom_lexeme.substr(1, atom_lexeme.length() - 2), FindGlobalConstsOpt {});
+                    std::string temp_contents {atom_lexeme.substr(1, atom_lexeme.length() - 2)};
+                    context.m_has_string_ops = true;
+
+                    return context.record_symbol(atom_lexeme, temp_contents, FindGlobalConstsOpt {});
+                }
+                case TokenTag::literal_escaped_string: {
+                    std::string temp_contents {atom_lexeme.substr(1, atom_lexeme.length() - 2)};
+                    context.m_has_string_ops = true;
+
+                    return context.record_symbol(atom_lexeme, unescape_string_literal(temp_contents), FindGlobalConstsOpt {});
                 }
                 case TokenTag::keyword_prototype: {
                     context.m_has_string_ops = false;
@@ -94,6 +167,8 @@ namespace DerkJS::Backend {
                 }
             } else if (const auto local_var_opcode = (context.m_access_as_lval && !context.m_accessing_property) ? Opcode::djs_ref_local : Opcode::djs_dup_local; primitive_locate_type == Location::local) {
                 context.encode_instruction(local_var_opcode, *primitive_locator);
+            } else if (primitive_locate_type == Location::heap_obj && primitive_locator->n == -1) {
+                context.encode_instruction(Opcode::djs_put_global_this);
             } else if (primitive_locate_type == Location::heap_obj && primitive_locator->n == -2) {
                 context.encode_instruction(Opcode::djs_put_this);
             } else if (primitive_locate_type == Location::heap_obj && primitive_locator->n == -3) {
@@ -183,6 +258,7 @@ namespace DerkJS::Backend {
         [[nodiscard]] auto emit(BytecodeEmitterContext& context, const Expr& node, const std::string& source) -> bool override {
             const auto& [lambda_params, lambda_body] = std::get<LambdaLiteral>(node.data);
             context.m_accessing_property = false;
+            std::string lambda_name {context.m_callee_name};
             int lambda_arity = lambda_params.size(); // named argument count
 
             // 1. Begin lambda code emission, but let's note that this nested "code scope" place a new buffer as the currently filling one before it's done & craps out a Lambda object... Which gets moved into the bytecode `Program` later.
@@ -246,8 +322,8 @@ namespace DerkJS::Backend {
             );
 
             //? NOTE: despite std::unique_ptr<Lambda>::release(), the raw pointer is quickly re-owned in the preloaded "heap" before recording into Program.builtins later. The pre_record_object method handles this task on argument `true`.
-            if (context.m_builtin_ids.contains(context.m_callee_name)) {
-                next_global_ref_loc = context.pre_record_object(context.m_callee_name, temp_callable.release()).value();
+            if (context.m_builtin_ids.contains(lambda_name)) {
+                next_global_ref_loc = context.pre_record_object(lambda_name, temp_callable.release()).value();
             } else if (!context.m_runtime_heap_ptr) {
                 auto lambda_object_ptr = context.m_heap.add_item(context.m_heap.get_next_id(), std::move(temp_callable));
 

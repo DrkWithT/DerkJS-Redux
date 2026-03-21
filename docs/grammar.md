@@ -1,9 +1,15 @@
 ### Grammar (Expressions)
 
 ```
+<string-literal> = <single-quote> <string-symbol>* <single-quote> | <double-quote> <string-symbol>* <double-quote>
+<string-symbol> = <non-quote & not-backslash & not-LF> | <escape-sequence>
+<escape-sequence> = <simple-escape> | <hex-escape>
+<simple-escape> = "\" ("b" | "f" | "n" | "r" | "t" | "v" | "\" | "'" | """ | "0")
+<hex-escape> = "\" "x" <hex-digit>{2}
+<hex-digit> = ( [a - f] | [0 - 9] )
 <param> = "..."? <identifier>
 
-<primary> = "undefined" | "null" | "this" | <identifier> | <boolean> | <number> | <object> | <array> | <lambda> | "(" <expr> ")"
+<primary> = "undefined" | "null" | "this" | <identifier> | <boolean> | <number> | <string-literal> | <object> | <array> | <lambda> | "(" <expr> ")"
 <object> = "{" (<property> ",")* "}"
 <property> = <identifier> : <expr>
 <array> = "[" (<expr> ("," <expr>)* )? "]"

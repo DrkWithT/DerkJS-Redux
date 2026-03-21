@@ -30,6 +30,7 @@ export namespace DerkJS {
         djs_deref, // Args: Replaces the top value with its fully-dereferenced Value.
         djs_pop, // Lazy pops by N given <pop-n>.
         djs_emplace, // Pops the temporary and stores it into the under value (local variable reference / property reference) which gets popped afterwards.
+        djs_put_global_this,
         djs_put_this, // Pushes a reference to the current `this` object.
         djs_ref_error, // Pushes an object reference in a Value for the current exception (`mostly errors`).
         djs_discard, // For `void`, replaces the evaluated expression value with an `undefined`.
@@ -80,7 +81,7 @@ export namespace DerkJS {
         code_chunk,
         immediate,
         constant,
-        heap_obj, // -2: this, -3: prototype, -4: rest param's Array
+        heap_obj, // -1: globalThis, -2: this, -3: prototype, -4: rest param's Array
         local,
         key_str,
         error_var, // Used for `e` in `catch(e) { ... }`.
@@ -124,6 +125,7 @@ export namespace DerkJS {
             "djs_deref",
             "djs_pop",
             "djs_emplace",
+            "djs_put_global_this",
             "djs_put_this",
             "djs_ref_error",
             "djs_discard",

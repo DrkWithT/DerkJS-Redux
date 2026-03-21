@@ -145,6 +145,7 @@ export namespace DerkJS {
             case TokenTag::literal_int:
             case TokenTag::literal_real:
             case TokenTag::literal_string:
+            case TokenTag::literal_escaped_string:
                 consume_any(lexer, source);
 
                 return std::make_unique<Expr>(

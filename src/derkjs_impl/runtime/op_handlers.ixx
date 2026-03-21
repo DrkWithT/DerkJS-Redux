@@ -41,6 +41,7 @@ namespace DerkJS {
     inline void op_deref(ExternVMCtx& ctx);
     inline void op_pop(ExternVMCtx& ctx);
     inline void op_emplace(ExternVMCtx& ctx);
+    inline void op_put_global_this(ExternVMCtx& ctx);
     inline void op_put_this(ExternVMCtx& ctx);
     inline void op_ref_error(ExternVMCtx& ctx);
     inline void op_discard(ExternVMCtx& ctx);
@@ -87,7 +88,8 @@ namespace DerkJS {
     constexpr tco_opcode_fn tco_opcodes[static_cast<std::size_t>(Opcode::last)] = {
         op_nop,
         op_dup, op_dup_local, op_ref_local, op_store_upval, op_ref_upval, op_put_const, op_deref, op_pop, op_emplace,
-        op_put_this, op_ref_error, op_discard, op_try_del, op_typename, op_put_obj_dud, op_make_arr, op_put_proto_key, op_get_prop, op_put_prop, op_ref_pack,
+        op_put_global_this, op_put_this,
+        op_ref_error, op_discard, op_try_del, op_typename, op_put_obj_dud, op_make_arr, op_put_proto_key, op_get_prop, op_put_prop, op_ref_pack,
         op_numify, op_strcat, op_pre_inc, op_pre_dec, op_post_inc, op_post_dec,
         op_mod, op_mul, op_div, op_add, op_sub,
         op_test_falsy, op_test_strict_eq, op_test_strict_ne, op_test_lt, op_test_lte, op_test_gt, op_test_gte, op_cmp_protos,
@@ -196,6 +198,15 @@ namespace DerkJS {
 
         ctx.rsp--;
         ctx.rsp--;
+        ctx.rip_p++;
+
+        TCO_ATTR
+        return dispatch_op(ctx);
+    }
+
+    inline void op_put_global_this(ExternVMCtx& ctx) {
+        ctx.stack.at(ctx.rsp + 1) = ctx.stack.at(0);
+        ctx.rsp++;
         ctx.rip_p++;
 
         TCO_ATTR

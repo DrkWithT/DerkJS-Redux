@@ -268,6 +268,7 @@ export namespace DerkJS {
             "djs_deref",
             "djs_pop",
             "djs_emplace",
+            "djs_put_global_this",
             "djs_put_this",
             "djs_ref_error",
             "djs_discard",
@@ -441,7 +442,8 @@ export namespace DerkJS {
             }
 
             if (!has_this_arg) {
-                vm_context_p->stack.at(callee_rsbp - 1) = caller_capture_p;
+                //? NOTE: `this` defaults to `globalThis` in normal function calls vs. ctor calls.
+                vm_context_p->stack.at(callee_rsbp - 1) = vm_context_p->stack.at(0);
             }
 
             vm_context_p->rip_p = m_code.data();

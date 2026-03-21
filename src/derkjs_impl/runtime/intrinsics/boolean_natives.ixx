@@ -17,10 +17,12 @@ namespace DerkJS::Runtime::Intrinsics {
     export auto native_boolean_ctor(ExternVMCtx* ctx, [[maybe_unused]] PropPool<Value, Value>* props, int argc) -> bool {
         const int passed_rsbp = ctx->rsbp;
         ObjectBase<Value>* instance_prototype_p = ctx->stack.at(passed_rsbp).to_object()->get_instance_prototype();
-        const auto& coercing_value = ctx->stack.at(passed_rsbp + 1);
+        const bool native_value = (argc >= 1)
+            ? ctx->stack.at(passed_rsbp + 1).is_truthy()
+            : false;
 
         if (auto temp_boolean_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::make_unique<BooleanBox>(
-            coercing_value.is_truthy(),
+            native_value,
             instance_prototype_p
         )); temp_boolean_p) {
             ctx->stack.at(passed_rsbp - 1) = Value {temp_boolean_p};

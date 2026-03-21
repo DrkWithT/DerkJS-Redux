@@ -105,6 +105,14 @@ namespace DerkJS::Runtime::Intrinsics {
             }
 
             return true;
+        } else if (argc == 0) {
+            if (auto blank_object_p = ctx->heap.add_item(
+                ctx->heap.get_next_id(),
+                std::make_unique<Object>( ctx->builtins.at(std::to_underlying(BuiltInObjects::object)) )
+            ); blank_object_p != nullptr) {
+                ctx->stack.at(passed_rsbp - 1) = Value {blank_object_p};
+                return true;
+            }
         }
 
         ctx->status = VMErrcode::bad_operation;

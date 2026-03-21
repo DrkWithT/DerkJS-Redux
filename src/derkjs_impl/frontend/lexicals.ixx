@@ -42,6 +42,7 @@ export namespace DerkJS {
         literal_int,
         literal_real,
         literal_string,
+        literal_escaped_string,
         symbol_two_pluses,      // '++' prefix operator
         symbol_two_minuses,     // '--' prefix operator
         symbol_percent,
@@ -139,6 +140,10 @@ export namespace DerkJS {
             return (c >= '0' && c <= '9');
         }
 
+        [[nodiscard]] static constexpr auto is_hex_digit(char c) noexcept -> bool {
+            return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+        }
+
         [[nodiscard]] static constexpr auto is_numeric(char c) noexcept -> bool {
             return is_digit(c) || c == '.';
         }
@@ -185,34 +190,80 @@ export namespace DerkJS {
             };
         }
 
-        [[nodiscard]] auto lex_between(const std::string& source, TokenTag tag, char delim) noexcept -> Token {
+        [[nodiscard]] auto eat_escape_sequence(const std::string& source) noexcept -> bool {
+            const auto temp_offset = m_pos;
+            auto is_simple_escape = true;
+
+            //? NOTE: eat pre-checked backslash
+            update_source_location(source.at(temp_offset));
+
+            if (const auto peek_1 = source.at(m_pos); is_any_of(peek_1, '\'', '\"', '\\', 'b', 'f', 'n', 'r', 't', 'v', '0')) {
+                update_source_location(peek_1);
+            } else if (peek_1 == 'x') {
+                is_simple_escape = false;
+                update_source_location(peek_1);
+            } else {
+                return false;
+            }
+
+            if (is_simple_escape) {
+                return true;
+            }
+
+            if (const auto peek_2 = source.at(m_pos); is_hex_digit(peek_2)) {
+                update_source_location(peek_2);
+            } else {
+                return false;
+            }
+
+            if (const auto peek_3 = source.at(m_pos); is_hex_digit(peek_3)) {
+                update_source_location(peek_3);
+            } else {
+                return false;
+            }
+
+            return true;
+        }
+
+        [[nodiscard]] auto lex_string(const std::string& source, char delim) noexcept -> Token {
             const auto temp_start = m_pos;
-            auto temp_length = 0;
             const auto temp_line = m_line;
             const auto temp_column = m_column;
+            bool valid = true;
             bool closed = false;
+            bool escaped = false;
             
             update_source_location(source.at(m_pos)); // skip leading quote
-            ++temp_length;
 
-            while (!at_eof()) {
-                if (const auto c = source.at(m_pos); c != delim) {
+            while (!at_eof() && valid) {
+                if (const auto c = source.at(m_pos); c == delim) {
                     update_source_location(c);
-                    ++temp_length;
-                } else {
-                    update_source_location(c);
-                    ++temp_length;
                     closed = true;
                     break;
+                } else if (c == '\n') {
+                    valid = false;
+                } else if (c == '\\') {
+                    escaped = true;
+                    valid = eat_escape_sequence(source);
+                } else {
+                    update_source_location(c);
                 }
             }
 
-            const auto deduced_tag = (closed) ? tag : TokenTag::unknown;
+            const auto deduced_tag = ([](bool is_valid, bool is_closed, bool is_escaped) noexcept {
+                if (!is_valid || !is_closed) {
+                    return TokenTag::unknown;
+                } else if (is_escaped) {
+                    return TokenTag::literal_escaped_string;
+                } else {
+                    return TokenTag::literal_string;
+                }
+            })(valid, closed, escaped);
 
             return {
                 deduced_tag,
                 temp_start,
-                temp_length,
+                m_pos - temp_start,
                 temp_line,
                 temp_column
             };
@@ -467,8 +518,8 @@ export namespace DerkJS {
             case ':': return lex_single(source, TokenTag::colon);
             case ',': return lex_single(source, TokenTag::comma);
             case ';': return lex_single(source, TokenTag::semicolon);
-            case '\'': return lex_between(source, TokenTag::literal_string, '\'');
-            case '\"': return lex_between(source, TokenTag::literal_string, '\"');
+            case '\'': return lex_string(source, '\'');
+            case '\"': return lex_string(source, '\"');
             default: break;
             }
 

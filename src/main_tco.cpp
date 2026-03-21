@@ -440,6 +440,15 @@ int main(int argc, char* argv[]) {
         Value {0}
     );
 
+    auto native_to_int32_p = driver.add_native_object<NativeFunction>(
+        "",
+        function_prototype_p,
+        DerkJSNatives::native_to_int32,
+        function_prototype_p,
+        driver.get_length_key_str_p(),
+        Value {1}
+    );
+
     /// Patch prototypes & alias built-in globals ///
 
     driver.patch_native_object(object_prototype_p, string_prototype_p, std::to_array(std::move(object_prototype_props)));
@@ -470,6 +479,7 @@ int main(int argc, char* argv[]) {
     driver.add_native_object_alias("parseFloat", parse_float_fn_p);
     driver.add_native_object_alias("nativePrint", native_print_fn_p);
     driver.add_native_object_alias("nativeReadLine", native_read_line_fn_p);
+    driver.add_native_object_alias("toInt32", native_to_int32_p);
 
     /// 6. Run the script after all configuration. ///
 

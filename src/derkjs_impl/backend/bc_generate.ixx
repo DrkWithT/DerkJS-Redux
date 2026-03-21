@@ -527,6 +527,12 @@ namespace DerkJS::Backend {
             record_symbol("NaN", Value {JSNaNOpt {}}, FindGlobalConstsOpt {});
             record_symbol("true", Value {true}, FindGlobalConstsOpt {});
             record_symbol("false", Value {false}, FindGlobalConstsOpt {});
+            m_global_consts_map["globalThis"] = Arg {
+                .n = -1,
+                .tag = Location::heap_obj,
+                .is_str_literal = false,
+                .from_closure = false
+            };
 
             // 2.1: Record global native objects to avoid extra hassle later.
             for (auto& [pre_name, pre_entity, pre_location] : preloadables) {
