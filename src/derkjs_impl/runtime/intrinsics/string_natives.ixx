@@ -99,23 +99,45 @@ namespace DerkJS::Runtime::Intrinsics {
             ctx->stack.at(passed_rsbp - 1).to_object()
         );
 
-        std::string old_source;
-        old_source.append_range(str_this_p->as_str_view());
+        std::string_view old_str_view = str_this_p->as_str_view();
+        const int old_str_length = old_str_view.length();
+        int first_non_space_pos = 0;
+        int last_non_space_pos = old_str_length - 1;
 
-        const int first_no_space_index = old_source.find_first_not_of(' ');
-        const int last_no_space_index = old_source.find_last_not_of(' ');
+        for (; first_non_space_pos < old_str_length; first_non_space_pos++) {
+            if (
+                const char c = old_str_view.at(first_non_space_pos);
+                c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '\v' && c != '\f' && c != '\xA0'
+            ) {
+                break;
+            }
+        }
+
+        for (; last_non_space_pos > first_non_space_pos; last_non_space_pos--) {
+            if (
+                const char c2 = old_str_view.at(last_non_space_pos);
+                c2 != ' ' && c2 != '\t' && c2 != '\n' && c2 != '\r' && c2 != '\v' && c2 != '\f' && c2 != '\xA0'
+            ) {
+                break;
+            }
+        }
+
+        std::string trimmed_source;
+
+        if (first_non_space_pos <= last_non_space_pos) {
+            trimmed_source.append_range(old_str_view.substr(first_non_space_pos, last_non_space_pos - first_non_space_pos + 1));
+        }
 
         if (auto trimmed_string_p = ctx->heap.add_item(ctx->heap.get_next_id(), std::make_unique<DynamicString>(
             ctx->builtins.at(static_cast<unsigned int>(BuiltInObjects::str)),
             ctx->builtins.at(static_cast<unsigned int>(BuiltInObjects::extra_length_key)),
-            old_source.substr(first_no_space_index, last_no_space_index - first_no_space_index + 1)
+            std::move(trimmed_source)
         )); trimmed_string_p) {
             ctx->stack.at(passed_rsbp - 1) = Value {trimmed_string_p};
             return true;
         }
 
         ctx->status = VMErrcode::bad_heap_alloc;
-
         return false;
     }
 

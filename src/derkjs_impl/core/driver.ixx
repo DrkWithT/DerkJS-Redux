@@ -37,6 +37,29 @@ export namespace DerkJS::Core {
         std::variant<std::unique_ptr<ObjectBase<Value>>, Value> item;
     };
 
+    auto stringify_uncaught_error(ObjectBase<Value>* error_object_p) -> std::string {
+        if (!error_object_p) {
+            return "undefined";
+        }
+
+        auto fake_name_key = std::make_unique<DynamicString>(
+            nullptr,
+            Value {nullptr},
+            std::string_view {"name"}
+        );
+        auto fake_msg_key = std::make_unique<DynamicString>(
+            nullptr,
+            Value {nullptr},
+            std::string_view {"message"}
+        );
+
+        return std::format(
+            "{}: {}\n",
+            error_object_p->get_property_value(Value {fake_name_key.get()}, false).get_value().to_string(),
+            error_object_p->get_property_value(Value {fake_msg_key.get()}, false).get_value().to_string()
+        );
+    }
+
     class Driver {
     public:
         static constexpr std::size_t default_stack_size = 8192;
@@ -273,7 +296,7 @@ export namespace DerkJS::Core {
                 std::println(
                     std::cerr, "{}\n{}",
                     error_code_msgs.at(static_cast<int>(vm_status)),
-                    vm.peek_leftover_error().to_string()
+                    stringify_uncaught_error(vm.peek_leftover_error().to_object())
                 );
                 return 1;
             case VMErrcode::ok:

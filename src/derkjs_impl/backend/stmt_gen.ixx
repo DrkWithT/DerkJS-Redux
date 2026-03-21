@@ -8,6 +8,7 @@ module;
 #include <forward_list>
 #include <flat_map>
 #include <string>
+#include <print>
 
 export module backend.stmt_gen;
 
@@ -41,27 +42,37 @@ namespace DerkJS::Backend {
                 context.m_callee_name.clear();
             }
 
-            auto var_local_slot = context.record_symbol(var_name, RecordLocalOpt {}, FindLocalsOpt {});
-            
             // 1. When hoisting the var declaration, just set it to undefined 1st.
-            if (const auto placeholder_undefined = context.lookup_symbol("undefined", FindGlobalConstsOpt {}).value(); context.m_prepass_vars) {
-                context.encode_instruction(Opcode::djs_put_const, placeholder_undefined);
-                context.m_local_maps.back().locals[var_name] = *var_local_slot;
-                return true;
-            }
+            auto var_local_slot = context.record_symbol(var_name, RecordLocalOpt {}, FindLocalsOpt {});
+            const auto placeholder_undefined = context.lookup_symbol("undefined", FindGlobalConstsOpt {}).value();
 
             // 2. In the 2nd pass, define the filler var in function scope. Although this is a var decl, it's been defined as undefined before, so treat the initialization as a var-assignment.
-            context.encode_instruction(Opcode::djs_ref_local, *var_local_slot);
+            if (context.m_prepass_vars) {
+                context.encode_instruction(Opcode::djs_put_const, placeholder_undefined);
+                context.m_local_maps.back().locals[var_name] = *var_local_slot;
+            } else {
+                context.encode_instruction(Opcode::djs_ref_local, *var_local_slot);
+            }
 
-            if (!context.emit_expr(*var_init_expr, source)) {
-                return false;
+            if (var_init_expr->tag == ExprNodeTag::lambda_literal && context.m_prepass_vars) {
+                context.encode_instruction(Opcode::djs_ref_local, *var_local_slot);
+
+                if (!context.emit_expr(*var_init_expr, source)) {
+                    return false;
+                }
+            } else if (!context.m_prepass_vars) {
+                if (!context.emit_expr(*var_init_expr, source)) {
+                    return false;
+                }
+            } else {
+                return true;
             }
 
             // 2b. Capture variable in environment in case its used as a closure.
             context.encode_instruction(Opcode::djs_put_const, context.record_symbol(var_name, var_name, FindKeyConstOpt {}).value()); // variable name is the capturing Object key!
             context.encode_instruction(Opcode::djs_store_upval);
-            context.m_member_depth = 0;
             context.encode_instruction(Opcode::djs_emplace);
+            context.m_member_depth = 0;
             context.m_callee_name.clear();
 
             return true;

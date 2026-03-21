@@ -141,7 +141,7 @@ export namespace DerkJS {
         }
 
         [[nodiscard]] static constexpr auto is_hex_digit(char c) noexcept -> bool {
-            return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+            return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
         }
 
         [[nodiscard]] static constexpr auto is_numeric(char c) noexcept -> bool {
@@ -518,8 +518,8 @@ export namespace DerkJS {
             case ':': return lex_single(source, TokenTag::colon);
             case ',': return lex_single(source, TokenTag::comma);
             case ';': return lex_single(source, TokenTag::semicolon);
-            case '\'': return lex_string(source, TokenTag::literal_string, '\'');
-            case '\"': return lex_string(source, TokenTag::literal_string, '\"');
+            case '\'': return lex_string(source, '\'');
+            case '\"': return lex_string(source, '\"');
             default: break;
             }
 

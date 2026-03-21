@@ -22,7 +22,9 @@ namespace DerkJS::Backend {
             if (c >= '0' && c <= '9') {
                 return c - '0';
             } else if (c >= 'a' && c <= 'f') {
-                return c - 'a';
+                return c - 'a' + 10;
+            } else if (c >= 'A' && c <= 'F') {
+                return c - 'A' + 10;
             }
 
             return 0;
@@ -32,12 +34,12 @@ namespace DerkJS::Backend {
         static constexpr auto unescape_sequence(char c) noexcept -> char {
             switch (c) {
             case '\'': case '\"': case '\\': return c;
-            case 'b': return '\b';
-            case 'f': return '\f';
             case 'n': return '\n';
-            case 'r': return '\r';
             case 't': return '\t';
+            case 'r': return '\r';
             case 'v': return '\v';
+            case 'f': return '\f';
+            case 'b': return '\b';
             case '0': default: return '\0';
             }
         }
@@ -48,18 +50,20 @@ namespace DerkJS::Backend {
             const int lower_hex_code = decode_hex_digit(c2);
 
             return static_cast<char>(upper_hex_code + lower_hex_code);
-        } 
+        }
 
         static auto unescape_string_literal(const std::string& s) noexcept -> std::string {
             std::ostringstream sout;
 
             for (int pos = 0, len = s.length(); pos < len; ) {
                 const auto c1 = s.at(pos);
-                ++pos;
 
                 if (c1 != '\\') {
+                    ++pos;
                     sout << c1;
                     continue;
+                } else {
+                    ++pos;
                 }
 
                 if (const auto c2 = s.at(pos); c2 != 'x') {
@@ -254,6 +258,7 @@ namespace DerkJS::Backend {
         [[nodiscard]] auto emit(BytecodeEmitterContext& context, const Expr& node, const std::string& source) -> bool override {
             const auto& [lambda_params, lambda_body] = std::get<LambdaLiteral>(node.data);
             context.m_accessing_property = false;
+            std::string lambda_name {context.m_callee_name};
             int lambda_arity = lambda_params.size(); // named argument count
 
             // 1. Begin lambda code emission, but let's note that this nested "code scope" place a new buffer as the currently filling one before it's done & craps out a Lambda object... Which gets moved into the bytecode `Program` later.
@@ -317,8 +322,8 @@ namespace DerkJS::Backend {
             );
 
             //? NOTE: despite std::unique_ptr<Lambda>::release(), the raw pointer is quickly re-owned in the preloaded "heap" before recording into Program.builtins later. The pre_record_object method handles this task on argument `true`.
-            if (context.m_builtin_ids.contains(context.m_callee_name)) {
-                next_global_ref_loc = context.pre_record_object(context.m_callee_name, temp_callable.release()).value();
+            if (context.m_builtin_ids.contains(lambda_name)) {
+                next_global_ref_loc = context.pre_record_object(lambda_name, temp_callable.release()).value();
             } else if (!context.m_runtime_heap_ptr) {
                 auto lambda_object_ptr = context.m_heap.add_item(context.m_heap.get_next_id(), std::move(temp_callable));
 
