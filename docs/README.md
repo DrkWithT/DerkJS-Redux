@@ -1,7 +1,7 @@
 ## README
 
 ### Brief
-My latest attempt at implmenting a subset of JavaScript, specifically ES5 with cherry-picked ES6+ features, in modern C++.
+My furthest attempt yet at implmenting a subset of JavaScript, specifically ES5 with cherry-picked ES6+ features, in modern C++. Abandoned due to burnout and fatal design flaws in the reference system.
 
 ### Required
  - Clang 21+ (just the Homebrew distribution for now)
